@@ -1,6 +1,6 @@
-import { requestDesktop } from '../infrastructure/desktopApi.js';
+import { createDesktopService } from '../infrastructure/desktopApi.js';
 
-export const appService = {
-  getInfo: () => requestDesktop('app', 'getInfo'),
-  getDatabaseStatus: () => requestDesktop('database', 'getStatus'),
-};
+export const appService = createDesktopService({
+  getInfo: ['app', 'getInfo'],
+  getDatabaseStatus: ['database', 'getStatus'],
+});

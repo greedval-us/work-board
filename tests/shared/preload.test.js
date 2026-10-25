@@ -5,7 +5,7 @@ import { createPreloadApis } from '../../src/shared/createPreloadApis.js';
 test('bridge exposes named operations and sends only their explicit payloads', async () => {
   const calls = [];
   const api = createPreloadApis({ invoke: async (...args) => { calls.push(args); return { ok: true, value: 'ok' }; } });
-  assert.deepEqual(Object.keys(api).sort(), ['app', 'calendar', 'database', 'instructions', 'settings', 'tasks']);
+  assert.deepEqual(Object.keys(api).sort(), ['analytics', 'app', 'attachments', 'calendar', 'database', 'instructions', 'settings', 'tasks']);
   assert.equal(api.invoke, undefined);
   await api.app.getInfo();
   await api.database.getStatus();

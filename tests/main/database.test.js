@@ -21,9 +21,9 @@ test('initializes a nested SQLite file with registry schema and settings', (t) =
   const status = database.getStatus();
   assert.equal(status.ready, true);
   assert.equal(status.filePath, filePath);
-  assert.equal(status.schemaVersion, 2);
+  assert.equal(status.schemaVersion, 3);
   assert.match(status.sqliteVersion, /^3\./);
-  assert.deepEqual(database.connection.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all().map(row => row.name), ['app_settings', 'calendar_tasks', 'instructions']);
+  assert.deepEqual(database.connection.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all().map(row => row.name), ['app_settings', 'attachments', 'calendar_tasks', 'instructions']);
   assert.equal(database.connection.prepare('PRAGMA foreign_keys').get().foreign_keys, 1);
   assert.equal(database.connection.prepare('PRAGMA journal_mode').get().journal_mode, 'wal');
 });
@@ -38,7 +38,7 @@ test('reopening preserves settings and does not reapply migrations', (t) => {
   database.close();
   database.open();
   assert.deepEqual(new SettingsRepository(database).get(), { theme: 'dark' });
-  assert.equal(database.getStatus().schemaVersion, 2);
+  assert.equal(database.getStatus().schemaVersion, 3);
 });
 
 test('invalid settings cannot modify persisted data', (t) => {

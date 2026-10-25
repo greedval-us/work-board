@@ -11,6 +11,18 @@ function record(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function isDesktopMethod(namespace, method) {
+  return Object.hasOwn(IPC_CHANNELS, namespace) && Object.hasOwn(IPC_CHANNELS[namespace], method);
+}
+
+// Each adapter declares its public methods; only named preload capabilities can be mapped.
+export function createDesktopService(methods) {
+  return Object.freeze(Object.fromEntries(Object.entries(methods).map(([name, [namespace, method]]) => {
+    if (!isDesktopMethod(namespace, method)) throw new TypeError('Unknown desktop service method.');
+    return [name, (...args) => requestDesktop(namespace, method, ...args)];
+  })));
+}
+
 function decodeResult(result) {
   if (record(result) && Object.keys(result).length === 2 && Object.hasOwn(result, 'ok')) {
     if (result.ok === true && Object.hasOwn(result, 'value')) return result.value;
@@ -30,7 +42,7 @@ function decodeResult(result) {
 // This is the renderer's single transport boundary. Services expose values/errors.
 export async function requestDesktop(namespace, method, ...args) {
   const api = getDesktopApi();
-  if (!Object.hasOwn(IPC_CHANNELS, namespace) || !Object.hasOwn(IPC_CHANNELS[namespace], method)
+  if (!isDesktopMethod(namespace, method)
     || typeof api[namespace]?.[method] !== 'function') {
     throw new DesktopError(ERROR_CODES.IPC_UNAVAILABLE);
   }

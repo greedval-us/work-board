@@ -1,44 +1,32 @@
-import { spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import electron from 'electron';
+import { DEV_SERVER } from '../src/shared/constants/runtime.js';
+import {
+  PROJECT_ROOT as root, createElectronEnvironment, readProjectMetadata,
+  runProcess, TemporaryDirectory, writeElectronEntry,
+} from './lib/runtime.mjs';
 
-const root = fileURLToPath(new URL('..', import.meta.url));
-const directory = mkdtempSync(path.join(tmpdir(), 'work-board-smoke-'));
-const metadata = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
-// Launch as an Electron application so getVersion() reads real package metadata.
-writeFileSync(path.join(directory, 'package.json'), JSON.stringify({
-  name: metadata.name, version: metadata.version,
-  main: path.join(root, 'scripts', 'registrySmoke.mjs'),
-}));
-const environment = { ...process.env, WORK_BOARD_SMOKE_USER_DATA: directory };
-delete environment.ELECTRON_RUN_AS_NODE;
-delete environment.WORK_BOARD_DEV_SERVER_URL;
+const SMOKE_TIMEOUT_MS = 90_000;
+const temporary = new TemporaryDirectory('work-board-smoke-');
 let devServer;
-if (process.argv.includes('--dev')) {
-  const { createServer } = await import('vite');
-  devServer = await createServer({ configFile: path.join(root, 'vite.config.js') });
-  await devServer.listen();
-  environment.WORK_BOARD_DEV_SERVER_URL = 'http://127.0.0.1:5173';
-}
-const child = spawn(electron, [directory], {
-  cwd: root, env: environment, stdio: 'inherit', windowsHide: true,
-});
-const timeout = setTimeout(() => { console.error('Desktop smoke timed out.'); child.kill(); }, 90000);
-let finished = false;
-async function cleanup(code) {
-  if (finished) return;
-  finished = true;
-  clearTimeout(timeout);
-  await devServer?.close();
-  const tempRoot = path.resolve(tmpdir());
-  const target = path.resolve(directory);
-  if (target.startsWith(tempRoot + path.sep) && path.basename(target).startsWith('work-board-smoke-')) {
-    rmSync(target, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+try {
+  writeElectronEntry(temporary.directory, readProjectMetadata(), path.join(root, 'scripts', 'registrySmoke.mjs'));
+  if (process.argv.includes('--dev')) {
+    const { createServer } = await import('vite');
+    devServer = await createServer({ configFile: path.join(root, 'vite.config.js') });
+    await devServer.listen();
   }
-  process.exitCode = code;
+  process.exitCode = await runProcess(electron, [temporary.directory], {
+    cwd: root, stdio: 'inherit', timeoutMs: SMOKE_TIMEOUT_MS, label: 'Desktop smoke',
+    env: createElectronEnvironment({
+      overrides: { WORK_BOARD_SMOKE_USER_DATA: temporary.directory },
+      devServerUrl: devServer ? DEV_SERVER.URL : undefined,
+    }),
+  });
+} catch (error) {
+  console.error(error);
+  process.exitCode = 1;
+} finally {
+  try { await devServer?.close(); }
+  finally { temporary.remove(); }
 }
-child.on('error', (error) => { console.error(error); cleanup(1); });
-child.on('close', (code) => cleanup(code ?? 1));

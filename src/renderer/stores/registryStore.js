@@ -1,13 +1,12 @@
 import { defineStore } from 'pinia';
 import { computed, onScopeDispose, reactive, shallowRef, watch } from 'vue';
-import { emptyFilters, INSTRUCTION_COLUMNS } from '../../shared/registry.js';
+import { emptyFilters, INSTRUCTION_COLUMNS, REGISTRY_DEFAULT_SORT, REGISTRY_PAGINATION } from '../../shared/registry.js';
 import { DesktopError } from '../../shared/errors.js';
 import { errorMessage } from '../infrastructure/errorMessage.js';
 import { createRequestScope, createSingleFlight } from '../infrastructure/requestScope.js';
 import { registryService } from '../services/RegistryService.js';
 import { useAppStore } from './appStore.js';
-
-const editableFields = ['controlDate', 'incomingNumber', 'instructionNumber', 'title', 'summary', 'deadline', 'executor', 'status', 'executionMark'];
+import { snapshotInstruction } from '../domain/instructions.js';
 
 // The factory supplies boundary dependencies in tests; each Pinia owns one registry.
 export function createRegistryStore({ app: suppliedApp, service = registryService } = {}) {
@@ -15,9 +14,9 @@ export function createRegistryStore({ app: suppliedApp, service = registryServic
     const app = suppliedApp ?? useAppStore();
     const draftFilters = reactive(emptyFilters());
     const appliedFilters = shallowRef(emptyFilters());
-    const sort = shallowRef({ field: 'controlDate', direction: 'desc' });
-    const page = shallowRef(1);
-    const pageSize = shallowRef(25);
+    const sort = shallowRef({ ...REGISTRY_DEFAULT_SORT });
+    const page = shallowRef(REGISTRY_PAGINATION.DEFAULT_PAGE);
+    const pageSize = shallowRef(REGISTRY_PAGINATION.DEFAULT_SIZE);
     const items = shallowRef([]);
     const total = shallowRef(0);
     const loading = shallowRef(false);
@@ -30,7 +29,7 @@ export function createRegistryStore({ app: suppliedApp, service = registryServic
     const mutationError = shallowRef('');
     const notice = shallowRef('');
     const ready = computed(() => Boolean(app.database?.ready));
-    const pageCount = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)));
+    const pageCount = computed(() => Math.max(REGISTRY_PAGINATION.DEFAULT_PAGE, Math.ceil(total.value / pageSize.value)));
     const busy = computed(() => saving.value || deleting.value);
     const canMutate = computed(() => ready.value && !app.databaseSwitching && !busy.value);
     const hasAppliedFilters = computed(() => Object.values(appliedFilters.value).some(Boolean));
@@ -48,7 +47,7 @@ export function createRegistryStore({ app: suppliedApp, service = registryServic
     const currentGeneration = () => app.database?.generation;
     const isCurrent = (generation) => active && ready.value && generation === currentGeneration();
     function snapshot() {
-      const request = { filters: { ...appliedFilters.value }, sort: { ...sort.value }, offset: (page.value - 1) * pageSize.value, limit: pageSize.value, generation: currentGeneration() };
+      const request = { filters: { ...appliedFilters.value }, sort: { ...sort.value }, offset: (page.value - REGISTRY_PAGINATION.DEFAULT_PAGE) * pageSize.value, limit: pageSize.value, generation: currentGeneration() };
       return { request, revision: app.revision, key: JSON.stringify([request, app.revision]) };
     }
 
@@ -96,7 +95,7 @@ export function createRegistryStore({ app: suppliedApp, service = registryServic
       filterError.value = '';
       appliedFilters.value = Object.fromEntries(Object.entries(draftFilters).map(([key, value]) => [key, value.trim()]));
       Object.assign(draftFilters, appliedFilters.value);
-      page.value = 1;
+      page.value = REGISTRY_PAGINATION.DEFAULT_PAGE;
       return refresh();
     }
 
@@ -104,19 +103,19 @@ export function createRegistryStore({ app: suppliedApp, service = registryServic
     function changeSort(field) {
       if (!INSTRUCTION_COLUMNS.some((column) => column.key === field)) return false;
       sort.value = { field, direction: sort.value.field === field && sort.value.direction === 'asc' ? 'desc' : 'asc' };
-      page.value = 1;
+      page.value = REGISTRY_PAGINATION.DEFAULT_PAGE;
       return refresh();
     }
     function setPage(value) {
-      const next = Math.max(1, Math.min(pageCount.value, Math.trunc(Number(value)) || 1));
+      const next = Math.max(REGISTRY_PAGINATION.DEFAULT_PAGE, Math.min(pageCount.value, Math.trunc(Number(value)) || REGISTRY_PAGINATION.DEFAULT_PAGE));
       if (page.value === next) return false;
       page.value = next;
       return refresh();
     }
     function setPageSize(value) {
-      if (![25, 50, 100].includes(Number(value))) return false;
+      if (!REGISTRY_PAGINATION.SIZES.includes(Number(value))) return false;
       pageSize.value = Number(value);
-      page.value = 1;
+      page.value = REGISTRY_PAGINATION.DEFAULT_PAGE;
       return refresh();
     }
 
@@ -145,7 +144,7 @@ export function createRegistryStore({ app: suppliedApp, service = registryServic
 
     async function saveRecord({ id = null, data: values, generation }) {
       if (!canMutate.value || !isCurrent(generation)) return false;
-      const data = Object.fromEntries(editableFields.map((field) => [field, values[field]]));
+      const data = snapshotInstruction(values);
       saving.value = true;
       mutationError.value = '';
       try {
@@ -192,7 +191,7 @@ export function createRegistryStore({ app: suppliedApp, service = registryServic
       cancelRecordRead();
       const initial = !previous?.length;
       if (initial || value[0] !== previous[0] || value[1] !== previous[1]) {
-        items.value = []; total.value = 0; page.value = 1; notice.value = ''; error.value = ''; mutationError.value = '';
+        items.value = []; total.value = 0; page.value = REGISTRY_PAGINATION.DEFAULT_PAGE; notice.value = ''; error.value = ''; mutationError.value = '';
       }
       if (initial) refresh(); else queueRefresh();
     }, { immediate: true, flush: 'sync' });

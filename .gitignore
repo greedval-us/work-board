@@ -33,6 +33,7 @@ coverage/
 *.sqlite.*
 *.sqlite3.*
 *.db.*
+*.files/
 database-location.json
 *.xlsx
 *.bak

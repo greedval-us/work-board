@@ -1,12 +1,13 @@
 import { app, BrowserWindow, Menu } from 'electron';
 import { fileURLToPath } from 'node:url';
+import { DEV_SERVER } from '../shared/constants/runtime.js';
+import { WINDOW_OPTIONS } from './config/window.js';
 
 export function createWindow() {
   const window = new BrowserWindow({
     title: 'Work Board',
     icon: fileURLToPath(new URL('../../build/renderer/icons/app-256.png', import.meta.url)),
-    width: 1200, height: 780, minWidth: 720, minHeight: 540,
-    show: false, backgroundColor: '#edeef2',
+    ...WINDOW_OPTIONS,
     webPreferences: {
       preload: fileURLToPath(new URL('../../build/main/preload.cjs', import.meta.url)),
       contextIsolation: true, nodeIntegration: false, sandbox: true,
@@ -21,9 +22,9 @@ export function createWindow() {
   window.once('ready-to-show', () => window.show());
 
   const devUrl = !app.isPackaged && process.env.WORK_BOARD_DEV_SERVER_URL;
-  if (devUrl && devUrl !== 'http://127.0.0.1:5173') {
+  if (devUrl && devUrl !== DEV_SERVER.URL) {
     window.destroy();
-    throw new Error('Недопустимый адрес Vite. Ожидается http://127.0.0.1:5173.');
+    throw new Error(`Недопустимый адрес Vite. Ожидается ${DEV_SERVER.URL}.`);
   }
   const loaded = devUrl
     ? window.loadURL(devUrl)

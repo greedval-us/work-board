@@ -1,6 +1,6 @@
 import { storeToRefs } from 'pinia';
 import { onScopeDispose, shallowRef, watch } from 'vue';
-import { localDate } from '../../shared/registry.js';
+import { INSTRUCTION_STATUS, localDate } from '../../shared/registry.js';
 import { createRegistryStore, useRegistryStore } from '../stores/registryStore.js';
 import { useAppStore } from '../stores/appStore.js';
 
@@ -28,7 +28,7 @@ export function useRegistry(suppliedApp, service) {
     closeRecord();
     selectedGeneration = app.database.generation;
     selected.value = { id: null, controlDate: localDate(), incomingNumber: '', instructionNumber: '',
-      title: '', summary: '', deadline: '', executor: '', status: 'pending', executionMark: '' };
+      title: '', summary: '', deadline: '', executor: '', status: INSTRUCTION_STATUS.PENDING, executionMark: '' };
     return true;
   }
 

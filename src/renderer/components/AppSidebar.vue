@@ -1,5 +1,5 @@
 <script setup>
-import { ClipboardList, CalendarDays, Settings2, Info, HardDrive, X } from 'lucide-vue-next';
+import { ClipboardList, CalendarDays, BarChart3, Settings2, Info, HardDrive, X } from 'lucide-vue-next';
 import AppIcon from './ui/AppIcon.vue';
 
 defineProps({
@@ -13,6 +13,7 @@ defineEmits(['navigate', 'close']);
 const navigation = [
   { to: '/', label: 'Реестр указаний', icon: ClipboardList },
   { to: '/calendar', label: 'Календарь и задачи', icon: CalendarDays },
+  { to: '/analytics', label: 'Аналитика', icon: BarChart3 },
   { to: '/settings', label: 'Настройки', icon: Settings2, utilityFirst: true },
   { to: '/info', label: 'О приложении', icon: Info },
 ];

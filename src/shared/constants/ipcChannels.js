@@ -5,4 +5,6 @@ export const IPC_CHANNELS = Object.freeze({
   instructions: Object.freeze({ list: 'instructions:list', get: 'instructions:get', create: 'instructions:create', update: 'instructions:update', remove: 'instructions:remove', export: 'instructions:export' }),
   tasks: Object.freeze({ list: 'tasks:list', get: 'tasks:get', create: 'tasks:create', update: 'tasks:update', remove: 'tasks:remove' }),
   calendar: Object.freeze({ month: 'calendar:month', day: 'calendar:day' }),
+  attachments: Object.freeze({ list: 'attachments:list', pick: 'attachments:pick', release: 'attachments:release', download: 'attachments:download' }),
+  analytics: Object.freeze({ summary: 'analytics:summary' }),
 });

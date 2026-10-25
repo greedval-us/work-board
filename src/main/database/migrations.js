@@ -1,3 +1,5 @@
+import { runTransaction } from './transaction.js';
+
 // Add sequential versions here. Each migration runs once in its own transaction.
 export const migrations = [
   {
@@ -41,6 +43,21 @@ export const migrations = [
     ) STRICT;
     CREATE INDEX calendar_tasks_date_completed_idx ON calendar_tasks (date, completed);`,
   },
+  {
+    version: 3,
+    sql: `CREATE TABLE attachments (
+      id INTEGER PRIMARY KEY,
+      instruction_id INTEGER REFERENCES instructions(id) ON DELETE CASCADE,
+      task_id INTEGER REFERENCES calendar_tasks(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      relative_path TEXT NOT NULL UNIQUE,
+      size INTEGER NOT NULL CHECK (size >= 0),
+      created_at TEXT NOT NULL,
+      CHECK ((instruction_id IS NOT NULL AND task_id IS NULL) OR (instruction_id IS NULL AND task_id IS NOT NULL))
+    ) STRICT;
+    CREATE INDEX attachments_instruction_idx ON attachments(instruction_id);
+    CREATE INDEX attachments_task_idx ON attachments(task_id);`,
+  },
 ];
 
 export function migrate(database) {
@@ -49,14 +66,9 @@ export function migrate(database) {
   if (current > latest) throw new Error('Версия базы данных новее версии приложения.');
   for (const migration of migrations) {
     if (migration.version <= current) continue;
-    database.exec('BEGIN IMMEDIATE');
-    try {
+    runTransaction(database, () => {
       database.exec(migration.sql);
       database.exec(`PRAGMA user_version = ${migration.version}`);
-      database.exec('COMMIT');
-    } catch (error) {
-      database.exec('ROLLBACK');
-      throw error;
-    }
+    });
   }
 }

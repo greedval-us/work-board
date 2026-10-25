@@ -1,147 +1,44 @@
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { app, dialog } from 'electron';
 import ExcelJS from 'exceljs';
 import { localDate } from '../src/shared/registry.js';
+import { PROJECT_ROOT } from './lib/runtime.mjs';
+import { DesktopSmokeDriver } from './lib/DesktopSmokeDriver.mjs';
 
+const SMOKE_TIMEOUT_MS = 80_000;
 const userData = process.env.WORK_BOARD_SMOKE_USER_DATA;
 if (!userData) throw new Error('Run npm run test:desktop.');
 app.setPath('userData', userData);
 const firstFile = path.join(userData, 'selected-controls.sqlite');
 const secondFile = path.join(userData, 'another.sqlite');
 const exportFile = path.join(userData, 'filtered.xlsx');
+const attachmentSource = path.join(userData, 'Приложение к отчёту.txt');
+const downloadedFile = path.join(userData, 'downloaded.txt');
+writeFileSync(attachmentSource, 'Документ для задачи и указания.');
 const today = localDate();
 const createFiles = [firstFile, secondFile];
 let openingFile = null;
-dialog.showSaveDialog = async (_window, options) => ({ canceled: false, filePath: options.title.includes('Excel') ? exportFile : createFiles.shift() });
-dialog.showOpenDialog = async () => openingFile ? { canceled: false, filePaths: [openingFile] } : { canceled: true, filePaths: [] };
-const timeout = setTimeout(() => { console.error('Registry desktop smoke timed out.'); app.exit(1); }, 80000);
-const output = fileURLToPath(new URL('../output/', import.meta.url));
+dialog.showSaveDialog = async (_window, { title }) => {
+  const filePath = title.includes('Excel') ? exportFile
+    : title.includes('вложение') ? downloadedFile : createFiles.shift();
+  return { canceled: false, filePath };
+};
+dialog.showOpenDialog = async (_window, { title }) => {
+  if (title === 'Прикрепить файлы') return { canceled: false, filePaths: [attachmentSource] };
+  return openingFile ? { canceled: false, filePaths: [openingFile] } : { canceled: true, filePaths: [] };
+};
+const timeout = setTimeout(() => { console.error('Registry desktop smoke timed out.'); app.exit(1); }, SMOKE_TIMEOUT_MS);
+const output = path.join(PROJECT_ROOT, 'output');
 mkdirSync(output, { recursive: true });
 
 app.once('browser-window-created', (_event, window) => {
-  window.webContents.setBackgroundThrottling(false);
-  queueMicrotask(() => window.removeAllListeners('ready-to-show'));
-  // CSS transitions need a live compositor. Keep the verification window
-  // transparent, absent from the taskbar, and unable to intercept user clicks.
-  window.setOpacity(0);
-  window.setSkipTaskbar(true);
-  window.setIgnoreMouseEvents(true);
-  const errors = [];
-  window.webContents.on('preload-error', (_event, _path, error) => errors.push(error.message));
-  window.webContents.on('console-message', (details) => { if (details.level === 'error') errors.push(details.message); });
-  const js = (source) => window.webContents.executeJavaScript(source);
-  const api = async (namespace, method, payload) => {
-    const result = await js(`window.desktopAPI.${namespace}.${method}(${payload === undefined ? '' : JSON.stringify(payload)})`);
-    assert.equal(typeof result?.ok, 'boolean', 'IPC must return an explicit result envelope');
-    if (!result.ok) throw Object.assign(new Error(result.error.message), { code: result.error.code });
-    return result.value;
-  };
-  let pageMotionVerified = false;
-
-  async function wait(expression) {
-    for (let count = 0; count < 200; count++) {
-      if (await js(expression)) return;
-      await new Promise(resolve => setTimeout(resolve, 50));
-    }
-    throw new Error(`Renderer condition not met: ${expression}`);
-  }
-  async function click(text, selector = 'button') {
-    await js(`(() => { const node = [...document.querySelectorAll(${JSON.stringify(selector)})].find(el => el.textContent.trim() === ${JSON.stringify(text)}); if (!node) throw new Error('Button missing: ' + ${JSON.stringify(text)}); node.click(); })()`);
-  }
-  async function navigate(route, heading) {
-    await js(`document.querySelector('nav a[href=${JSON.stringify('#' + route)}]').click()`);
-    await wait(`document.querySelector('h1')?.textContent === ${JSON.stringify(heading)}`);
-    if (!pageMotionVerified) {
-      await verifyEntrance('.page', 'page navigation');
-      pageMotionVerified = true;
-    }
-  }
-  async function fill(selector, values) {
-    await js(`(() => { const fields = document.querySelectorAll(${JSON.stringify(selector)}); for (const [index, value] of Object.entries(${JSON.stringify(values)})) { const field=fields[Number(index)]; if (!field) throw new Error('Field missing '+index); field.value=value; field.dispatchEvent(new Event(field.tagName==='SELECT'?'change':'input',{bubbles:true})); } })()`);
-  }
-  async function openFilters() {
-    await js("document.querySelector('.registry-filter-toggle').click()");
-    await wait("Boolean(document.querySelector('.registry-filters:popover-open')) && document.querySelector('.registry-filter-toggle').getAttribute('aria-expanded') === 'true' && Boolean(document.activeElement?.closest('.registry-filters'))");
-  }
-  async function escapeKey() {
-    window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
-    window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
-  }
-  async function verifyEntrance(selector, label) {
-    const frame = await js(`(async () => {
-      let frame;
-      for(let attempt=0;attempt<30;attempt++) {
-        await new Promise(resolve => requestAnimationFrame(resolve));
-        const element=document.querySelector(${JSON.stringify(selector)});
-        const style=getComputedStyle(element);
-        frame={opacity:Number(style.opacity),transform:style.transform,animations:element.getAnimations().map(a=>({state:a.playState,duration:a.effect.getTiming().duration}))};
-        if(frame.opacity > .01 && frame.opacity < .99 && frame.animations.some(a=>a.state==='running')) break;
-      }
-      return frame;
-    })()`);
-    assert.ok(frame.animations.some(animation => animation.state === 'running' && animation.duration > 0), `${label}: no real entrance animation ${JSON.stringify(frame)}`);
-    assert.ok(frame.opacity > 0 && frame.opacity < 1, `${label}: no intermediate fade frame ${JSON.stringify(frame)}`);
-    console.log(`Motion ${label}: intermediate opacity ${frame.opacity.toFixed(3)}.`);
-  }
-  async function geometry(kind, label) {
-    await js('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
-    const measurements = await js(`(() => {
-      const rect = selector => { const el=document.querySelector(selector); if(!el) return null; const r=el.getBoundingClientRect(); return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height,scrollWidth:el.scrollWidth,clientWidth:el.clientWidth,scrollHeight:el.scrollHeight,clientHeight:el.clientHeight}; };
-      const selectors=${JSON.stringify(['.main-content', '.page', '.registry-toolbar', '.registry-pagination', '.registry-table-scroll', '.registry-table thead', '.registry-table tbody tr', '.calendar-page-heading', '.calendar-month-panel', '.calendar-month-grid', '.calendar-day-panel', '.calendar-add-task'])};
-      return {width:innerWidth,height:innerHeight,document:{width:document.documentElement.scrollWidth,height:document.documentElement.scrollHeight},elements:Object.fromEntries(selectors.map(s=>[s,rect(s)])),dates:[...document.querySelectorAll('.calendar-date')].map(el=>{const r=el.getBoundingClientRect();return{right:r.right,bottom:r.bottom,x:r.x,y:r.y}}),columns:document.querySelectorAll('.registry-table th').length};
-    })()`);
-    const { width, height, elements, document: bounds } = measurements;
-    assert.ok(bounds.width <= width + 1 && bounds.height <= height + 1, `${label}: document overflow ${JSON.stringify(measurements)}`);
-    const main = elements['.main-content'];
-    const page = elements['.page'];
-    assert.ok(main.scrollHeight <= main.clientHeight + 1, `${label}: main page scrolls ${JSON.stringify(measurements)}`);
-    assert.ok(page.bottom <= main.bottom + 1 && page.right <= main.right + 1, `${label}: clipped workspace`);
-    for (const selector of kind === 'registry'
-      ? ['.registry-toolbar', '.registry-pagination']
-      : ['.calendar-page-heading', '.calendar-month-panel', '.calendar-day-panel', '.calendar-add-task']) {
-      const element = elements[selector];
-      assert.ok(element && element.y >= main.y - 1 && element.bottom <= main.bottom + 1 && element.right <= main.right + 1,
-        `${label}: ${selector} is outside the workspace ${JSON.stringify(measurements)}`);
-    }
-    if (kind === 'registry') {
-      const scroller = elements['.registry-table-scroll'];
-      assert.equal(measurements.columns, 8);
-      assert.ok(scroller.scrollWidth <= scroller.clientWidth + 1, `${label}: default table needs horizontal scrolling`);
-      const header = elements['.registry-table thead'];
-      const row = elements['.registry-table tbody tr'];
-      assert.ok(scroller.height + 1 >= header.height + row.height * 3, `${label}: fewer than three visible rows ${JSON.stringify({scroller:scroller.height,header:header.height,row:row.height})}`);
-    } else {
-      const grid = elements['.calendar-month-grid'];
-      assert.ok([35,42].includes(measurements.dates.length));
-      assert.ok(measurements.dates.every(day => day.bottom <= grid.bottom + 1 && day.y >= grid.y - 1 && day.right <= grid.right + 1), `${label}: calendar dates are clipped`);
-    }
-    console.log(`Adaptive ${label}: ${width}×${height}, workspace fits.`);
-  }
-  async function resizeSweep(kind) {
-    for (const [width, height] of [[1200,780], [1024,768], [720,640], [720,540], [1440,900]]) {
-      window.setSize(width, height);
-      await new Promise(resolve => setTimeout(resolve, 230));
-      await geometry(kind, `${kind} ${width}×${height}`);
-      if ((width === 720 && height === 640) || (width === 1200 && height === 780)) await screenshot(`${kind}-adaptive-${width}.png`);
-    }
-    window.setSize(1200,780);
-    await new Promise(resolve => setTimeout(resolve, 230));
-  }
-  async function screenshot(name) {
-    // Invalidate every layer: hidden Chromium windows can retain an earlier
-    // raster for backdrop-filtered navigation after a theme change.
-    const [width, height] = window.getContentSize();
-    window.setContentSize(width + 1, height);
-    await js('new Promise(resolve => requestAnimationFrame(resolve))');
-    window.setContentSize(width, height);
-    await js('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
-    await new Promise(resolve => setTimeout(resolve, 220));
-    writeFileSync(path.join(output, name), (await window.webContents.capturePage()).toPNG());
-  }
+  const driver = new DesktopSmokeDriver(window, { output });
+  driver.prepare();
+  const { js, api, wait, click, navigate, fill, openFilters, pressKey, verifyEntrance,
+    geometry, resize, resizeDefault, resizeSweep, screenshot, errors } = driver;
 
   window.webContents.once('did-finish-load', async () => {
     try {
@@ -159,7 +56,7 @@ app.once('browser-window-created', (_event, window) => {
       await wait("document.querySelector('.file-path')?.textContent.includes('selected-controls.sqlite')");
       const initial = await api('database', 'getStatus');
       const generation = initial.generation;
-      assert.equal(initial.schemaVersion, 2);
+      assert.equal(initial.schemaVersion, 3);
       assert.equal(initial.filePath, firstFile);
 
       await navigate('/', 'Реестр указаний');
@@ -171,10 +68,15 @@ app.once('browser-window-created', (_event, window) => {
         0: today, 1: '0017', 2: '0001/К', 3: today, 4: 'Проверить отчёт',
         5: 'Сверить сведения\nПодготовить итоговую справку.', 6: 'Иванов И.И.', 7: 'pending', 8: 'Ожидается ответ',
       });
+      await js("document.querySelector('.registry-instruction-dialog .attachment-add').click()");
+      await wait("document.querySelectorAll('.attachment-list li').length === 1 && !document.querySelector('.attachment-add').disabled");
       await js("document.querySelector('.registry-instruction-form').requestSubmit()");
       await wait("!document.querySelector('.registry-instruction-dialog[open]') && document.querySelector('.registry-count')?.textContent === '1'");
       const created = (await api('instructions', 'list', { generation })).items[0];
       assert.equal(created.incomingNumber, '0017');
+      const instructionFiles = await api('attachments', 'list', { entityType: 'instructions', entityId: created.id, generation });
+      assert.equal(instructionFiles.length, 1);
+      assert.equal(readFileSync(path.join(firstFile + '.files', instructionFiles[0].relativePath), 'utf8'), 'Документ для задачи и указания.');
 
       // Fixture rows make pagination meaningful; user CRUD above exercised the actual form.
       await js(`(async () => { for(let index=0;index<26;index++) await window.desktopAPI.instructions.create({generation:${generation},data:{controlDate:${JSON.stringify(today)},incomingNumber:'00'+index,instructionNumber:'К-'+index,title:'Плановое указание '+(index+1),summary:'Подготовить документы и проверить исполнение.',deadline:${JSON.stringify(today)},executor:'Иванов И.И.',status:'pending',executionMark:''}}); })()`);
@@ -199,18 +101,16 @@ app.once('browser-window-created', (_event, window) => {
         'Expanded compact navigation must overlay rather than squeeze the table');
       assert.equal(await js("document.querySelector('.app-body').inert"), true);
       await js("document.querySelector('#expanded-navigation nav a:last-child').focus()");
-      window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Tab' });
-      window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Tab' });
+      await pressKey('Tab');
       await wait("document.activeElement?.classList.contains('brand')");
-      window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Tab', modifiers: ['shift'] });
-      window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Tab', modifiers: ['shift'] });
+      await pressKey('Tab', ['shift']);
       await wait("document.activeElement === document.querySelector('#expanded-navigation nav a:last-child')");
-      await escapeKey();
+      await pressKey('Escape');
       await wait("!document.querySelector('.sidebar-frame-overlay') && document.activeElement?.classList.contains('sidebar-toggle')");
       assert.equal(await js("document.querySelector('.app-body').inert"), false);
       await openFilters();
       await fill('.registry-filter-fields input,.registry-filter-fields select', { 0: 'Черновик фильтра' });
-      await escapeKey();
+      await pressKey('Escape');
       await wait("!document.querySelector('.registry-filters:popover-open') && document.activeElement?.classList.contains('registry-filter-toggle')");
       assert.equal(await js("document.querySelector('.registry-count').textContent"), '27');
       await openFilters();
@@ -233,6 +133,12 @@ app.once('browser-window-created', (_event, window) => {
       await wait("document.querySelector('.registry-count')?.textContent === '1'");
       await js("document.querySelector('.registry-table tbody tr').click()");
       await wait("Boolean(document.querySelector('.registry-instruction-dialog[open]'))");
+      await wait("Boolean(document.querySelector('.attachment-list button.attachment-name'))");
+      await js("document.querySelector('.attachment-list button.attachment-name').click()");
+      await wait("document.querySelector('.attachment-panel')?.textContent.includes('сохранён.')");
+      assert.equal(readFileSync(downloadedFile, 'utf8'), 'Документ для задачи и указания.');
+      await js("document.querySelector('.attachment-panel').scrollIntoView({block:'center'})");
+      await screenshot('instruction-attachments.png');
       await fill('.registry-form-grid input,.registry-form-grid textarea,.registry-form-grid select', { 7: 'completed', 8: 'Исполнено в срок' });
       await js("document.querySelector('.registry-instruction-form').requestSubmit()");
       await wait("!document.querySelector('.registry-instruction-dialog[open]')");
@@ -248,10 +154,15 @@ app.once('browser-window-created', (_event, window) => {
       await verifyEntrance('.calendar-task-dialog', 'task card');
       assert.equal(await js("document.querySelector('.calendar-task-form fieldset').disabled"), false);
       await fill('.calendar-task-form input:not([type=checkbox]),.calendar-task-form select,.calendar-task-form textarea', { 0: 'Подготовить совещание', 1: today, 2: 'urgent', 3: 'Согласовать повестку и участников.' });
+      await js("document.querySelector('.calendar-task-dialog .attachment-add').click()");
+      await wait("document.querySelectorAll('.attachment-list li').length === 1 && !document.querySelector('.attachment-add').disabled");
       await js("document.querySelector('.calendar-task-form').requestSubmit()");
       await wait("!document.querySelector('.calendar-task-dialog[open]') && Boolean(document.querySelector('.calendar-task-open'))");
       day = (await api('calendar', 'month', { month: today.slice(0, 7), generation })).days.find(day => day.date === today);
       assert.equal(day.tasks, 1);
+      const savedTask = (await api('calendar', 'day', { date: today, generation })).tasks[0];
+      const taskFiles = await api('attachments', 'list', { entityType: 'tasks', entityId: savedTask.id, generation });
+      assert.equal(taskFiles.length, 1);
       await screenshot('calendar-light.png');
       await resizeSweep('calendar');
       for (let attempt = 0; attempt < 12; attempt++) {
@@ -260,13 +171,11 @@ app.once('browser-window-created', (_event, window) => {
         if (await js("document.querySelector('.calendar-month-grid')?.style.getPropertyValue('--calendar-weeks') === '6'")) break;
       }
       assert.equal(await js("document.querySelector('.calendar-month-grid').style.getPropertyValue('--calendar-weeks')"), '6');
-      window.setSize(720,540);
-      await new Promise(resolve => setTimeout(resolve, 230));
+      await resize(720, 540);
       await geometry('calendar', 'six-week month 720×540');
       await click('Сегодня', '.calendar-month-navigation button');
       await wait("Boolean(document.querySelector('.calendar-task-open'))");
-      window.setSize(1200,780);
-      await new Promise(resolve => setTimeout(resolve, 230));
+      await resizeDefault();
 
       // A failed native checkbox save must keep the visible control consistent with SQLite.
       const lock = new DatabaseSync(firstFile);
@@ -283,6 +192,9 @@ app.once('browser-window-created', (_event, window) => {
       // Dirty-task close guard stays in Electron until the user chooses an action.
       await js("document.querySelector('.calendar-task-open').click()");
       await wait("Boolean(document.querySelector('.calendar-task-dialog[open]'))");
+      await wait("Boolean(document.querySelector('.attachment-list button.attachment-name'))");
+      await js("document.querySelector('.calendar-task-dialog .attachment-add').click()");
+      await wait("document.querySelectorAll('.attachment-list li').length === 2 && !document.querySelector('.attachment-add').disabled");
       await fill('[name=task-title]', { 0: 'Несохранённое изменение' });
       window.close();
       await wait("Boolean(document.querySelector('.calendar-confirm-dialog[open]'))");
@@ -293,10 +205,40 @@ app.once('browser-window-created', (_event, window) => {
       await wait("Boolean(document.querySelector('.calendar-confirm-dialog[open]'))");
       await click('Не сохранять', '.calendar-confirm-dialog button');
       await wait("!document.querySelector('.calendar-task-dialog[open]')");
+      assert.equal((await api('attachments', 'list', { entityType: 'tasks', entityId: savedTask.id, generation })).length, 1);
+
+      await navigate('/analytics', 'Аналитика');
+      await wait("document.querySelector('[data-metric=total]')?.textContent === '28'");
+      assert.equal(await js("document.querySelector('[data-metric=completed]').textContent"), '2');
+      assert.equal(await js("document.querySelector('[data-metric=active]').textContent"), '26');
+      await screenshot('analytics-light.png');
+      await js("document.querySelector('.analytics-filter-toggle').click()");
+      await wait("document.querySelector('.analytics-filter-toggle').getAttribute('aria-expanded') === 'true'");
+      await fill('[name=analytics-priority]', { 0: 'urgent' });
+      await click('Применить', '.analytics-filters button');
+      await wait("document.querySelector('[data-metric=total]')?.textContent === '1'");
+      assert.equal(await js("document.querySelector('[data-metric=completed]').textContent"), '1');
+      await click('Сбросить', '.analytics-filters button');
+      await wait("document.querySelector('[data-metric=total]')?.textContent === '28'");
+      await fill('[name=analytics-from]', { 0: '2000-01-01' }); await fill('[name=analytics-to]', { 0: '2000-01-31' });
+      await click('Применить', '.analytics-filters button');
+      await wait("document.querySelector('.analytics-empty h2')?.textContent === 'В этой выборке нет записей'");
+      await click('Сбросить', '.analytics-filters button');
+      await wait("document.querySelector('[data-metric=total]')?.textContent === '28'");
+      await resize(720, 540);
+      await js("document.querySelector('.analytics-filter-toggle').click()");
+      await wait("document.querySelector('.analytics-filter-toggle').getAttribute('aria-expanded') === 'false'");
+      assert.equal(await js('document.documentElement.scrollWidth > innerWidth'), false);
+      assert.equal(await js("document.querySelector('.main-content').scrollWidth > document.querySelector('.main-content').clientWidth"), false);
+      await screenshot('analytics-compact.png');
+      await resizeDefault();
 
       await navigate('/settings', 'Настройки');
       await js("document.querySelector('button[value=dark]').click()");
       await wait("document.documentElement.dataset.appearance === 'dark'");
+      await navigate('/analytics', 'Аналитика');
+      await wait("document.querySelector('[data-metric=total]')?.textContent === '28'");
+      await screenshot('analytics-dark.png');
       await navigate('/calendar', 'Календарь и задачи');
       await wait("Boolean(document.querySelector('.calendar-task-open'))");
       await screenshot('calendar-dark.png');
@@ -312,6 +254,7 @@ app.once('browser-window-created', (_event, window) => {
       const next = await api('database', 'getStatus');
       assert.notEqual(next.generation, generation);
       assert.equal((await api('instructions', 'list', { generation: next.generation })).total, 0);
+      assert.equal((await api('analytics', 'summary', { generation: next.generation })).totals.total, 0);
       await assert.rejects(api('instructions', 'update', { id: created.id, data: { title: 'Wrong DB' }, generation }));
       await click('Открыть базу', '.storage-button');
       assert.equal((await api('database', 'getStatus')).generation, next.generation);
@@ -321,6 +264,7 @@ app.once('browser-window-created', (_event, window) => {
       const reopened = await api('database', 'getStatus');
       assert.equal((await api('instructions', 'list', { generation: reopened.generation })).total, 27);
       assert.equal((await api('calendar', 'day', { date: today, generation: reopened.generation })).tasks.length, 1);
+      assert.equal((await api('attachments', 'list', { entityType: 'instructions', entityId: created.id, generation: reopened.generation })).length, 1);
       assert.equal(JSON.parse(readFileSync(path.join(userData, 'database-location.json'), 'utf8')).filePath, firstFile);
 
       await navigate('/', 'Реестр указаний');
@@ -335,6 +279,7 @@ app.once('browser-window-created', (_event, window) => {
       await click('Удалить', '.registry-confirm-dialog button');
       await wait("!document.querySelector('.registry-instruction-dialog[open]') && document.querySelector('.registry-count')?.textContent === '0'");
       assert.equal(await api('instructions', 'get', { id: created.id, generation: reopened.generation }), null);
+      assert.equal(existsSync(path.join(firstFile + '.files', instructionFiles[0].relativePath)), false);
       await navigate('/calendar', 'Календарь и задачи');
       await wait("Boolean(document.querySelector('.calendar-task-open'))");
       await js("document.querySelector('.calendar-task-open').click()");
@@ -344,6 +289,7 @@ app.once('browser-window-created', (_event, window) => {
       await click('Удалить', '.calendar-confirm-dialog button');
       await wait("!document.querySelector('.calendar-task-dialog[open]') && !document.querySelector('.calendar-task-open')");
       assert.equal((await api('calendar', 'day', { date: today, generation: reopened.generation })).tasks.length, 0);
+      assert.equal(existsSync(path.join(firstFile + '.files', taskFiles[0].relativePath)), false);
       // Reduced motion must remove visual delays without changing focus or editing.
       await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
       await wait("matchMedia('(prefers-reduced-motion: reduce)').matches");
@@ -356,7 +302,7 @@ app.once('browser-window-created', (_event, window) => {
       await navigate('/', 'Реестр указаний');
       await openFilters();
       assert.equal(await js("document.querySelector('.registry-filters').getAnimations().filter(a=>a.playState==='running').length"), 0);
-      await escapeKey();
+      await pressKey('Escape');
       await wait("!document.querySelector('.registry-filters:popover-open')");
       await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
       await js("document.querySelector('nav a[href=\"#/calendar\"]').click(); document.querySelector('nav a[href=\"#/settings\"]').click(); document.querySelector('nav a[href=\"#/\"]').click()");
@@ -364,14 +310,13 @@ app.once('browser-window-created', (_event, window) => {
       assert.equal(await js("document.querySelectorAll('.page').length"), 1);
       console.log('Motion rapid navigation and reduced-motion checks passed.');
       await navigate('/calendar', 'Календарь и задачи');
-      window.setSize(720, 640);
-      await new Promise(resolve => setTimeout(resolve, 150));
+      await resize(720, 640);
       assert.equal(await js('document.documentElement.scrollWidth > innerWidth'), false);
       await screenshot('calendar-compact.png');
       assert.deepEqual(errors, []);
       window.webContents.debugger.detach();
       clearTimeout(timeout);
-      console.log('Registry desktop smoke passed: create/open DB, CRUD UI, filters, 27-row Excel, calendar counts/tasks, generation isolation, unsaved close guard, light/dark, compact window.');
+      console.log('Registry desktop smoke passed: create/open DB, CRUD UI, attachments/download/discard, analytics/filter/empty state, 27-row Excel, calendar, generation isolation, unsaved close guard, light/dark, compact window.');
       app.quit();
     } catch (error) {
       console.error(error);

@@ -25,6 +25,21 @@ test('renderer decodes success values once and preserves named method payloads',
   assert.deepEqual(calls, [['tasks:create', request]]);
 });
 
+test('desktop service mappings expose declared aliases and preserve positional arguments', async (t) => {
+  const calls = [];
+  bridge(t, createPreloadApis({ invoke: async (...args) => {
+    calls.push(args);
+    return { ok: true, value: 'saved' };
+  } }));
+  const service = gateway.createDesktopService({ status: ['database', 'getStatus'], theme: ['settings', 'setTheme'] });
+  assert.equal(await service.status(), 'saved');
+  assert.equal(await service.theme('dark', 7), 'saved');
+  assert.deepEqual(calls, [['database:get-status'], ['settings:set-theme', { theme: 'dark', generation: 7 }]]);
+  assert.deepEqual(Object.keys(service), ['status', 'theme']);
+  assert.throws(() => gateway.createDesktopService({ unsafe: ['database', 'executeSql'] }), TypeError);
+  assert.throws(() => gateway.createDesktopService({ unsafe: ['filesystem', 'read'] }), TypeError);
+});
+
 test('a main-process sqlite failure reaches the UI with a safe message and a stable code', async (t) => {
   assert.equal(typeof gateway.requestDesktop, 'function');
   const handlers = new Map();

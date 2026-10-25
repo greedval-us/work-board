@@ -36,7 +36,7 @@ test('migration upgrades legacy settings once and preserves existing values', ()
     database.exec("CREATE TABLE app_settings (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL) STRICT; INSERT INTO app_settings VALUES ('theme', 'dark'); PRAGMA user_version = 1");
     migrate(database);
     migrate(database);
-    assert.equal(database.prepare('PRAGMA user_version').get().user_version, 2);
+    assert.equal(database.prepare('PRAGMA user_version').get().user_version, 3);
     assert.equal(database.prepare("SELECT value FROM app_settings WHERE key = 'theme'").get().value, 'dark');
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM instructions').get().count, 0);
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM calendar_tasks').get().count, 0);

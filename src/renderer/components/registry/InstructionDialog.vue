@@ -2,8 +2,13 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, shallowRef, useId, useTemplateRef, watch } from 'vue';
 import { Trash2, X } from 'lucide-vue-next';
 import { INSTRUCTION_STATUSES } from '../../../shared/registry.js';
+import { ENTITY_TYPES } from '../../../shared/constants/entities.js';
 import { createDialogMotion } from '../../infrastructure/dialogMotion.js';
 import ConfirmDialog from './ConfirmDialog.vue';
+import AttachmentPanel from '../attachments/AttachmentPanel.vue';
+import { useAppStore } from '../../stores/appStore.js';
+import { createInstructionDraft, snapshotInstruction } from '../../domain/instructions.js';
+import { INSTRUCTION_FORM_LIMITS } from '../../constants/inputLimits.js';
 
 const props = defineProps({ record: { type: Object, required: true }, saving: Boolean, deleting: Boolean,
   error: { type: String, default: '' }, canEdit: { type: Boolean, default: true }, closing: Boolean,
@@ -17,13 +22,15 @@ const errorElement = useTemplateRef('errorElement');
 const titleId = useId();
 const helpId = useId();
 const errorId = useId();
-const form = reactive(Object.fromEntries(['controlDate', 'incomingNumber', 'instructionNumber', 'title', 'summary', 'deadline', 'executor', 'status', 'executionMark'].map((key) => [key, props.record[key] ?? ''])));
+const form = reactive(createInstructionDraft(props.record));
+const generation = useAppStore().database?.generation;
+const attachmentBusy = shallowRef(false);
 const initialValue = JSON.stringify(form);
 const dirty = computed(() => JSON.stringify(form) !== initialValue);
 const leaving = shallowRef(false);
 const closeRequested = shallowRef(false);
 const requestingClose = shallowRef(false);
-const busy = computed(() => props.saving || props.deleting || props.closing || leaving.value || closeRequested.value);
+const busy = computed(() => attachmentBusy.value || props.saving || props.deleting || props.closing || leaving.value || closeRequested.value);
 const motion = createDialogMotion(() => dialog.value);
 let previousFocus;
 let disposed = false;
@@ -47,7 +54,7 @@ async function leaveSurface() {
 
 async function save() {
   if (busy.value || !props.canEdit || !formElement.value.reportValidity()) return false;
-  return props.saveRecord({ ...form });
+  return props.saveRecord(snapshotInstruction(form));
 }
 
 async function requestClose() {
@@ -93,15 +100,16 @@ defineExpose({ requestClose, dirty, enterSurface, leaveSurface });
           <p v-if="props.error" :id="errorId" ref="errorElement" class="registry-form-error" role="alert" tabindex="-1">{{ props.error }}</p>
           <fieldset class="registry-form-grid" :disabled="busy || !props.canEdit" :aria-describedby="props.error ? errorId : undefined">
             <label class="registry-field"><span>Дата постановки на контроль *</span><input v-model="form.controlDate" type="date" required /></label>
-            <label class="registry-field"><span>Входящий номер</span><input v-model="form.incomingNumber" type="text" maxlength="200" placeholder="Например, 001/в" /></label>
-            <label class="registry-field"><span>Номер указания *</span><input ref="instructionNumber" v-model="form.instructionNumber" type="text" required maxlength="200" /></label>
+            <label class="registry-field"><span>Входящий номер</span><input v-model="form.incomingNumber" type="text" :maxlength="INSTRUCTION_FORM_LIMITS.incomingNumber" placeholder="Например, 001/в" /></label>
+            <label class="registry-field"><span>Номер указания *</span><input ref="instructionNumber" v-model="form.instructionNumber" type="text" required :maxlength="INSTRUCTION_FORM_LIMITS.instructionNumber" /></label>
             <label class="registry-field"><span>Срок исполнения *</span><input v-model="form.deadline" type="date" required /></label>
-            <label class="registry-field registry-field-wide"><span>Название указания *</span><input v-model="form.title" type="text" required maxlength="500" /></label>
-            <label class="registry-field registry-field-wide"><span>Краткое содержание указания</span><textarea v-model="form.summary" rows="4" maxlength="20000" /></label>
-            <label class="registry-field"><span>Исполнитель *</span><input v-model="form.executor" type="text" required maxlength="300" /></label>
+            <label class="registry-field registry-field-wide"><span>Название указания *</span><input v-model="form.title" type="text" required :maxlength="INSTRUCTION_FORM_LIMITS.title" /></label>
+            <label class="registry-field registry-field-wide"><span>Краткое содержание указания</span><textarea v-model="form.summary" rows="4" :maxlength="INSTRUCTION_FORM_LIMITS.summary" /></label>
+            <label class="registry-field"><span>Исполнитель *</span><input v-model="form.executor" type="text" required :maxlength="INSTRUCTION_FORM_LIMITS.executor" /></label>
             <label class="registry-field"><span>Статус исполнения *</span><select v-model="form.status" required><option v-for="(label, value) in INSTRUCTION_STATUSES" :key="value" :value="value">{{ label }}</option></select></label>
-            <label class="registry-field registry-field-wide"><span>Отметка об исполнении</span><textarea v-model="form.executionMark" rows="3" maxlength="10000" placeholder="Комментарий к исполнению" /></label>
+            <label class="registry-field registry-field-wide"><span>Отметка об исполнении</span><textarea v-model="form.executionMark" rows="3" :maxlength="INSTRUCTION_FORM_LIMITS.executionMark" placeholder="Комментарий к исполнению" /></label>
           </fieldset>
+          <AttachmentPanel v-model="form.attachments" :entity-type="ENTITY_TYPES.INSTRUCTIONS" :entity-id="props.record.id" :generation="generation" :disabled="busy || !props.canEdit" @busy="attachmentBusy = $event" />
         </div>
         <div class="registry-dialog-actions"><button v-if="props.record.id" type="button" class="registry-button registry-delete-button" :disabled="busy || !props.canEdit" @click="remove"><Trash2 :size="16" aria-hidden="true" />{{ props.deleting ? 'Удаление…' : 'Удалить' }}</button><span v-if="dirty" class="registry-unsaved-label">Не сохранено</span><div class="registry-actions"><button type="button" class="registry-button" :disabled="busy" @click="requestClose">Отмена</button><button type="submit" class="registry-button registry-button-primary" :disabled="busy || !props.canEdit">{{ props.saving ? 'Сохранение…' : 'Сохранить' }}</button></div></div>
       </form>

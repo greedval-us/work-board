@@ -1,9 +1,9 @@
-import { requestDesktop } from '../infrastructure/desktopApi.js';
+import { createDesktopService } from '../infrastructure/desktopApi.js';
 
-export const calendarService = {
-  month: (request) => requestDesktop('calendar', 'month', request),
-  day: (request) => requestDesktop('calendar', 'day', request),
-  createTask: (request) => requestDesktop('tasks', 'create', request),
-  updateTask: (request) => requestDesktop('tasks', 'update', request),
-  removeTask: (request) => requestDesktop('tasks', 'remove', request),
-};
+export const calendarService = createDesktopService({
+  month: ['calendar', 'month'],
+  day: ['calendar', 'day'],
+  createTask: ['tasks', 'create'],
+  updateTask: ['tasks', 'update'],
+  removeTask: ['tasks', 'remove'],
+});

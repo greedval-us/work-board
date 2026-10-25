@@ -1,4 +1,6 @@
 import { daysInMonth, validateDate, ValidationError } from '../../shared/registry.js';
+import { ISO_MONTH_PATTERN } from '../../shared/constants/dates.js';
+import { INSTRUCTION_STATUS } from '../../shared/constants/registry.js';
 
 export class CalendarService {
   constructor(instructions, tasks) {
@@ -8,7 +10,7 @@ export class CalendarService {
 
   month(request = {}) {
     const month = request?.month;
-    if (typeof month !== 'string' || !/^\d{4}-\d{2}$/.test(month)) throw new ValidationError('Выберите корректный месяц.');
+    if (typeof month !== 'string' || !ISO_MONTH_PATTERN.test(month)) throw new ValidationError('Выберите корректный месяц.');
     const from = validateDate(`${month}-01`, 'Месяц');
     const [year, number] = month.split('-').map(Number);
     const count = daysInMonth(year, number);
@@ -19,7 +21,7 @@ export class CalendarService {
     }));
     const byDate = new Map(days.map(day => [day.date, day]));
     for (const instruction of this.instructions.all({ filters: { deadlineFrom: from, deadlineTo: to } })) {
-      const key = instruction.status === 'completed' ? 'completedControls' : 'controls';
+      const key = instruction.status === INSTRUCTION_STATUS.COMPLETED ? 'completedControls' : 'controls';
       byDate.get(instruction.deadline)[key] += 1;
     }
     for (const task of this.tasks.list({ from, to })) {

@@ -1,5 +1,6 @@
 import { validateDate, validateId, validateTask, ValidationError } from '../../shared/registry.js';
 import { AppError } from '../utils/AppError.js';
+import { validateDateRange } from '../../shared/validation.js';
 
 const COLUMNS = 'id, title, date, description, priority, completed, created_at AS createdAt, updated_at AS updatedAt';
 const fromRow = row => row ? { ...row, completed: Boolean(row.completed) } : null;
@@ -14,7 +15,7 @@ export class TaskRepository {
     const values = [];
     if (from !== undefined && from !== '') { clauses.push('date >= ?'); values.push(validateDate(from, 'Дата с')); }
     if (to !== undefined && to !== '') { clauses.push('date <= ?'); values.push(validateDate(to, 'Дата по')); }
-    if (from && to && from > to) throw new ValidationError('Начало периода не может быть позже окончания.');
+    validateDateRange(from, to);
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
     return this.database.connection.prepare(`SELECT ${COLUMNS} FROM calendar_tasks ${where} ORDER BY date ASC, id ASC`)
       .all(...values).map(fromRow);

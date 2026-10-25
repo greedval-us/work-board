@@ -9,6 +9,14 @@ import { DatabaseSelectionService } from './services/DatabaseSelectionService.js
 import { CalendarService } from './services/CalendarService.js';
 import { ExcelExportService } from './services/ExcelExportService.js';
 import { IPCManager } from './ipc/IPCManager.js';
+import { AttachmentService } from './services/AttachmentService.js';
+import { AnalyticsService } from './services/AnalyticsService.js';
+import { AttachmentRepository } from './repositories/AttachmentRepository.js';
+import { AttachmentSelections } from './attachments/AttachmentSelections.js';
+import { AttachmentStorage } from './attachments/AttachmentStorage.js';
+import { RecordService } from './services/RecordService.js';
+import { ENTITY_TYPES } from '../shared/constants/entities.js';
+import { AnalyticsRepository } from './repositories/AnalyticsRepository.js';
 
 // Composition root: platform dependencies enter here; repositories and services
 // do not create windows or discover each other through global state.
@@ -20,10 +28,21 @@ export function createApplicationServices({ app, ipcMain, dialog, getWindow, log
     location.restore();
     const instructions = new InstructionRepository(database);
     const tasks = new TaskRepository(database);
+    const attachments = new AttachmentService({
+      database, instructions, tasks, dialog, getWindow,
+      repository: new AttachmentRepository(database),
+      selections: new AttachmentSelections(),
+      storage: new AttachmentStorage({ database, logger }),
+    });
+    const recordServices = {
+      [ENTITY_TYPES.INSTRUCTIONS]: new RecordService({ entityType: ENTITY_TYPES.INSTRUCTIONS, repository: instructions, attachments }),
+      [ENTITY_TYPES.TASKS]: new RecordService({ entityType: ENTITY_TYPES.TASKS, repository: tasks, attachments }),
+    };
     ipc = new IPCManager({
       ipcMain, database, appService: new AppService(app),
       settingsService: new SettingsService(new SettingsRepository(database)),
-      instructions, tasks, calendar: new CalendarService(instructions, tasks),
+      recordServices, calendar: new CalendarService(instructions, tasks), attachments,
+      analytics: new AnalyticsService({ repository: new AnalyticsRepository(database) }),
       selection: new DatabaseSelectionService({ database, location, dialog, getWindow }),
       exportService: new ExcelExportService({ database, instructions, dialog, getWindow }),
       getWindow, logger,

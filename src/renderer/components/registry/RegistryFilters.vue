@@ -2,6 +2,9 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, shallowRef, useId, useTemplateRef } from 'vue';
 import { RotateCcw, SlidersHorizontal, X } from 'lucide-vue-next';
 import { INSTRUCTION_STATUSES } from '../../../shared/registry.js';
+import { REGISTRY_FILTER_LIMITS } from '../../constants/inputLimits.js';
+
+const FILTER_POPOVER = Object.freeze({ MAX_WIDTH: 720, VIEWPORT_MARGIN: 16, ANCHOR_GAP: 8, MIN_VISIBLE_HEIGHT: 220 });
 
 const props = defineProps({ filters: { type: Object, required: true }, appliedFilters: { type: Object, required: true }, disabled: Boolean, changed: Boolean, error: { type: String, default: '' } });
 const emit = defineEmits(['update', 'apply', 'reset']);
@@ -33,10 +36,10 @@ const update = (field, event) => emit('update', { field, value: event.target.val
 function positionPanel() {
   const bounds = filterbar.value?.getBoundingClientRect();
   if (!bounds) return;
-  const width = Math.min(720, window.innerWidth - 32);
-  const top = Math.max(16, Math.min(bounds.bottom + 8, window.innerHeight - 220));
-  panelStyle.value = { width: `${width}px`, left: `${Math.max(16, Math.min(bounds.left, window.innerWidth - width - 16))}px`,
-    top: `${top}px`, maxHeight: `${window.innerHeight - top - 16}px` };
+  const width = Math.min(FILTER_POPOVER.MAX_WIDTH, window.innerWidth - FILTER_POPOVER.VIEWPORT_MARGIN * 2);
+  const top = Math.max(FILTER_POPOVER.VIEWPORT_MARGIN, Math.min(bounds.bottom + FILTER_POPOVER.ANCHOR_GAP, window.innerHeight - FILTER_POPOVER.MIN_VISIBLE_HEIGHT));
+  panelStyle.value = { width: `${width}px`, left: `${Math.max(FILTER_POPOVER.VIEWPORT_MARGIN, Math.min(bounds.left, window.innerWidth - width - FILTER_POPOVER.VIEWPORT_MARGIN))}px`,
+    top: `${top}px`, maxHeight: `${window.innerHeight - top - FILTER_POPOVER.VIEWPORT_MARGIN}px` };
 }
 
 function beforeToggle(event) {
@@ -76,12 +79,12 @@ onBeforeUnmount(() => window.removeEventListener('resize', resize));
       <form aria-label="Фильтры реестра" @submit.prevent="apply">
         <div class="registry-filter-panel-heading"><h2 :id="titleId">Фильтры</h2><button type="button" class="registry-button registry-filter-close" aria-label="Закрыть фильтры" @click="closePanel"><X :size="17" aria-hidden="true" /></button></div>
         <fieldset class="registry-filter-fields" :disabled="props.disabled">
-          <label class="registry-field"><span>Номер указания</span><input :value="props.filters.instructionNumber" data-filter="instructionNumber" type="search" maxlength="200" placeholder="Часть номера" @input="update('instructionNumber', $event)" /></label>
+          <label class="registry-field"><span>Номер указания</span><input :value="props.filters.instructionNumber" data-filter="instructionNumber" type="search" :maxlength="REGISTRY_FILTER_LIMITS.instructionNumber" placeholder="Часть номера" @input="update('instructionNumber', $event)" /></label>
           <label class="registry-field"><span>Срок исполнения с</span><input :value="props.filters.deadlineFrom" data-filter="deadlineFrom" type="date" @input="update('deadlineFrom', $event)" /></label>
           <label class="registry-field"><span>Срок исполнения по</span><input :value="props.filters.deadlineTo" data-filter="deadlineTo" type="date" :min="props.filters.deadlineFrom || undefined" @input="update('deadlineTo', $event)" /></label>
-          <label class="registry-field"><span>Исполнитель</span><input :value="props.filters.executor" data-filter="executor" type="search" maxlength="200" placeholder="Имя или фамилия" @input="update('executor', $event)" /></label>
+          <label class="registry-field"><span>Исполнитель</span><input :value="props.filters.executor" data-filter="executor" type="search" :maxlength="REGISTRY_FILTER_LIMITS.executor" placeholder="Имя или фамилия" @input="update('executor', $event)" /></label>
           <label class="registry-field"><span>Статус исполнения</span><select :value="props.filters.status" data-filter="status" @change="update('status', $event)"><option value="">Все статусы</option><option v-for="(label, value) in INSTRUCTION_STATUSES" :key="value" :value="value">{{ label }}</option></select></label>
-          <label class="registry-field"><span>Отметка об исполнении</span><input :value="props.filters.executionMark" data-filter="executionMark" type="search" maxlength="500" placeholder="Текст комментария" @input="update('executionMark', $event)" /></label>
+          <label class="registry-field"><span>Отметка об исполнении</span><input :value="props.filters.executionMark" data-filter="executionMark" type="search" :maxlength="REGISTRY_FILTER_LIMITS.executionMark" placeholder="Текст комментария" @input="update('executionMark', $event)" /></label>
         </fieldset>
         <div class="registry-filter-footer"><p v-if="props.error" class="registry-inline-error" role="alert">{{ props.error }}</p><p v-else class="registry-help">Все условия — одновременно. Даты включительно.</p><div class="registry-actions"><button class="registry-button" type="button" :disabled="props.disabled" @click="reset">Сбросить</button><button class="registry-button registry-button-primary" type="submit" :disabled="props.disabled">Применить</button></div></div>
       </form>

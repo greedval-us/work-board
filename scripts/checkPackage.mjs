@@ -1,14 +1,18 @@
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import asar from '@electron/asar';
 import { NtExecutable, NtExecutableResource } from 'pe-library';
+import packaging from '../electron-builder.config.cjs';
+import { PROJECT_ROOT as root, createElectronEnvironment, readProjectMetadata, runProcessSync } from './lib/runtime.mjs';
 
-const root = fileURLToPath(new URL('..', import.meta.url));
-const metadata = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
-const archive = path.join(root, 'release/win-unpacked/resources/app.asar');
+const PACKAGED_DIRECTORIES = ['src/main', 'src/shared', 'build/main', 'build/renderer'];
+const MIN_PACKAGE_BYTES = 50_000_000;
+const ICON_RESOURCE_TYPE = 3;
+const metadata = readProjectMetadata();
+const releaseDirectory = path.join(root, packaging.directories.output);
+const unpackedDirectory = path.join(releaseDirectory, 'win-unpacked');
+const archive = path.join(unpackedDirectory, 'resources/app.asar');
 let checked = 0;
 function verifyDirectory(relative) {
   for (const entry of readdirSync(path.join(root, relative), { withFileTypes: true })) {
@@ -21,7 +25,7 @@ function verifyDirectory(relative) {
     }
   }
 }
-for (const directory of ['src/main', 'src/shared', 'build/main', 'build/renderer']) verifyDirectory(directory);
+for (const directory of PACKAGED_DIRECTORIES) verifyDirectory(directory);
 assert.equal(JSON.parse(asar.extractFile(archive, path.normalize('node_modules/exceljs/package.json'))).version, metadata.dependencies.exceljs);
 
 // Inspect the PE resource tree, rather than accepting an icon copied next to an
@@ -30,11 +34,11 @@ function verifyWindowsIcon(filename) {
   const executable = NtExecutable.from(readFileSync(filename), { ignoreCert: true });
   const resources = NtExecutableResource.from(executable);
   const expected = readFileSync(path.join(root, 'src/public/icons/app-256.png'));
-  assert.ok(resources.entries.some(entry => entry.type === 3 && Buffer.from(entry.bin).equals(expected)),
+  assert.ok(resources.entries.some(entry => entry.type === ICON_RESOURCE_TYPE && Buffer.from(entry.bin).equals(expected)),
     `Work Board icon missing in ${path.basename(filename)}`);
 }
 
-const executable = path.join(root, 'release/win-unpacked/Work Board.exe');
+const executable = path.join(unpackedDirectory, `${packaging.productName}.exe`);
 verifyWindowsIcon(executable);
 const runtimeCheck = `
   const assert = require('node:assert/strict');
@@ -53,18 +57,15 @@ const runtimeCheck = `
     console.log('Packaged Electron runtime: SQLite and ExcelJS passed.');
   }).catch(error => { console.error(error); process.exitCode = 1; });
 `;
-const result = spawnSync(executable, ['-e', runtimeCheck, path.join(archive, 'node_modules/exceljs'), metadata.devDependencies.electron], {
-  env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, encoding: 'utf8', windowsHide: true, timeout: 30000,
+const status = runProcessSync(executable, ['-e', runtimeCheck, path.join(archive, 'node_modules/exceljs'), metadata.devDependencies.electron], {
+  env: createElectronEnvironment({ runAsNode: true }), stdio: 'inherit',
 });
-process.stdout.write(result.stdout || '');
-process.stderr.write(result.stderr || '');
-if (result.error) throw result.error;
-assert.equal(result.status, 0);
+assert.equal(status, 0);
 console.log(`Packaged sources and build match: ${checked} files. Application icon verified.`);
-for (const name of [`Work Board Setup ${metadata.version}.exe`, `Work Board ${metadata.version}.exe`]) {
-  const filename = path.join(root, 'release', name);
+for (const name of [`${packaging.productName} Setup ${metadata.version}.exe`, `${packaging.productName} ${metadata.version}.exe`]) {
+  const filename = path.join(releaseDirectory, name);
   const stat = statSync(filename);
-  assert.ok(stat.size > 50_000_000);
+  assert.ok(stat.size > MIN_PACKAGE_BYTES);
   verifyWindowsIcon(filename);
   console.log(`${name}: ${stat.size} bytes, embedded icon verified.`);
 }

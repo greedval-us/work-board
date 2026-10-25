@@ -1,8 +1,8 @@
 <script setup>
 import { computed } from 'vue';
 import { ArrowUpRight, Check, Plus } from 'lucide-vue-next';
-import { getUrgency, INSTRUCTION_STATUSES, TASK_PRIORITIES } from '../../../shared/registry.js';
 import { dayLabel } from '../../domain/calendarDates.js';
+import { presentCalendarRecords } from '../../presentation/calendarRecords.js';
 
 const props = defineProps({
   date: { type: String, required: true }, instructions: { type: Array, required: true }, tasks: { type: Array, required: true },
@@ -11,12 +11,10 @@ const props = defineProps({
 });
 const emit = defineEmits(['newTask', 'openTask', 'toggleTask', 'retry']);
 const title = computed(() => dayLabel(props.date));
-const instructionRows = computed(() => props.instructions.map((item) => ({ ...item, urgency: getUrgency(item, props.today) })));
-const taskRows = computed(() => props.tasks.map((item) => ({ ...item, urgency: getUrgency(item, props.today) })));
-const activeControls = computed(() => props.instructions.filter((item) => item.status !== 'completed').length);
-const completedControls = computed(() => props.instructions.length - activeControls.value);
-const activeTasks = computed(() => props.tasks.filter((item) => !item.completed).length);
-const completedTasks = computed(() => props.tasks.length - activeTasks.value);
+const records = computed(() => presentCalendarRecords(props.instructions, props.tasks, props.today));
+const instructionRows = computed(() => records.value.instructions);
+const taskRows = computed(() => records.value.tasks);
+const counts = computed(() => records.value.counts);
 
 function toggleTask(event, item) {
   // Commit the visual check only after SQLite confirms the change.
@@ -32,7 +30,7 @@ function toggleTask(event, item) {
     <div v-else-if="error" class="calendar-alert" role="alert"><p>{{ error }}</p><button class="calendar-button" @click="emit('retry')">Повторить</button></div>
     <template v-else>
       <section class="calendar-day-section" aria-labelledby="calendar-controls-heading">
-        <div class="calendar-list-heading"><h3 id="calendar-controls-heading">Указания</h3><span class="calendar-list-count" :aria-label="`На контроле: ${activeControls}`">{{ activeControls }}</span><span v-if="completedControls" class="calendar-completed-count" :aria-label="`Исполнено: ${completedControls}`" :title="`Исполнено: ${completedControls}`"><Check :size="12" aria-hidden="true" />{{ completedControls }}</span></div>
+        <div class="calendar-list-heading"><h3 id="calendar-controls-heading">Указания</h3><span class="calendar-list-count" :aria-label="`На контроле: ${counts.activeControls}`">{{ counts.activeControls }}</span><span v-if="counts.completedControls" class="calendar-completed-count" :aria-label="`Исполнено: ${counts.completedControls}`" :title="`Исполнено: ${counts.completedControls}`"><Check :size="12" aria-hidden="true" />{{ counts.completedControls }}</span></div>
         <div class="calendar-list-body" tabindex="0" role="region" aria-label="Указания на выбранный день">
         <p v-if="!instructionRows.length" class="calendar-empty-list">Указаний к этому сроку нет.</p>
         <ul v-else class="calendar-record-list">
@@ -40,14 +38,14 @@ function toggleTask(event, item) {
             <RouterLink class="calendar-instruction-card" :to="{ path: '/', query: { instruction: item.id } }">
               <span class="calendar-record-number">№ {{ item.instructionNumber }} <ArrowUpRight :size="15" aria-hidden="true" /></span>
               <strong :title="item.title">{{ item.title }}</strong><span class="calendar-record-secondary" :title="item.executor">{{ item.executor }}</span>
-              <span class="calendar-record-meta"><span class="calendar-badge" :class="`calendar-tone-${item.urgency.tone}`">{{ item.urgency.label }}</span><span v-if="item.status !== 'completed' && item.urgency.label !== INSTRUCTION_STATUSES[item.status]">{{ INSTRUCTION_STATUSES[item.status] }}</span></span>
+              <span class="calendar-record-meta"><span class="calendar-badge" :class="`calendar-tone-${item.urgency.tone}`">{{ item.urgency.label }}</span><span v-if="item.secondaryLabel">{{ item.secondaryLabel }}</span></span>
             </RouterLink>
           </li>
         </ul>
         </div>
       </section>
       <section class="calendar-day-section" aria-labelledby="calendar-tasks-heading">
-        <div class="calendar-list-heading"><h3 id="calendar-tasks-heading">Мои задачи</h3><span class="calendar-list-count" :aria-label="`Невыполненных задач: ${activeTasks}`">{{ activeTasks }}</span><span v-if="completedTasks" class="calendar-completed-count" :aria-label="`Выполнено: ${completedTasks}`" :title="`Выполнено: ${completedTasks}`"><Check :size="12" aria-hidden="true" />{{ completedTasks }}</span><button class="calendar-add-task" :disabled="disabled" aria-label="Добавить задачу на выбранный день" @click="emit('newTask')"><Plus :size="17" aria-hidden="true" /></button></div>
+        <div class="calendar-list-heading"><h3 id="calendar-tasks-heading">Мои задачи</h3><span class="calendar-list-count" :aria-label="`Невыполненных задач: ${counts.activeTasks}`">{{ counts.activeTasks }}</span><span v-if="counts.completedTasks" class="calendar-completed-count" :aria-label="`Выполнено: ${counts.completedTasks}`" :title="`Выполнено: ${counts.completedTasks}`"><Check :size="12" aria-hidden="true" />{{ counts.completedTasks }}</span><button class="calendar-add-task" :disabled="disabled" aria-label="Добавить задачу на выбранный день" @click="emit('newTask')"><Plus :size="17" aria-hidden="true" /></button></div>
         <div class="calendar-list-body" tabindex="0" role="region" aria-label="Задачи на выбранный день">
         <p v-if="taskError" class="calendar-task-error" role="alert">{{ taskError }}</p>
         <p v-if="!taskRows.length" class="calendar-empty-list">Пока свободно. Добавьте задачу на этот день.</p>
@@ -56,7 +54,7 @@ function toggleTask(event, item) {
             <input type="checkbox" class="calendar-task-checkbox" :checked="item.completed" :disabled="disabled || busyTaskId !== null" :aria-label="`${item.completed ? 'Вернуть в работу' : 'Отметить выполненной'}: ${item.title}`" @change="toggleTask($event, item)" />
             <button class="calendar-task-open" :disabled="disabled || busyTaskId === item.id" @click="emit('openTask', item)">
               <strong :title="item.title">{{ item.title }}</strong><span v-if="item.description" class="calendar-record-secondary calendar-task-description">{{ item.description }}</span>
-              <span class="calendar-record-meta"><span class="calendar-badge" :class="`calendar-tone-${item.urgency.tone}`">{{ item.urgency.label }}</span><span v-if="!item.completed && item.urgency.label !== TASK_PRIORITIES[item.priority]">{{ TASK_PRIORITIES[item.priority] }}</span></span>
+              <span class="calendar-record-meta"><span class="calendar-badge" :class="`calendar-tone-${item.urgency.tone}`">{{ item.urgency.label }}</span><span v-if="item.secondaryLabel">{{ item.secondaryLabel }}</span></span>
             </button>
           </li>
         </ul>

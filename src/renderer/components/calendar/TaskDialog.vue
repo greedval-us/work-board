@@ -2,8 +2,11 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, shallowRef } from 'vue';
 import { Trash2, X } from 'lucide-vue-next';
 import { TASK_PRIORITIES } from '../../../shared/registry.js';
+import { DATE_LIMITS } from '../../../shared/constants/dates.js';
+import { ENTITY_TYPES } from '../../../shared/constants/entities.js';
 import { useTaskEditor } from './useTaskEditor.js';
 import { createDialogMotion } from '../../infrastructure/dialogMotion.js';
+import AttachmentPanel from '../attachments/AttachmentPanel.vue';
 
 const props = defineProps({
   task: { type: Object, default: null }, date: { type: String, required: true },
@@ -19,7 +22,8 @@ const confirmationMode = shallowRef('unsaved');
 const closing = shallowRef(false);
 const confirmationClosing = shallowRef(false);
 const actionPending = shallowRef(false);
-const fieldsDisabled = computed(() => busy.value || closing.value || confirmationClosing.value);
+const attachmentBusy = shallowRef(false);
+const fieldsDisabled = computed(() => busy.value || attachmentBusy.value || closing.value || confirmationClosing.value);
 const interactionBusy = computed(() => fieldsDisabled.value || actionPending.value);
 const dialogMotion = createDialogMotion(() => dialog.value);
 const confirmationMotion = createDialogMotion(() => confirmation.value);
@@ -155,12 +159,13 @@ defineExpose({ requestClose });
       <fieldset :disabled="fieldsDisabled">
         <label class="calendar-field">Название задачи <span aria-hidden="true">*</span><input v-model="draft.title" name="task-title" required autofocus autocomplete="off" placeholder="Что нужно сделать" /></label>
         <div class="calendar-form-row">
-          <label class="calendar-field">Дата <span aria-hidden="true">*</span><input v-model="draft.date" name="task-date" type="date" min="0001-01-01" max="9999-12-31" required /></label>
+          <label class="calendar-field">Дата <span aria-hidden="true">*</span><input v-model="draft.date" name="task-date" type="date" :min="DATE_LIMITS.MIN" :max="DATE_LIMITS.MAX" required /></label>
           <label class="calendar-field">Срочность<select v-model="draft.priority" name="task-priority"><option v-for="(label, value) in TASK_PRIORITIES" :key="value" :value="value">{{ label }}</option></select></label>
         </div>
         <label class="calendar-field">Описание<textarea v-model="draft.description" name="task-description" rows="5" placeholder="Подробности и заметки" /></label>
         <label class="calendar-completion-field"><input v-model="draft.completed" type="checkbox" />Задача выполнена</label>
       </fieldset>
+      <AttachmentPanel v-model="draft.attachments" :entity-type="ENTITY_TYPES.TASKS" :entity-id="task?.id" :generation="generation" :disabled="interactionBusy" @busy="attachmentBusy = $event" />
       <p v-if="error" ref="errorRegion" class="calendar-task-error" role="alert" tabindex="-1">{{ error }}</p>
       <div class="calendar-dialog-footer">
         <button v-if="task" type="button" class="calendar-button calendar-delete-button" :disabled="interactionBusy" @click="confirmDelete"><Trash2 :size="15" aria-hidden="true" />Удалить</button>

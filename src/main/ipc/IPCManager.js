@@ -13,7 +13,7 @@ export class IPCManager {
 
   init() {
     if (this.#unregister) return;
-    const { ipcMain, appService, database, settingsService, getWindow, logger, selection, instructions } = this.options;
+    const { ipcMain, appService, database, settingsService, getWindow, logger, selection, recordServices } = this.options;
     this.#unregister = registerIpcHandlers({
       ipcMain,
       logger,
@@ -24,7 +24,7 @@ export class IPCManager {
           [IPC_CHANNELS.database.create]: () => selection.create(),
           [IPC_CHANNELS.database.open]: () => selection.open(),
         } : {}),
-        ...(instructions ? new BusinessHandler(this.options).requests() : {}),
+        ...(recordServices ? new BusinessHandler(this.options).requests() : {}),
       },
       isTrusted(event) {
         const window = getWindow();

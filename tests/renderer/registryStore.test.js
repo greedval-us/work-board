@@ -30,6 +30,14 @@ function setup(t, overrides = {}) {
   return { app, store };
 }
 
+test('saving attachments sends plain cloneable data through the desktop boundary', async t => {
+  let sent;
+  const { store } = setup(t, { create: async ({ data }) => { sent = structuredClone(data); return { id: 1 }; } });
+  const data = reactive({ ...record(1), attachments: { add: [{ token: 'selected', name: 'file.txt', size: 1 }], remove: [] } });
+  assert.equal(await store.saveRecord({ data, generation: 1 }), true);
+  assert.equal(sent.attachments.add[0].token, 'selected');
+});
+
 test('a response queued before a new filter request cannot publish under that filter', async (t) => {
   const previous = deferred();
   const next = deferred();
