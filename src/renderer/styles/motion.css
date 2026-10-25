@@ -1,0 +1,83 @@
+:root {
+  --motion-fast: 140ms;
+  --motion-page-enter: 280ms;
+  --motion-page-exit: 180ms;
+  --motion-surface-enter: 300ms;
+  --motion-surface-exit: 160ms;
+  --motion-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-ease-in: cubic-bezier(0.4, 0, 1, 1);
+}
+
+.workspace-enter-active {
+  transition: opacity var(--motion-page-enter) var(--motion-ease-out), transform var(--motion-page-enter) var(--motion-ease-out);
+  will-change: opacity, transform;
+}
+.workspace-leave-active {
+  transition: opacity var(--motion-page-exit) var(--motion-ease-in), transform var(--motion-page-exit) var(--motion-ease-in);
+  pointer-events: none;
+  will-change: opacity, transform;
+}
+.workspace-enter-from { opacity: 0; transform: translate3d(0, 8px, 0); }
+.workspace-leave-to { opacity: 0; transform: translate3d(0, -4px, 0); }
+
+.sidebar-floating {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 31;
+  width: 216px;
+  padding-top: 44px;
+  border-color: var(--border);
+  background: var(--panel);
+  box-shadow: 0 16px 50px rgb(0 0 0 / .12);
+  transform-origin: 0 24px;
+}
+.navigation-panel-enter-active { transition: opacity var(--motion-surface-enter) var(--motion-ease-out), transform var(--motion-surface-enter) var(--motion-ease-out); }
+.navigation-panel-leave-active { transition: opacity var(--motion-surface-exit) var(--motion-ease-in), transform var(--motion-surface-exit) var(--motion-ease-in); pointer-events: none; }
+.navigation-panel-enter-from, .navigation-panel-leave-to { opacity: 0; transform: translate3d(-10px, 0, 0) scale(.985); }
+.navigation-shade-enter-active { transition: opacity var(--motion-surface-enter) var(--motion-ease-out); }
+.navigation-shade-leave-active { transition: opacity var(--motion-surface-exit) var(--motion-ease-in); pointer-events: none; }
+.navigation-shade-enter-from, .navigation-shade-leave-to { opacity: 0; }
+
+/* A native popover remains in the top layer throughout its closing transition. */
+.registry-filter-panel {
+  opacity: 0;
+  transform: translate3d(0, -6px, 0) scale(.98);
+  transform-origin: 24px 0;
+  pointer-events: none;
+  transition: opacity var(--motion-surface-exit) var(--motion-ease-in), transform var(--motion-surface-exit) var(--motion-ease-in), overlay var(--motion-surface-exit) allow-discrete, display var(--motion-surface-exit) allow-discrete;
+}
+.registry-filter-panel:popover-open {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+  transition: opacity 240ms var(--motion-ease-out), transform 240ms var(--motion-ease-out), overlay 240ms allow-discrete, display 240ms allow-discrete;
+}
+@starting-style {
+  .registry-filter-panel:popover-open { opacity: 0; transform: translate3d(0, -6px, 0) scale(.98); }
+}
+
+:is(.registry-dialog, .calendar-task-dialog, .calendar-confirm-dialog) { transform-origin: center; }
+:is(.registry-dialog, .calendar-task-dialog, .calendar-confirm-dialog)::backdrop {
+  opacity: 1;
+  transition: opacity var(--motion-surface-enter) var(--motion-ease-out);
+}
+:is(.registry-dialog, .calendar-task-dialog, .calendar-confirm-dialog)[data-motion-state='leaving']::backdrop {
+  opacity: 0;
+  transition-duration: var(--motion-surface-exit);
+  transition-timing-function: var(--motion-ease-in);
+}
+@starting-style {
+  :is(.registry-dialog, .calendar-task-dialog, .calendar-confirm-dialog)[open]::backdrop { opacity: 0; }
+}
+
+:is(.registry-button, .calendar-button, .calendar-icon-button, .icon-button, .nav-item, .theme-option, .storage-button, .calendar-date) {
+  transition: background-color var(--motion-fast) ease, color var(--motion-fast) ease, border-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease, transform var(--motion-fast) var(--motion-ease-out);
+}
+:is(.registry-button, .calendar-button, .calendar-icon-button, .icon-button, .nav-item, .theme-option, .storage-button, .calendar-date):active:not(:disabled) { transform: scale(.98); }
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --motion-fast: 0ms; --motion-page-enter: 0ms; --motion-page-exit: 0ms; --motion-surface-enter: 0ms; --motion-surface-exit: 0ms; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  .workspace-enter-from, .workspace-leave-to, .navigation-panel-enter-from, .navigation-panel-leave-to { opacity: 1; transform: none; }
+  :is(.registry-button, .calendar-button, .calendar-icon-button, .icon-button, .nav-item, .theme-option, .storage-button, .calendar-date):active:not(:disabled) { transform: none; }
+}

@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Сообщить об уязвимости
+    url: https://github.com/greedval-us/work-board/security/policy
+    about: Порядок закрытого сообщения описан в SECURITY.md

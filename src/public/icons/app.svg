@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="blue" x1="80" y1="24" x2="422" y2="488" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#469BFF"/>
+      <stop offset="1" stop-color="#0865DA"/>
+    </linearGradient>
+    <linearGradient id="paper" x1="256" y1="112" x2="256" y2="400" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#EFF6FF"/>
+    </linearGradient>
+  </defs>
+  <rect x="24" y="24" width="464" height="464" rx="112" fill="url(#blue)"/>
+  <rect x="25" y="25" width="462" height="462" rx="111" stroke="white" stroke-opacity=".2" stroke-width="2"/>
+  <rect x="122" y="120" width="268" height="288" rx="42" fill="#034BAA" fill-opacity=".17"/>
+  <rect x="122" y="108" width="268" height="288" rx="42" fill="url(#paper)"/>
+  <path d="M122 190H390" stroke="#1876E8" stroke-opacity=".12" stroke-width="4"/>
+  <rect x="158" y="144" width="104" height="14" rx="7" fill="#247FEF"/>
+  <circle cx="346" cy="151" r="8" fill="#247FEF" fill-opacity=".35"/>
+  <path d="M157 243L171 257L194 229M157 317L171 331L194 303" stroke="#1778EB" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M225 245H345M225 319H315" stroke="#1778EB" stroke-opacity=".45" stroke-width="14" stroke-linecap="round"/>
+</svg>
