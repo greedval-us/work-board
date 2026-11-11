@@ -11,11 +11,19 @@ test('bridge exposes named operations and sends only their explicit payloads', a
   await api.database.getStatus();
   await api.settings.get(1);
   assert.deepEqual(await api.settings.setTheme('dark', 1), { ok: true, value: 'ok' });
+  await api.settings.addRegistryOption('source', 'Канцелярия', 1);
+  await api.settings.updateRegistryOption('source', 'Канцелярия', 'Архив', 1);
+  await api.settings.removeRegistryOption('source', 'Архив', 1);
   await api.instructions.create({ generation: 1, data: { title: 'Указание' } });
+  await api.instructions.exportControlCard({ generation: 1, id: 4, fields: { officePhone: '' } });
   await api.database.open();
   assert.deepEqual(calls, [
     ['app:get-info'], ['database:get-status'], ['settings:get', { generation: 1 }], ['settings:set-theme', { theme: 'dark', generation: 1 }],
-    ['instructions:create', { generation: 1, data: { title: 'Указание' } }], ['database:open'],
+    ['settings:add-registry-option', { field: 'source', value: 'Канцелярия', generation: 1 }],
+    ['settings:update-registry-option', { field: 'source', previousValue: 'Канцелярия', value: 'Архив', generation: 1 }],
+    ['settings:remove-registry-option', { field: 'source', value: 'Архив', generation: 1 }],
+    ['instructions:create', { generation: 1, data: { title: 'Указание' } }],
+    ['instructions:export-control-card', { generation: 1, id: 4, fields: { officePhone: '' } }], ['database:open'],
   ]);
 });
 

@@ -10,6 +10,7 @@ export function useRegistry(suppliedApp, service) {
   const store = suppliedApp || service ? createRegistryStore({ app, ...(service ? { service } : {}) })() : useRegistryStore();
   const refs = storeToRefs(store);
   const selected = shallowRef(null);
+  const selectedCheckpoint = shallowRef('');
   let selectedGeneration = null;
   let recordVersion = 0;
   let active = true;
@@ -18,6 +19,7 @@ export function useRegistry(suppliedApp, service) {
   function closeRecord() {
     ++recordVersion;
     selected.value = null;
+    selectedCheckpoint.value = '';
     selectedGeneration = null;
     store.cancelRecordRead();
     store.clearMutationError();
@@ -27,17 +29,18 @@ export function useRegistry(suppliedApp, service) {
     if (!store.canMutate) return false;
     closeRecord();
     selectedGeneration = app.database.generation;
-    selected.value = { id: null, controlDate: localDate(), incomingNumber: '', instructionNumber: '',
-      title: '', summary: '', deadline: '', executor: '', status: INSTRUCTION_STATUS.PENDING, executionMark: '' };
+    selected.value = { id: null, controlDate: localDate(), incomingNumber: '', instructionNumber: '', source: '',
+      title: '', summary: '', deadline: '', extendedUntil: '', executor: '', controlType: '', status: INSTRUCTION_STATUS.PENDING, executionMark: '' };
     return true;
   }
 
-  async function openRecord(id) {
+  async function openRecord(id, checkpoint = '', isRequested = () => true) {
     const generation = app.database?.generation;
     const version = ++recordVersion;
     const record = await store.getRecord(id, generation);
-    if (!record || !isCurrent(generation) || version !== recordVersion) return false;
+    if (!record || !isCurrent(generation) || version !== recordVersion || !isRequested()) return false;
     selectedGeneration = generation;
+    selectedCheckpoint.value = checkpoint;
     selected.value = record;
     store.clearMutationError();
     return true;
@@ -63,8 +66,8 @@ export function useRegistry(suppliedApp, service) {
   store.ensureLoaded();
   onScopeDispose(() => { active = false; closeRecord(); });
 
-  return { ...refs, draftFilters: store.draftFilters, formError: refs.mutationError, selected,
-    refresh: store.refresh, applyFilters: store.applyFilters, resetFilters: store.resetFilters,
+  return { ...refs, draftFilters: store.draftFilters, formError: refs.mutationError, selected, selectedCheckpoint,
+    refresh: store.refresh, updateToday: store.updateToday, applyFilters: store.applyFilters, resetFilters: store.resetFilters,
     changeSort: store.changeSort, setPage: store.setPage, setPageSize: store.setPageSize,
     exportRecords: store.exportRecords, closeRecord, createRecord, openRecord, saveRecord, removeRecord };
 }

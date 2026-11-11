@@ -10,9 +10,10 @@ export class ExcelExportService {
   async export(request) {
     this.database.assertGeneration(request.generation);
     const normalized = normalizeListRequest(request);
+    const exportedAt = new Date();
+    if (normalized.filters.checkpoint && !normalized.today) normalized.today = localDate(exportedAt);
     // Snapshot all matching rows before the asynchronous native dialog.
     const rows = this.instructions.all(normalized);
-    const exportedAt = new Date();
     const result = await this.dialog.showSaveDialog(this.getWindow(), {
       title: 'Выгрузить реестр в Excel', defaultPath: `Указания ${localDate(exportedAt)}.xlsx`,
       filters: [{ name: 'Книга Excel', extensions: ['xlsx'] }],

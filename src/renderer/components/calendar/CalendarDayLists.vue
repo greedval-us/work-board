@@ -2,10 +2,11 @@
 import { computed } from 'vue';
 import { ArrowUpRight, Check, Plus } from 'lucide-vue-next';
 import { dayLabel } from '../../domain/calendarDates.js';
-import { presentCalendarRecords } from '../../presentation/calendarRecords.js';
+import { presentCalendarCheckpoints, presentCalendarRecords } from '../../presentation/calendarRecords.js';
 
 const props = defineProps({
   date: { type: String, required: true }, instructions: { type: Array, required: true }, tasks: { type: Array, required: true },
+  checkpoints: { type: Array, default: () => [] },
   today: { type: String, required: true }, loading: Boolean, error: { type: String, default: '' },
   taskError: { type: String, default: '' }, busyTaskId: { default: null }, disabled: Boolean,
 });
@@ -15,6 +16,7 @@ const records = computed(() => presentCalendarRecords(props.instructions, props.
 const instructionRows = computed(() => records.value.instructions);
 const taskRows = computed(() => records.value.tasks);
 const counts = computed(() => records.value.counts);
+const checkpointList = computed(() => presentCalendarCheckpoints(props.checkpoints, props.today));
 
 function toggleTask(event, item) {
   // Commit the visual check only after SQLite confirms the change.
@@ -36,12 +38,38 @@ function toggleTask(event, item) {
         <ul v-else class="calendar-record-list">
           <li v-for="item in instructionRows" :key="item.id">
             <RouterLink class="calendar-instruction-card" :to="{ path: '/', query: { instruction: item.id } }">
-              <span class="calendar-record-number">№ {{ item.instructionNumber }} <ArrowUpRight :size="15" aria-hidden="true" /></span>
+              <span class="calendar-record-number" :title="`Подписной номер ${item.instructionNumber}`">№ {{ item.instructionNumber }} <ArrowUpRight :size="15" aria-hidden="true" /></span>
               <strong :title="item.title">{{ item.title }}</strong><span class="calendar-record-secondary" :title="item.executor">{{ item.executor }}</span>
               <span class="calendar-record-meta"><span class="calendar-badge" :class="`calendar-tone-${item.urgency.tone}`">{{ item.urgency.label }}</span><span v-if="item.secondaryLabel">{{ item.secondaryLabel }}</span></span>
             </RouterLink>
           </li>
         </ul>
+        </div>
+      </section>
+      <section class="calendar-day-section" aria-labelledby="calendar-checkpoints-heading">
+        <div class="calendar-list-heading">
+          <h3 id="calendar-checkpoints-heading">Промежуточный контроль</h3>
+          <span class="calendar-list-count" :aria-label="`Без отметки: ${checkpointList.open}`">{{ checkpointList.open }}</span>
+          <span v-if="checkpointList.marked" class="calendar-completed-count" :aria-label="`С отметкой: ${checkpointList.marked}`" :title="`С отметкой: ${checkpointList.marked}`">
+            <Check :size="12" aria-hidden="true" />{{ checkpointList.marked }}
+          </span>
+        </div>
+        <div class="calendar-list-body" tabindex="0" role="region" aria-labelledby="calendar-checkpoints-heading">
+          <p v-if="!checkpointList.rows.length" class="calendar-empty-list">Промежуточных сроков на этот день нет.</p>
+          <ul v-else class="calendar-record-list">
+            <li v-for="item in checkpointList.rows" :key="item.instructionId">
+              <RouterLink class="calendar-instruction-card calendar-checkpoint-card" :to="{ name: 'Registry', query: { instruction: item.instructionId, checkpoint: item.date } }">
+                <span class="calendar-record-number" :title="`Подписной номер ${item.instructionNumber}`">№ {{ item.instructionNumber }} <ArrowUpRight :size="15" aria-hidden="true" /></span>
+                <strong :title="item.title">{{ item.title }}</strong>
+                <span class="calendar-record-secondary" :title="item.executor">{{ item.executor }}</span>
+                <span class="calendar-record-meta">
+                  <span class="calendar-badge" :class="`calendar-tone-${item.urgency.tone}`">{{ item.urgency.label }}</span>
+                  <span v-if="!item.scheduled">Вне текущего графика</span>
+                </span>
+                <span v-if="item.mark" class="calendar-record-secondary calendar-checkpoint-mark" :title="item.mark">{{ item.mark }}</span>
+              </RouterLink>
+            </li>
+          </ul>
         </div>
       </section>
       <section class="calendar-day-section" aria-labelledby="calendar-tasks-heading">

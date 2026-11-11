@@ -12,6 +12,18 @@ export class SettingsHandler {
         this.database.assertGeneration?.(payload?.generation);
         return this.settingsService.setTheme(payload?.theme);
       },
+      [channels.settings.addRegistryOption]: (payload) => {
+        this.database.assertGeneration(payload?.generation);
+        return this.settingsService.addRegistryOption(payload?.field, payload?.value);
+      },
+      [channels.settings.updateRegistryOption]: (payload) => {
+        this.database.assertGeneration(payload?.generation);
+        return this.settingsService.updateRegistryOption(payload?.field, payload?.previousValue, payload?.value);
+      },
+      [channels.settings.removeRegistryOption]: (payload) => {
+        this.database.assertGeneration(payload?.generation);
+        return this.settingsService.removeRegistryOption(payload?.field, payload?.value);
+      },
     };
   }
 }

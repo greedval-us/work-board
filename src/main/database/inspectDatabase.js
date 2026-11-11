@@ -11,9 +11,9 @@ function hasSettingsSchema(connection, tables) {
 }
 
 function inspectSchema(connection, tables, version) {
-  for (const [table, expected] of Object.entries(REQUIRED_DATABASE_COLUMNS)) {
-    const introduced = table === 'attachments' ? DATABASE_CONFIG.ATTACHMENTS_SCHEMA_VERSION : DATABASE_CONFIG.REGISTRY_SCHEMA_VERSION;
-    if (version < introduced) continue;
+  for (const [table, versions] of Object.entries(REQUIRED_DATABASE_COLUMNS)) {
+    const expected = Object.entries(versions).flatMap(([introduced, columns]) => version >= Number(introduced) ? columns : []);
+    if (!expected.length) continue;
     const actual = tables.includes(table) ? connection.prepare(`PRAGMA table_info(${table})`).all().map(column => column.name) : [];
     if (!expected.every(column => actual.includes(column))) throw new AppError('Структура базы повреждена или не соответствует версии приложения.', 'DATABASE_INVALID');
   }

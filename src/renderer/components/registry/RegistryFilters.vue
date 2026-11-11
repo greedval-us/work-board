@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, shallowRef, useId, useTemplateRef } from 'vue';
 import { RotateCcw, SlidersHorizontal, X } from 'lucide-vue-next';
-import { INSTRUCTION_STATUSES } from '../../../shared/registry.js';
+import { CHECKPOINT_FILTER_LABELS, INSTRUCTION_STATUSES } from '../../../shared/registry.js';
 import { REGISTRY_FILTER_LIMITS } from '../../constants/inputLimits.js';
 
 const FILTER_POPOVER = Object.freeze({ MAX_WIDTH: 720, VIEWPORT_MARGIN: 16, ANCHOR_GAP: 8, MIN_VISIBLE_HEIGHT: 220 });
@@ -21,12 +21,14 @@ const shortDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value.slice(
 const appliedConditions = computed(() => {
   const filters = props.appliedFilters;
   const conditions = [];
-  if (filters.instructionNumber) conditions.push({ key: 'number', label: `№ ${filters.instructionNumber}`, detail: `Номер указания: ${filters.instructionNumber}` });
+  if (filters.instructionNumber) conditions.push({ key: 'number', label: `№ ${filters.instructionNumber}`, detail: `Подписной номер: ${filters.instructionNumber}` });
   if (filters.deadlineFrom || filters.deadlineTo) conditions.push({ key: 'deadline',
     label: filters.deadlineFrom && filters.deadlineTo ? `${shortDate(filters.deadlineFrom)}–${shortDate(filters.deadlineTo)}` : `${filters.deadlineFrom ? 'с' : 'по'} ${shortDate(filters.deadlineFrom || filters.deadlineTo)}`,
-    detail: `Срок исполнения: ${filters.deadlineFrom || 'без начала'} — ${filters.deadlineTo || 'без окончания'}, включительно` });
+    detail: `Действующий срок: ${filters.deadlineFrom || 'без начала'} — ${filters.deadlineTo || 'без окончания'}, включительно` });
   if (filters.executor) conditions.push({ key: 'executor', label: filters.executor, detail: `Исполнитель: ${filters.executor}` });
   if (filters.status) conditions.push({ key: 'status', label: INSTRUCTION_STATUSES[filters.status], detail: `Статус: ${INSTRUCTION_STATUSES[filters.status]}` });
+  if (filters.checkpoint) conditions.push({ key: 'checkpoint', label: CHECKPOINT_FILTER_LABELS[filters.checkpoint],
+    detail: `Промежуточный контроль · ${CHECKPOINT_FILTER_LABELS[filters.checkpoint]}` });
   if (filters.executionMark) conditions.push({ key: 'mark', label: filters.executionMark, detail: `Отметка об исполнении: ${filters.executionMark}` });
   return conditions;
 });
@@ -79,12 +81,13 @@ onBeforeUnmount(() => window.removeEventListener('resize', resize));
       <form aria-label="Фильтры реестра" @submit.prevent="apply">
         <div class="registry-filter-panel-heading"><h2 :id="titleId">Фильтры</h2><button type="button" class="registry-button registry-filter-close" aria-label="Закрыть фильтры" @click="closePanel"><X :size="17" aria-hidden="true" /></button></div>
         <fieldset class="registry-filter-fields" :disabled="props.disabled">
-          <label class="registry-field"><span>Номер указания</span><input :value="props.filters.instructionNumber" data-filter="instructionNumber" type="search" :maxlength="REGISTRY_FILTER_LIMITS.instructionNumber" placeholder="Часть номера" @input="update('instructionNumber', $event)" /></label>
-          <label class="registry-field"><span>Срок исполнения с</span><input :value="props.filters.deadlineFrom" data-filter="deadlineFrom" type="date" @input="update('deadlineFrom', $event)" /></label>
-          <label class="registry-field"><span>Срок исполнения по</span><input :value="props.filters.deadlineTo" data-filter="deadlineTo" type="date" :min="props.filters.deadlineFrom || undefined" @input="update('deadlineTo', $event)" /></label>
+          <label class="registry-field"><span>Подписной номер</span><input :value="props.filters.instructionNumber" data-filter="instructionNumber" type="search" :maxlength="REGISTRY_FILTER_LIMITS.instructionNumber" placeholder="Часть номера" @input="update('instructionNumber', $event)" /></label>
+          <label class="registry-field"><span>Действующий срок с</span><input :value="props.filters.deadlineFrom" data-filter="deadlineFrom" type="date" @input="update('deadlineFrom', $event)" /></label>
+          <label class="registry-field"><span>Действующий срок по</span><input :value="props.filters.deadlineTo" data-filter="deadlineTo" type="date" :min="props.filters.deadlineFrom || undefined" @input="update('deadlineTo', $event)" /></label>
           <label class="registry-field"><span>Исполнитель</span><input :value="props.filters.executor" data-filter="executor" type="search" :maxlength="REGISTRY_FILTER_LIMITS.executor" placeholder="Имя или фамилия" @input="update('executor', $event)" /></label>
           <label class="registry-field"><span>Статус исполнения</span><select :value="props.filters.status" data-filter="status" @change="update('status', $event)"><option value="">Все статусы</option><option v-for="(label, value) in INSTRUCTION_STATUSES" :key="value" :value="value">{{ label }}</option></select></label>
-          <label class="registry-field"><span>Отметка об исполнении</span><input :value="props.filters.executionMark" data-filter="executionMark" type="search" :maxlength="REGISTRY_FILTER_LIMITS.executionMark" placeholder="Текст комментария" @input="update('executionMark', $event)" /></label>
+          <label class="registry-field"><span>Промежуточный контроль</span><select :value="props.filters.checkpoint" data-filter="checkpoint" @change="update('checkpoint', $event)"><option value="">Все указания</option><option v-for="(label, value) in CHECKPOINT_FILTER_LABELS" :key="value" :value="value">{{ label }}</option></select></label>
+          <label class="registry-field registry-field-wide"><span>Отметка об исполнении</span><input :value="props.filters.executionMark" data-filter="executionMark" type="search" :maxlength="REGISTRY_FILTER_LIMITS.executionMark" placeholder="Текст комментария" @input="update('executionMark', $event)" /></label>
         </fieldset>
         <div class="registry-filter-footer"><p v-if="props.error" class="registry-inline-error" role="alert">{{ props.error }}</p><p v-else class="registry-help">Все условия — одновременно. Даты включительно.</p><div class="registry-actions"><button class="registry-button" type="button" :disabled="props.disabled" @click="reset">Сбросить</button><button class="registry-button registry-button-primary" type="submit" :disabled="props.disabled">Применить</button></div></div>
       </form>

@@ -1,6 +1,7 @@
-import { daysInMonth, validateDate, ValidationError } from '../../shared/registry.js';
+import { daysInMonth, instructionDeadline, validateDate, ValidationError } from '../../shared/registry.js';
 import { ISO_MONTH_PATTERN } from '../../shared/constants/dates.js';
 import { INSTRUCTION_STATUS } from '../../shared/constants/registry.js';
+import { listControlCheckpoints } from '../../shared/controlSchedule.js';
 
 export class CalendarService {
   constructor(instructions, tasks) {
@@ -17,16 +18,20 @@ export class CalendarService {
     const to = `${month}-${String(count).padStart(2, '0')}`;
     const days = Array.from({ length: count }, (_, index) => ({
       date: `${month}-${String(index + 1).padStart(2, '0')}`,
-      controls: 0, completedControls: 0, tasks: 0, completedTasks: 0,
+      controls: 0, completedControls: 0, tasks: 0, completedTasks: 0, checkpoints: 0, completedCheckpoints: 0,
     }));
     const byDate = new Map(days.map(day => [day.date, day]));
     for (const instruction of this.instructions.all({ filters: { deadlineFrom: from, deadlineTo: to } })) {
       const key = instruction.status === INSTRUCTION_STATUS.COMPLETED ? 'completedControls' : 'controls';
-      byDate.get(instruction.deadline)[key] += 1;
+      byDate.get(instructionDeadline(instruction))[key] += 1;
     }
     for (const task of this.tasks.list({ from, to })) {
       const key = task.completed ? 'completedTasks' : 'tasks';
       byDate.get(task.date)[key] += 1;
+    }
+    for (const checkpoint of this.#checkpoints(from, to)) {
+      const key = checkpoint.mark.trim() ? 'completedCheckpoints' : 'checkpoints';
+      byDate.get(checkpoint.date)[key] += 1;
     }
     return { days };
   }
@@ -37,6 +42,17 @@ export class CalendarService {
     return {
       instructions: this.instructions.all({ filters: { deadlineFrom: date, deadlineTo: date } }),
       tasks: this.tasks.list({ from: date, to: date }),
+      checkpoints: [...this.#checkpoints(date, date)],
     };
+  }
+
+  *#checkpoints(from, to) {
+    for (const instruction of this.instructions.scheduledForCalendar()) {
+      const { id, title, instructionNumber, executor, controlSchedule } = instruction;
+      const deadline = instructionDeadline(instruction);
+      for (const checkpoint of listControlCheckpoints(controlSchedule, { from, to, deadline })) {
+        yield { ...checkpoint, instructionId: id, title, instructionNumber, executor };
+      }
+    }
   }
 }

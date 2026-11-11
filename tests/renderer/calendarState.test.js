@@ -38,19 +38,24 @@ function setup(t, service) {
 test('late calendar responses from a previous database cannot replace current data', async (t) => {
   const oldMonth = deferred();
   const oldDay = deferred();
+  const checkpoint = { instructionId: 22, date: '2026-10-23', mark: '', scheduled: true };
   const service = {
-    month: ({ generation }) => generation === 1 ? oldMonth.promise : Promise.resolve({ days: [{ date: '2026-10-23', controls: 2 }] }),
-    day: ({ generation }) => generation === 1 ? oldDay.promise : Promise.resolve({ instructions: [{ id: 22 }], tasks: [] }),
+    month: ({ generation }) => generation === 1 ? oldMonth.promise : Promise.resolve({ days: [{ date: '2026-10-23', controls: 2, checkpoints: 1 }] }),
+    day: ({ generation }) => generation === 1 ? oldDay.promise : Promise.resolve({ instructions: [{ id: 22 }], tasks: [], checkpoints: [checkpoint] }),
   };
   const { app, calendar } = setup(t, service);
   app.database = { ready: true, generation: 2 };
   await calendar.refresh();
   oldMonth.resolve({ days: [{ date: '2026-10-23', controls: 99 }] });
-  oldDay.resolve({ instructions: [{ id: 11 }], tasks: [] });
+  oldDay.resolve({ instructions: [{ id: 11 }], tasks: [], checkpoints: [{ ...checkpoint, instructionId: 11 }] });
   await nextTick();
   await nextTick();
   assert.equal(calendar.monthDays.value[0].controls, 2);
   assert.equal(calendar.instructions.value[0].id, 22);
+  assert.deepEqual(calendar.checkpoints.value, [checkpoint]);
+  const selected = calendar.grid.value.find(day => day.date === '2026-10-23');
+  assert.equal(selected.checkpoints, 1);
+  assert.equal(selected.completedCheckpoints, 0);
   assert.equal(calendar.monthLoading.value, false);
   assert.equal(calendar.dayLoading.value, false);
 });
@@ -67,6 +72,7 @@ test('a slower selected day cannot overwrite the most recent selection', async (
   oldDay.resolve({ instructions: [], tasks: [{ id: 23 }] });
   await nextTick();
   assert.equal(calendar.tasks.value[0].id, 24);
+  assert.deepEqual(calendar.checkpoints.value, []);
 });
 
 test('a draft from an old database cannot write an ID into the new database', async (t) => {

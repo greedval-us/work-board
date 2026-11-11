@@ -10,7 +10,7 @@ export function useCalendar({ store = useCalendarStore(), now = () => new Date()
   const grid = computed(() => {
     const counts = new Map(state.monthDays.value.map((day) => [day.date, day]));
     return buildMonthGrid(state.month.value).map((day) => ({
-      controls: 0, tasks: 0, completedControls: 0, completedTasks: 0,
+      controls: 0, tasks: 0, completedControls: 0, completedTasks: 0, checkpoints: 0, completedCheckpoints: 0,
       ...counts.get(day.date), ...day,
     }));
   });

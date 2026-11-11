@@ -2,7 +2,6 @@
 import { nextTick, onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'vue';
 import { onBeforeRouteLeave, onBeforeRouteUpdate, RouterLink, useRoute } from 'vue-router';
 import { Columns3, Download, FilePlus2, ListChecks, RefreshCw } from 'lucide-vue-next';
-import { localDate } from '../../../shared/registry.js';
 import { useRegistry } from '../../composables/useRegistry.js';
 import { useAppStore } from '../../stores/appStore.js';
 import PageHeading from '../ui/PageHeading.vue';
@@ -14,11 +13,10 @@ import RegistryTable from './RegistryTable.vue';
 const app = useAppStore();
 const route = useRoute();
 const editor = useTemplateRef('editor');
-const today = shallowRef(localDate());
 const wideColumns = shallowRef(false);
 const { draftFilters, appliedFilters, sort, page, pageSize, pageCount, items, total, loading, saving, deleting,
-  exporting, opening, error, filterError, formError, notice, selected, ready, canMutate,
-  hasAppliedFilters, filtersChanged, refresh, applyFilters, resetFilters, changeSort,
+  exporting, opening, error, filterError, formError, notice, selected, selectedCheckpoint, ready, canMutate, today,
+  hasAppliedFilters, filtersChanged, refresh, applyFilters, resetFilters, changeSort, updateToday,
   setPage, setPageSize, closeRecord, createRecord, openRecord, saveRecord, removeRecord, exportRecords } = useRegistry();
 const displayedRecord = shallowRef(null);
 const displayedGeneration = shallowRef(null);
@@ -48,7 +46,7 @@ watch([selected, () => app.database?.generation], async ([record, generation]) =
 }, { immediate: true });
 
 function updateDate() {
-  today.value = localDate();
+  updateToday();
   clearTimeout(midnightTimer);
   const now = new Date();
   const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
@@ -60,8 +58,12 @@ const unregisterGuard = app.registerUnsavedGuard(guardDraft);
 onBeforeRouteLeave(guardDraft);
 onBeforeRouteUpdate((to, from) => to.query.instruction === from.query.instruction ? true : guardDraft());
 
-watch([() => route.query.instruction, ready], ([id, isReady]) => {
-  if (isReady && id && /^\d+$/.test(String(id))) openRecord(Number(id));
+watch([() => route.query.instruction, () => route.query.checkpoint, ready], ([id, checkpoint, isReady], [previousId] = []) => {
+  if (!isReady || !id || !/^\d+$/.test(String(id))) return;
+  const recordId = Number(id);
+  const date = typeof checkpoint === 'string' ? checkpoint : '';
+  if (id === previousId && selected.value?.id === recordId) selectedCheckpoint.value = date;
+  else openRecord(recordId, date, () => route.query.instruction === id && route.query.checkpoint === checkpoint);
 }, { immediate: true });
 
 onMounted(() => { updateDate(); window.addEventListener('focus', updateDate); document.addEventListener('visibilitychange', updateDate); });
@@ -81,7 +83,7 @@ onBeforeUnmount(() => { disposed = true; surfaceVersion++; unregisterGuard(); cl
         <div class="registry-results-heading">
           <h2>Записей <span class="registry-count">{{ total }}</span></h2>
           <div class="registry-status-slot"><div v-if="error" class="registry-error-banner" role="alert"><span :title="error">{{ error }}</span><button type="button" class="registry-inline-action" :disabled="loading" @click="refresh"><RefreshCw :size="12" aria-hidden="true" />Повторить</button></div><p v-else-if="notice" class="registry-notice" role="status" :title="notice">{{ notice }}</p><span v-else class="registry-help" role="status">{{ loading ? 'Загрузка…' : opening ? 'Открытие карточки…' : '' }}</span></div>
-          <button type="button" class="registry-inline-action registry-column-toggle" :aria-pressed="wideColumns" :title="wideColumns ? 'Уместить восемь столбцов в ширину окна' : 'Увеличить ширину столбцов; доступна прокрутка внутри таблицы'" @click="wideColumns = !wideColumns"><Columns3 :size="14" aria-hidden="true" /><span>{{ wideColumns ? 'По ширине окна' : 'Столбцы шире' }}</span></button>
+          <button type="button" class="registry-inline-action registry-column-toggle" :aria-pressed="wideColumns" :title="wideColumns ? 'Уместить столбцы в ширину окна' : 'Увеличить ширину столбцов для просмотра с прокруткой'" @click="wideColumns = !wideColumns"><Columns3 :size="14" aria-hidden="true" /><span>{{ wideColumns ? 'По ширине окна' : 'Столбцы шире' }}</span></button>
         </div>
         <RegistryTable v-if="items.length" :items="items" :sort="sort" :loading="loading" :wide="wideColumns" :today="today" @sort="changeSort" @open="openRecord" />
         <div v-else-if="loading" class="registry-empty registry-empty-results" role="status"><RefreshCw :size="28" class="registry-loading-icon" aria-hidden="true" /><h2>Загрузка реестра…</h2></div>
@@ -89,6 +91,6 @@ onBeforeUnmount(() => { disposed = true; surfaceVersion++; unregisterGuard(); cl
         <RegistryPagination :page="page" :page-size="pageSize" :page-count="pageCount" :total="total" :disabled="loading || app.databaseSwitching" @page="setPage" @page-size="setPageSize" />
       </section>
     </template>
-    <InstructionDialog v-if="displayedRecord" :key="displayedKey" ref="editor" :record="displayedRecord" :saving="saving" :deleting="deleting" :error="formError" :closing="!selected" :can-edit="Boolean(selected) && displayedGeneration === app.database?.generation && ready && !app.databaseSwitching" :save-record="saveRecord" :delete-record="removeRecord" @close="closeRecord" />
+    <InstructionDialog v-if="displayedRecord" :key="displayedKey" ref="editor" :record="displayedRecord" :selected-checkpoint="selectedCheckpoint" :saving="saving" :deleting="deleting" :error="formError" :closing="!selected" :can-edit="Boolean(selected) && displayedGeneration === app.database?.generation && ready && !app.databaseSwitching" :save-record="saveRecord" :delete-record="removeRecord" @close="closeRecord" />
   </div>
 </template>

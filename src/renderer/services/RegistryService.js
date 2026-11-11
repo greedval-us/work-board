@@ -7,4 +7,5 @@ export const registryService = createDesktopService({
   update: ['instructions', 'update'],
   remove: ['instructions', 'remove'],
   export: ['instructions', 'export'],
+  exportControlCard: ['instructions', 'exportControlCard'],
 });

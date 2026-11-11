@@ -3,10 +3,10 @@ import { computed } from 'vue';
 import { Layers, CircleCheck, Clock3, TriangleAlert } from 'lucide-vue-next';
 const props = defineProps({ totals: { type: Object, required: true } });
 const cards = computed(() => [
-  { key: 'total', label: 'Всего записей', value: props.totals.total, caption: 'в выбранном периоде', icon: Layers, tone: 'neutral' },
-  { key: 'completed', label: 'Выполнено', value: props.totals.completed, caption: `${props.totals.completionRate}% от всех записей`, icon: CircleCheck, tone: 'success' },
+  { key: 'total', label: 'Всего указаний', value: props.totals.total, caption: 'в выбранном периоде', icon: Layers, tone: 'neutral' },
+  { key: 'completed', label: 'Выполнено', value: props.totals.completed, caption: `${props.totals.completionRate}% от всех указаний`, icon: CircleCheck, tone: 'success' },
   { key: 'active', label: 'Активные', value: props.totals.active, caption: 'ещё требуют исполнения', icon: Clock3, tone: 'accent' },
-  { key: 'overdue', label: 'Просрочено', value: props.totals.overdue, caption: 'из активных записей', icon: TriangleAlert, tone: 'danger' },
+  { key: 'overdue', label: 'Просрочено', value: props.totals.overdue, caption: 'из активных указаний', icon: TriangleAlert, tone: 'danger' },
 ]);
 </script>
 <template>

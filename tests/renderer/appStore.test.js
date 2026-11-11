@@ -41,6 +41,48 @@ test('theme changes only after persistence succeeds', async (t) => {
   assert.doesNotMatch(store.error, /Хранилище недоступно/);
 });
 
+test('registry options load for the active database and refresh after each saved change', async (t) => {
+  const first = { source: ['Канцелярия'], executor: [], controlType: [] };
+  const second = { source: [], executor: ['Иванов'], controlType: [] };
+  const store = bridge(t, {
+    database: {
+      getStatus: async () => ({ ready: true, generation: 1 }),
+      open: async () => ({ cancelled: false, status: { ready: true, generation: 2 } }),
+    },
+    settings: {
+      get: async (generation) => ({ theme: 'light', registryOptions: generation === 1 ? first : second }),
+      addRegistryOption: async (field, value, generation) => {
+        assert.deepEqual([field, value, generation], ['controlType', 'Плановый', 2]);
+        return { theme: 'light', registryOptions: { ...second, controlType: [value] } };
+      },
+      updateRegistryOption: async (field, previousValue, value, generation) => {
+        assert.deepEqual([field, previousValue, value, generation], ['controlType', 'Плановый', 'Ежемесячный', 2]);
+        return { theme: 'light', registryOptions: { ...second, controlType: [value] } };
+      },
+      removeRegistryOption: async (field, value, generation) => {
+        if (value === 'Удалённый вариант') throw new Error('Вариант не найден');
+        assert.deepEqual([field, value, generation], ['controlType', 'Ежемесячный', 2]);
+        return { theme: 'light', registryOptions: second };
+      },
+    },
+  });
+  await store.initialize();
+  assert.deepEqual(store.registryOptions, first);
+  await store.selectDatabase('open');
+  assert.deepEqual(store.registryOptions, second);
+  assert.equal(await store.addRegistryOption('controlType', 'Плановый'), true);
+  assert.deepEqual(store.registryOptions, { ...second, controlType: ['Плановый'] });
+  assert.equal(await store.updateRegistryOption('controlType', 'Плановый', 'Ежемесячный'), true);
+  assert.deepEqual(store.registryOptions, { ...second, controlType: ['Ежемесячный'] });
+  assert.equal(await store.removeRegistryOption('controlType', 'Удалённый вариант'), false);
+  assert.match(store.registryOptionsError, /Связь с приложением недоступна/);
+  assert.equal(store.error, '');
+  assert.deepEqual(store.registryOptions, { ...second, controlType: ['Ежемесячный'] });
+  assert.equal(await store.removeRegistryOption('controlType', 'Ежемесячный'), true);
+  assert.deepEqual(store.registryOptions, second);
+  assert.equal(store.registryOptionsError, '');
+});
+
 test('concurrent bootstrap callers share pending work and await initialized state', async (t) => {
   let calls = 0;
   let finish;

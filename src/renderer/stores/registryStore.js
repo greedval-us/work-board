@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { computed, onScopeDispose, reactive, shallowRef, watch } from 'vue';
-import { emptyFilters, INSTRUCTION_COLUMNS, REGISTRY_DEFAULT_SORT, REGISTRY_PAGINATION } from '../../shared/registry.js';
+import { emptyFilters, INSTRUCTION_COLUMNS, localDate, REGISTRY_DEFAULT_SORT, REGISTRY_PAGINATION } from '../../shared/registry.js';
 import { DesktopError } from '../../shared/errors.js';
 import { errorMessage } from '../infrastructure/errorMessage.js';
 import { createRequestScope, createSingleFlight } from '../infrastructure/requestScope.js';
@@ -9,11 +9,12 @@ import { useAppStore } from './appStore.js';
 import { snapshotInstruction } from '../domain/instructions.js';
 
 // The factory supplies boundary dependencies in tests; each Pinia owns one registry.
-export function createRegistryStore({ app: suppliedApp, service = registryService } = {}) {
+export function createRegistryStore({ app: suppliedApp, service = registryService, now = () => new Date() } = {}) {
   return defineStore('registry', () => {
     const app = suppliedApp ?? useAppStore();
     const draftFilters = reactive(emptyFilters());
     const appliedFilters = shallowRef(emptyFilters());
+    const today = shallowRef(localDate(now()));
     const sort = shallowRef({ ...REGISTRY_DEFAULT_SORT });
     const page = shallowRef(REGISTRY_PAGINATION.DEFAULT_PAGE);
     const pageSize = shallowRef(REGISTRY_PAGINATION.DEFAULT_SIZE);
@@ -46,12 +47,36 @@ export function createRegistryStore({ app: suppliedApp, service = registryServic
 
     const currentGeneration = () => app.database?.generation;
     const isCurrent = (generation) => active && ready.value && generation === currentGeneration();
+    function query() {
+      const filters = { ...appliedFilters.value };
+      const request = { filters, sort: { ...sort.value }, generation: currentGeneration() };
+      if (filters.checkpoint) request.today = today.value;
+      return request;
+    }
+
     function snapshot() {
-      const request = { filters: { ...appliedFilters.value }, sort: { ...sort.value }, offset: (page.value - REGISTRY_PAGINATION.DEFAULT_PAGE) * pageSize.value, limit: pageSize.value, generation: currentGeneration() };
+      const request = { ...query(), offset: (page.value - REGISTRY_PAGINATION.DEFAULT_PAGE) * pageSize.value, limit: pageSize.value };
       return { request, revision: app.revision, key: JSON.stringify([request, app.revision]) };
     }
 
-    function refresh() {
+    function invalidateList() {
+      listScope.invalidate();
+      listFlights.clear();
+      loadedKey = null;
+      listKey = null;
+    }
+
+    function syncToday() {
+      const date = localDate(now());
+      if (date === today.value) return false;
+      today.value = date;
+      if (!appliedFilters.value.checkpoint) return false;
+      page.value = REGISTRY_PAGINATION.DEFAULT_PAGE;
+      invalidateList();
+      return true;
+    }
+
+    function load() {
       if (!ready.value) { listScope.invalidate(); listFlights.clear(); items.value = []; total.value = 0; loading.value = false; return Promise.resolve(false); }
       const { request, revision, key } = snapshot();
       if (listKey !== key) { listFlights.clear(); listKey = key; }
@@ -76,9 +101,19 @@ export function createRegistryStore({ app: suppliedApp, service = registryServic
       });
     }
 
+    function refresh() {
+      syncToday();
+      return load();
+    }
+
+    function updateToday() {
+      return syncToday() ? load() : Promise.resolve(false);
+    }
+
     function ensureLoaded() {
+      syncToday();
       if (ready.value && !error.value && loadedKey === snapshot().key) return Promise.resolve(true);
-      return refresh();
+      return load();
     }
 
     function queueRefresh() {
@@ -173,7 +208,8 @@ export function createRegistryStore({ app: suppliedApp, service = registryServic
 
     async function exportRecords() {
       if (!ready.value || exporting.value || app.databaseSwitching) return false;
-      const request = { filters: { ...appliedFilters.value }, sort: { ...sort.value }, generation: currentGeneration() };
+      updateToday();
+      const request = query();
       exporting.value = true;
       error.value = '';
       notice.value = '';
@@ -187,7 +223,7 @@ export function createRegistryStore({ app: suppliedApp, service = registryServic
     }
 
     watch([() => app.database?.generation, () => app.database?.ready, () => app.revision], (value, previous) => {
-      listScope.invalidate(); listFlights.clear(); loadedKey = null; listKey = null;
+      invalidateList();
       cancelRecordRead();
       const initial = !previous?.length;
       if (initial || value[0] !== previous[0] || value[1] !== previous[1]) {
@@ -197,8 +233,8 @@ export function createRegistryStore({ app: suppliedApp, service = registryServic
     }, { immediate: true, flush: 'sync' });
     onScopeDispose(() => { active = false; listScope.dispose(); recordScope.dispose(); listFlights.clear(); recordFlights.clear(); });
 
-    return { draftFilters, appliedFilters, sort, page, pageSize, pageCount, items, total, loading, opening, saving, deleting, exporting,
-      error, filterError, mutationError, notice, ready, busy, canMutate, hasAppliedFilters, filtersChanged, refresh, ensureLoaded,
+    return { draftFilters, appliedFilters, today, sort, page, pageSize, pageCount, items, total, loading, opening, saving, deleting, exporting,
+      error, filterError, mutationError, notice, ready, busy, canMutate, hasAppliedFilters, filtersChanged, refresh, ensureLoaded, updateToday,
       applyFilters, resetFilters, changeSort, setPage, setPageSize, getRecord, cancelRecordRead, clearMutationError, saveRecord, removeRecord, exportRecords };
   });
 }

@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick } from 'vue';
-import { ChevronLeft, ChevronRight, FileText, ListTodo } from 'lucide-vue-next';
+import { Check, ChevronLeft, ChevronRight, FileText, Flag, ListTodo } from 'lucide-vue-next';
 import { getUrgency, INSTRUCTION_STATUS, localDate } from '../../../shared/registry.js';
 import { calendarDate, monthLabel, moveMonth } from '../../domain/calendarDates.js';
 import { CALENDAR_LAYOUT, CALENDAR_WEEKDAYS } from '../../constants/calendar.js';
@@ -20,7 +20,12 @@ const weekCount = computed(() => visibleDays.value.length / CALENDAR_LAYOUT.DAYS
 const days = computed(() => visibleDays.value.map((day) => ({
   ...day,
   controlTone: getUrgency({ deadline: day.date, status: INSTRUCTION_STATUS.PENDING }, props.today).tone,
-  ariaLabel: `${day.date}, контролей: ${day.controls}, задач: ${day.tasks}${day.date === props.today ? ', сегодня' : ''}`,
+  ariaLabel: [
+    day.date, `контролей: ${day.controls}`, `задач: ${day.tasks}`,
+    day.checkpoints && `промежуточных сроков без отметки: ${day.checkpoints}`,
+    day.completedCheckpoints && `промежуточных сроков с отметкой: ${day.completedCheckpoints}`,
+    day.date === props.today && 'сегодня',
+  ].filter(Boolean).join(', '),
 })));
 
 async function navigate(event, day, index) {
@@ -68,12 +73,19 @@ function registerButton(date, element) {
         <span class="calendar-date-events">
           <span v-if="day.controls" class="calendar-date-count" :class="`calendar-tone-${day.controlTone}`" :title="`Контроли: ${day.controls}`"><FileText :size="11" aria-hidden="true" />{{ day.controls }}</span>
           <span v-if="day.tasks" class="calendar-date-count calendar-tone-info" :title="`Задачи: ${day.tasks}`"><ListTodo :size="12" aria-hidden="true" />{{ day.tasks }}</span>
+          <span v-if="day.checkpoints" class="calendar-date-count calendar-date-checkpoint" :class="`calendar-tone-${day.controlTone}`" :title="`Промежуточные сроки без отметки: ${day.checkpoints}`"><Flag :size="11" aria-hidden="true" />{{ day.checkpoints }}</span>
+          <span v-if="day.completedCheckpoints" class="calendar-date-count calendar-date-checkpoint calendar-date-checkpoint-marked calendar-tone-success" :title="`Промежуточные сроки с отметкой: ${day.completedCheckpoints}`"><Check :size="12" aria-hidden="true" />{{ day.completedCheckpoints }}</span>
         </span>
       </button>
     </div>
     <div class="calendar-month-caption">
-      <div class="calendar-month-legend"><span><FileText :size="12" aria-hidden="true" />Контроли</span><span><ListTodo :size="13" aria-hidden="true" />Задачи</span></div>
-      <span v-if="loading" role="status">Обновление…</span><span v-else>Активные</span>
+      <div class="calendar-month-legend">
+        <span><FileText :size="12" aria-hidden="true" />Контроли</span>
+        <span><ListTodo :size="13" aria-hidden="true" />Задачи</span>
+        <span><Flag :size="12" aria-hidden="true" />Промежуточные сроки</span>
+        <span><Check :size="13" class="calendar-tone-success" aria-hidden="true" />С отметкой</span>
+      </div>
+      <span v-if="loading" role="status">Обновление…</span>
     </div>
   </section>
 </template>

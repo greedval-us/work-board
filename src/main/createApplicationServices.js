@@ -8,6 +8,7 @@ import { AppService } from './services/AppService.js';
 import { DatabaseSelectionService } from './services/DatabaseSelectionService.js';
 import { CalendarService } from './services/CalendarService.js';
 import { ExcelExportService } from './services/ExcelExportService.js';
+import { ControlCardExportService } from './services/ControlCardExportService.js';
 import { IPCManager } from './ipc/IPCManager.js';
 import { AttachmentService } from './services/AttachmentService.js';
 import { AnalyticsService } from './services/AnalyticsService.js';
@@ -45,6 +46,7 @@ export function createApplicationServices({ app, ipcMain, dialog, getWindow, log
       analytics: new AnalyticsService({ repository: new AnalyticsRepository(database) }),
       selection: new DatabaseSelectionService({ database, location, dialog, getWindow }),
       exportService: new ExcelExportService({ database, instructions, dialog, getWindow }),
+      controlCardExport: new ControlCardExportService({ database, instructions, dialog, getWindow }),
       getWindow, logger,
     });
     ipc.init();

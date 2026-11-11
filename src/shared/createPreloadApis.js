@@ -15,6 +15,11 @@ export function createPreloadApis(ipcRenderer) {
     settings: {
       get: (generation) => ipcRenderer.invoke(channels.settings.get, { generation }),
       setTheme: (theme, generation) => ipcRenderer.invoke(channels.settings.setTheme, { theme, generation }),
+      addRegistryOption: (field, value, generation) => ipcRenderer.invoke(channels.settings.addRegistryOption, { field, value, generation }),
+      updateRegistryOption: (field, previousValue, value, generation) => ipcRenderer.invoke(channels.settings.updateRegistryOption, {
+        field, previousValue, value, generation,
+      }),
+      removeRegistryOption: (field, value, generation) => ipcRenderer.invoke(channels.settings.removeRegistryOption, { field, value, generation }),
     },
     instructions: payloadMethods(channels.instructions),
     tasks: payloadMethods(channels.tasks),

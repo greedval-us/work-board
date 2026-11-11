@@ -15,3 +15,16 @@ export function presentCalendarRecords(instructions, tasks, today) {
     counts: { activeControls, completedControls: instructions.length - activeControls, activeTasks, completedTasks: tasks.length - activeTasks },
   };
 }
+
+export function presentCalendarCheckpoints(checkpoints, today) {
+  let marked = 0;
+  const rows = checkpoints.map(item => {
+    if (item.mark.trim()) {
+      marked += 1;
+      return { ...item, urgency: { tone: 'success', label: 'Есть отметка' } };
+    }
+    const urgency = getUrgency({ deadline: item.date, status: INSTRUCTION_STATUS.PENDING }, today);
+    return { ...item, urgency: urgency.tone === 'info' ? { ...urgency, label: 'По графику' } : urgency };
+  });
+  return { rows, open: rows.length - marked, marked };
+}

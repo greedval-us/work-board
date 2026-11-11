@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { ref, shallowRef } from 'vue';
 import { DEFAULT_SETTINGS } from '../../shared/constants/settings.js';
 import { appService } from '../services/AppService.js';
 import { settingsService } from '../services/SettingsService.js';
@@ -12,10 +12,12 @@ export const useAppStore = defineStore('app', () => {
   const info = ref(null);
   const database = ref(null);
   const theme = ref(DEFAULT_SETTINGS.theme);
+  const registryOptions = shallowRef(DEFAULT_SETTINGS.registryOptions);
   const loading = ref(false);
   const initialized = ref(false);
   const saving = ref(false);
   const error = ref('');
+  const registryOptionsError = ref('');
   const revision = ref(0);
   const pendingOperations = ref(0);
   const databaseSwitching = ref(false);
@@ -26,6 +28,12 @@ export const useAppStore = defineStore('app', () => {
     return initialization.run('bootstrap', loadApplication);
   }
 
+  function applySettings(settings) {
+    theme.value = settings.theme;
+    registryOptions.value = settings.registryOptions ?? DEFAULT_SETTINGS.registryOptions;
+    registryOptionsError.value = '';
+  }
+
   async function loadApplication() {
     loading.value = true;
     error.value = '';
@@ -34,23 +42,42 @@ export const useAppStore = defineStore('app', () => {
       const settings = status.ready ? await settingsService.get(status.generation) : DEFAULT_SETTINGS;
       info.value = appInfo;
       database.value = status;
-      theme.value = settings.theme;
+      applySettings(settings);
       initialized.value = true;
     } catch (cause) {
       error.value = errorMessage(cause, 'Не удалось загрузить локальные данные.');
     } finally { loading.value = false; }
   }
 
-  async function setTheme(value) {
-    if (!initialized.value || !database.value?.ready || loading.value || saving.value || databaseSwitching.value) return;
+  async function saveSettings(operation, feedback = error) {
+    if (!initialized.value || !database.value?.ready || loading.value || saving.value || databaseSwitching.value) return false;
     saving.value = true;
     error.value = '';
+    registryOptionsError.value = '';
     try {
-      const settings = await withOperation(() => settingsService.setTheme(value, database.value.generation));
-      theme.value = settings.theme;
+      const settings = await withOperation(() => operation(database.value.generation));
+      applySettings(settings);
+      return true;
     } catch (cause) {
-      error.value = errorMessage(cause, 'Не удалось сохранить настройки.');
+      feedback.value = errorMessage(cause, 'Не удалось сохранить настройки.');
+      return false;
     } finally { saving.value = false; }
+  }
+
+  function setTheme(value) {
+    return saveSettings(generation => settingsService.setTheme(value, generation));
+  }
+
+  function addRegistryOption(field, value) {
+    return saveSettings(generation => settingsService.addRegistryOption(field, value, generation), registryOptionsError);
+  }
+
+  function updateRegistryOption(field, previousValue, value) {
+    return saveSettings(generation => settingsService.updateRegistryOption(field, previousValue, value, generation), registryOptionsError);
+  }
+
+  function removeRegistryOption(field, value) {
+    return saveSettings(generation => settingsService.removeRegistryOption(field, value, generation), registryOptionsError);
   }
 
   function touchData() { revision.value++; }
@@ -87,14 +114,18 @@ export const useAppStore = defineStore('app', () => {
     }
     if (!['create', 'open'].includes(mode)) return false;
     if (!await resolveUnsavedChanges()) return false;
+    if (pendingOperations.value > 0 || databaseSwitching.value || loading.value) {
+      error.value = 'Дождитесь завершения текущей операции перед выбором базы.';
+      return false;
+    }
     databaseSwitching.value = true;
     error.value = '';
     try {
       const result = await databaseService[mode]();
       if (result.cancelled) return false;
       database.value = result.status;
-      theme.value = DEFAULT_SETTINGS.theme;
-      try { theme.value = (await settingsService.get(result.status.generation)).theme; }
+      applySettings(DEFAULT_SETTINGS);
+      try { applySettings(await settingsService.get(result.status.generation)); }
       catch (cause) { error.value = errorMessage(cause); }
       initialized.value = true;
       touchData();
@@ -106,8 +137,9 @@ export const useAppStore = defineStore('app', () => {
   }
 
   return {
-    info, database, theme, loading, initialized, saving, error, revision, pendingOperations,
-    databaseSwitching, initialize, setTheme, touchData, withOperation, selectDatabase,
+    info, database, theme, registryOptions, loading, initialized, saving, error, registryOptionsError, revision, pendingOperations,
+    databaseSwitching, initialize, setTheme, addRegistryOption, updateRegistryOption, removeRegistryOption,
+    touchData, withOperation, selectDatabase,
     registerUnsavedGuard, resolveUnsavedChanges, prepareToClose,
     hasUnsavedGuards: () => unsavedGuards.size > 0,
   };

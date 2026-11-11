@@ -18,14 +18,40 @@ test('instruction validation preserves identifiers and optional multiline text',
   assert.equal(data.instructionNumber, '007/Б');
   assert.equal(data.summary, '  Первая строка\nВторая строка  ');
   const { incomingNumber, summary, executionMark, status, ...required } = instruction();
-  assert.deepEqual(validateInstruction(required), instruction({ incomingNumber: '', summary: '', executionMark: '', status: 'pending' }));
+  assert.deepEqual(validateInstruction(required), instruction({
+    incomingNumber: '', source: '', summary: '', extendedUntil: '', controlType: '', executionMark: '', status: 'pending',
+    controlSchedule: { frequency: '', firstDate: '', customDates: [], marks: [] },
+  }));
+});
+
+test('instruction validation uses the extended deadline for active checkpoint dates', () => {
+  const controlSchedule = {
+    frequency: 'custom',
+    customDates: ['2026-10-28', '2026-10-24', '2026-10-24'],
+    marks: [{ date: '2026-11-01', text: '  Отчёт\nпроверен  ' }],
+  };
+  assert.throws(() => validateInstruction(instruction({ controlSchedule })), ValidationError);
+  const data = validateInstruction(instruction({ extendedUntil: '2026-10-28', controlSchedule }));
+  assert.deepEqual(data.controlSchedule, {
+    frequency: 'custom', firstDate: '', customDates: ['2026-10-24', '2026-10-28'], marks: controlSchedule.marks,
+  });
+});
+
+test('an extension accepts a real date on or after the original deadline', () => {
+  for (const extendedUntil of ['2026-10-26', '2026-11-01']) {
+    assert.equal(validateInstruction(instruction({ extendedUntil })).extendedUntil, extendedUntil);
+  }
+  for (const extendedUntil of ['2026-10-25', '2027-02-29', '01.11.2026', ' ', null, 20261101]) {
+    assert.throws(() => validateInstruction(instruction({ extendedUntil })), ValidationError);
+  }
 });
 
 test('required instruction fields and strict Gregorian dates reject invalid input safely', () => {
   const invalid = [
     ...['controlDate', 'instructionNumber', 'title', 'deadline', 'executor'].map(key => instruction({ [key]: ' ' })),
     ...['2026-02-29', '2024-02-30', '2026-13-01', '2026-00-01', '2026-10-00', '2026-1-03', '0000-01-01', '2026-10-23T00:00:00Z'].map(deadline => instruction({ deadline })),
-    instruction({ status: 'done' }), instruction({ status: null }), instruction({ incomingNumber: 123 }), null,
+    instruction({ status: 'done' }), instruction({ status: null }), instruction({ incomingNumber: 123 }),
+    instruction({ source: 123 }), instruction({ controlType: null }), null,
   ];
   for (const data of invalid) {
     assert.throws(() => validateInstruction(data), error => error instanceof ValidationError && Boolean(error.publicMessage));
@@ -53,6 +79,16 @@ test('filters validate ranges and support an empty status', () => {
   }
 });
 
+test('checkpoint filters default to empty and accept only supported values', () => {
+  assert.equal(emptyFilters().checkpoint, '');
+  for (const checkpoint of ['', 'overdue', 'today']) {
+    assert.equal(normalizeFilters({ checkpoint }).checkpoint, checkpoint);
+  }
+  for (const checkpoint of ['all', 'TODAY', 'constructor', null, 1]) {
+    assert.throws(() => normalizeFilters({ checkpoint }), ValidationError);
+  }
+});
+
 test('list requests constrain sort fields and pagination', () => {
   assert.deepEqual(normalizeListRequest(), {
     filters: emptyFilters(), sort: { field: 'controlDate', direction: 'desc' }, offset: 0, limit: 25,
@@ -60,6 +96,14 @@ test('list requests constrain sort fields and pagination', () => {
   assert.equal(normalizeListRequest({ offset: 50, limit: 50, sort: { field: 'executor', direction: 'asc' } }).offset, 50);
   for (const request of [{ offset: -1 }, { offset: null }, { offset: 0.5 }, { limit: 0 }, { limit: null }, { limit: 101 }, { limit: '25' }, { sort: { field: null } }, { sort: { direction: null } }, { sort: { field: 'id; DROP TABLE instructions', direction: 'asc' } }, { sort: { field: 'deadline', direction: 'DROP' } }]) {
     assert.throws(() => normalizeListRequest(request), ValidationError);
+  }
+});
+
+test('list requests accept an optional Gregorian reference date', () => {
+  assert.equal(Object.hasOwn(normalizeListRequest(), 'today'), false);
+  assert.equal(normalizeListRequest({ today: '2028-02-29' }).today, '2028-02-29');
+  for (const today of ['2026-02-29', '2026-10-23T00:00:00Z', '', null, 20261023]) {
+    assert.throws(() => normalizeListRequest({ today }), ValidationError);
   }
 });
 
@@ -77,6 +121,12 @@ test('urgency distinguishes overdue, next three days, later dates and completed 
   assert.equal(getUrgency({ deadline: '2026-10-27', status: 'pending' }, '2026-10-23').tone, 'info');
   assert.deepEqual(getUrgency({ deadline: '2026-10-22', status: 'completed' }, '2026-10-23'), { tone: 'success', label: 'Исполнено' });
   assert.equal(getUrgency({ deadline: '2027-01-02', status: 'pending' }, '2026-12-30').tone, 'warning');
+});
+
+test('instruction urgency uses the extended deadline', () => {
+  const data = instruction({ deadline: '2026-10-22', extendedUntil: '2026-10-26' });
+  assert.equal(getUrgency(data, '2026-10-23').tone, 'warning');
+  assert.equal(getUrgency(data, '2026-10-27').tone, 'danger');
 });
 
 test('task urgency uses explicit priority and recalculates overdue and completed states', () => {

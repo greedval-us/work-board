@@ -30,7 +30,7 @@ test('desktop smoke polling retries renderer conditions and reports exhausted co
 
 function registryMeasurements() {
   return {
-    width: 1000, height: 600, document: { width: 1001, height: 601 }, columns: 8, dates: [],
+    width: 1000, height: 600, document: { width: 1001, height: 601 }, columns: 13, dates: [],
     elements: {
       '.main-content': { y: 0, right: 1000, bottom: 600, clientHeight: 600, scrollHeight: 601 },
       '.page': { right: 1000, bottom: 600 },
@@ -55,9 +55,9 @@ test('workspace geometry tolerates subpixel rounding but rejects document and ta
 
 test('registry geometry requires complete columns and space for three visible rows', () => {
   const measurements = registryMeasurements();
-  measurements.columns = 7;
+  measurements.columns = 12;
   assert.throws(() => assertWorkspaceFits(measurements, 'registry', 'fixture'));
-  measurements.columns = 8;
+  measurements.columns = 13;
   measurements.elements['.registry-table-scroll'].height = 118;
   assert.throws(() => assertWorkspaceFits(measurements, 'registry', 'fixture'), /fewer than three visible rows/);
 });

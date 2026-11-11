@@ -1,8 +1,9 @@
 import { ValidationError } from './errors.js';
 import { validateDate, localDate, addCalendarDays } from './dates.js';
 import { validateRecord as record, validateText as text, validateEnum as enumValue, validateDateRange } from './validation.js';
+import { validateControlSchedule } from './controlSchedule.js';
 import {
-  INSTRUCTION_COLUMNS, INSTRUCTION_STATUSES, INSTRUCTION_STATUS, TASK_PRIORITIES,
+  CHECKPOINT_FILTER_LABELS, INSTRUCTION_COLUMNS, INSTRUCTION_STATUSES, INSTRUCTION_STATUS, TASK_PRIORITIES,
   TASK_PRIORITY, TASK_PRIORITY_TONES, REGISTRY_PAGINATION, REGISTRY_DEFAULT_SORT, SORT_DIRECTIONS, URGENCY_WINDOW_DAYS,
 } from './constants/registry.js';
 
@@ -14,17 +15,29 @@ export { ValidationError } from './errors.js';
 
 export function validateInstruction(value) {
   const data = record(value, 'Указание');
-  return {
+  const { extendedUntil = '' } = data;
+  const instruction = {
     controlDate: validateDate(data.controlDate, 'Дата постановки на контроль'),
     incomingNumber: text(data.incomingNumber, 'Входящий номер'),
-    instructionNumber: text(data.instructionNumber, 'Номер указания', true),
+    instructionNumber: text(data.instructionNumber, 'Подписной номер', true),
+    source: text(data.source, 'Откуда'),
     title: text(data.title, 'Название указания', true),
-    summary: text(data.summary, 'Краткое содержание'),
+    summary: text(data.summary, 'Резолюция'),
     deadline: validateDate(data.deadline, 'Срок исполнения'),
+    extendedUntil: extendedUntil === '' ? '' : validateDate(extendedUntil, 'Продлён до'),
     executor: text(data.executor, 'Исполнитель', true),
+    controlType: text(data.controlType, 'Вид контроля'),
     status: enumValue(data.status === undefined ? INSTRUCTION_STATUS.PENDING : data.status, INSTRUCTION_STATUSES, 'Статус'),
     executionMark: text(data.executionMark, 'Отметка об исполнении'),
   };
+  if (instruction.extendedUntil && instruction.extendedUntil < instruction.deadline) {
+    throw new ValidationError('Дата продления не может быть раньше срока исполнения.');
+  }
+  instruction.controlSchedule = validateControlSchedule(data.controlSchedule, {
+    controlDate: instruction.controlDate,
+    deadline: instructionDeadline(instruction),
+  });
+  return instruction;
 }
 
 export function validateTask(value) {
@@ -41,7 +54,7 @@ export function validateTask(value) {
 }
 
 export function emptyFilters() {
-  return { instructionNumber: '', deadlineFrom: '', deadlineTo: '', executor: '', status: '', executionMark: '' };
+  return { instructionNumber: '', deadlineFrom: '', deadlineTo: '', executor: '', status: '', executionMark: '', checkpoint: '' };
 }
 
 export function normalizeFilters(value = {}) {
@@ -52,6 +65,7 @@ export function normalizeFilters(value = {}) {
   if (filters.deadlineTo) validateDate(filters.deadlineTo, 'Срок по');
   validateDateRange(filters.deadlineFrom, filters.deadlineTo);
   if (filters.status) enumValue(filters.status, INSTRUCTION_STATUSES, 'Статус');
+  if (filters.checkpoint) enumValue(filters.checkpoint, CHECKPOINT_FILTER_LABELS, 'Промежуточный контроль');
   return filters;
 }
 
@@ -68,11 +82,17 @@ export function normalizeListRequest(value = {}) {
   const limit = data.limit === undefined ? REGISTRY_PAGINATION.DEFAULT_SIZE : data.limit;
   if (!Number.isSafeInteger(offset) || offset < 0) throw new ValidationError('Некорректное смещение страницы.');
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > REGISTRY_PAGINATION.MAX_SIZE) throw new ValidationError(`Размер страницы должен быть от 1 до ${REGISTRY_PAGINATION.MAX_SIZE}.`);
-  return { filters: normalizeFilters(data.filters), sort: { field, direction }, offset, limit };
+  const request = { filters: normalizeFilters(data.filters), sort: { field, direction }, offset, limit };
+  if (data.today !== undefined) request.today = validateDate(data.today);
+  return request;
 }
 
 export function normalizeSearch(value) {
   return value.normalize('NFKC').toLocaleLowerCase('ru-RU');
+}
+
+export function instructionDeadline(item) {
+  return item.extendedUntil || item.deadline;
 }
 
 export function getUrgency(item, today = localDate()) {
@@ -80,7 +100,7 @@ export function getUrgency(item, today = localDate()) {
   if (isTask ? item.completed : item.status === INSTRUCTION_STATUS.COMPLETED) {
     return { tone: 'success', label: isTask ? 'Выполнено' : 'Исполнено' };
   }
-  const date = isTask ? item.date : item.deadline;
+  const date = isTask ? item.date : instructionDeadline(item);
   if (date < today) return { tone: 'danger', label: 'Просрочено' };
   if (isTask) {
     const priority = item.priority ?? TASK_PRIORITY.NORMAL;

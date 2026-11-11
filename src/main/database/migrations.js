@@ -1,4 +1,5 @@
 import { runTransaction } from './transaction.js';
+import { EFFECTIVE_INSTRUCTION_DEADLINE_SQL } from './instructionDeadline.js';
 
 // Add sequential versions here. Each migration runs once in its own transaction.
 export const migrations = [
@@ -57,6 +58,21 @@ export const migrations = [
     ) STRICT;
     CREATE INDEX attachments_instruction_idx ON attachments(instruction_id);
     CREATE INDEX attachments_task_idx ON attachments(task_id);`,
+  },
+  {
+    version: 4,
+    sql: `ALTER TABLE instructions ADD COLUMN source TEXT NOT NULL DEFAULT '';
+    ALTER TABLE instructions ADD COLUMN control_type TEXT NOT NULL DEFAULT '';`,
+  },
+  {
+    version: 5,
+    sql: `ALTER TABLE instructions ADD COLUMN extended_until TEXT NOT NULL DEFAULT '';
+    CREATE INDEX instructions_effective_deadline_status_idx ON instructions (${EFFECTIVE_INSTRUCTION_DEADLINE_SQL}, status);`,
+  },
+  {
+    version: 6,
+    sql: `ALTER TABLE instructions ADD COLUMN control_schedule TEXT NOT NULL DEFAULT '';
+    CREATE INDEX instructions_control_schedule_idx ON instructions (id) WHERE control_schedule <> '';`,
   },
 ];
 

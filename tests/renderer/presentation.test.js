@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { formatFileSize } from '../../src/renderer/presentation/formatters.js';
 import { getTaskPriorityPresentation } from '../../src/renderer/presentation/taskPriorities.js';
-import { presentCalendarRecords } from '../../src/renderer/presentation/calendarRecords.js';
+import { presentCalendarCheckpoints, presentCalendarRecords } from '../../src/renderer/presentation/calendarRecords.js';
 
 test('attachment size labels switch at binary unit boundaries and retain the one-decimal display', () => {
   for (const [bytes, label] of [[0, '0 Б'], [1023, '1023 Б'], [1024, '1 КБ'], [1536, '1,5 КБ'], [1048575, '1 024 КБ'], [1048576, '1 МБ'], [1572864, '1,5 МБ']]) {
@@ -33,4 +33,23 @@ test('calendar labels retain useful status and priority details without repeatin
   ]);
   assert.deepEqual(records.tasks.map(row => [row.urgency.label, row.secondaryLabel]), [['Просрочено', 'Срочная'], ['Важная', ''], ['Выполнено', '']]);
   assert.deepEqual(records.counts, { activeControls: 3, completedControls: 1, activeTasks: 2, completedTasks: 1 });
+});
+
+test('checkpoint marks take precedence over date urgency, including historical checkpoints', () => {
+  const { rows, open, marked } = presentCalendarCheckpoints([
+    { date: '2026-10-24', mark: 'Доклад получен', scheduled: false },
+    { date: '2026-10-25', mark: '', scheduled: true },
+    { date: '2026-10-26', mark: '', scheduled: true },
+    { date: '2026-11-05', mark: '', scheduled: true },
+  ], '2026-10-26');
+  assert.deepEqual(rows.map(({ urgency }) => urgency), [
+    { tone: 'success', label: 'Есть отметка' },
+    { tone: 'danger', label: 'Просрочено' },
+    { tone: 'warning', label: 'Срок сегодня' },
+    { tone: 'info', label: 'По графику' },
+  ]);
+  assert.equal(rows[0].scheduled, false);
+  assert.equal(rows[0].mark, 'Доклад получен');
+  assert.equal(open, 3);
+  assert.equal(marked, 1);
 });

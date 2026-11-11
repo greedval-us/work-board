@@ -1,31 +1,14 @@
 import { emptyAnalyticsFilters } from '../../shared/analytics.js';
-import { ENTITY_TYPES } from '../../shared/constants/entities.js';
-import { INSTRUCTION_STATUS, localDate } from '../../shared/registry.js';
+import { localDate, normalizeSearch } from '../../shared/registry.js';
 
 export const ANALYTICS_PERIODS = Object.freeze({ MONTH: 'month', YEAR: 'year', ALL: 'all' });
-const INSTRUCTION_ONLY_STATUSES = new Set([INSTRUCTION_STATUS.PENDING, INSTRUCTION_STATUS.IN_PROGRESS]);
 
-export const supportsTaskFilters = entityType => entityType !== ENTITY_TYPES.INSTRUCTIONS;
-export const supportsInstructionFilters = entityType => entityType !== ENTITY_TYPES.TASKS;
-export const isAnalyticsStatusAvailable = (entityType, status) => supportsInstructionFilters(entityType) || !INSTRUCTION_ONLY_STATUSES.has(status);
-export const showTaskPriorityBreakdown = filters => supportsTaskFilters(filters.entityType) && !filters.executor;
-
-export function changeAnalyticsFilter(filters, key, value) {
-  const next = { ...filters, [key]: value };
-  if (key === 'entityType') {
-    next.priority = '';
-    next.executor = '';
-  }
-  if (key === 'priority' && value) {
-    next.entityType = ENTITY_TYPES.TASKS;
-    next.executor = '';
-  }
-  if (key === 'executor' && value) {
-    next.entityType = ENTITY_TYPES.INSTRUCTIONS;
-    next.priority = '';
-  }
-  if ((key === 'entityType' || (key === 'priority' && value)) && !isAnalyticsStatusAvailable(next.entityType, next.status)) next.status = '';
-  return next;
+export function analyticsExecutorOptions(recorded, configured, selected) {
+  const options = new Map(recorded.map(({ key, label }) => [key, label]));
+  for (const label of configured) options.set(normalizeSearch(label), label);
+  if (selected && !options.has(selected)) options.set(selected, selected);
+  return [...options].map(([key, label]) => ({ key, label }))
+    .sort((left, right) => left.label.localeCompare(right.label, 'ru-RU'));
 }
 
 export function applyAnalyticsPeriod(filters, period, today = localDate()) {

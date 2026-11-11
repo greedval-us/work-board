@@ -16,7 +16,7 @@ function record(id) {
     createdAt: '2026-10-23T10:00:00Z', updatedAt: '2026-10-23T10:00:00Z' };
 }
 
-function setup(t, overrides = {}) {
+function setup(t, overrides = {}, now) {
   const pinia = createPinia();
   const app = reactive({
     database: { ready: true, generation: 1 }, revision: 0, databaseSwitching: false,
@@ -25,7 +25,7 @@ function setup(t, overrides = {}) {
   });
   const service = { list: async () => ({ items: [], total: 0 }), get: async ({ id }) => record(id),
     create: async ({ data }) => ({ ...record(1), ...data }), ...overrides };
-  const store = createRegistryStore({ app, service })(pinia);
+  const store = createRegistryStore({ app, service, now })(pinia);
   t.after(() => disposePinia(pinia));
   return { app, store };
 }
@@ -120,4 +120,90 @@ test('queries superseded before their queued work starts do not issue obsolete I
   assert.deepEqual(executors, ['Петров']);
   assert.equal(store.items[0].id, 5);
   assert.equal(store.loading, false);
+});
+
+test('a checkpoint filter resets to the first page when the local date changes', async (t) => {
+  const previous = deferred();
+  const next = deferred();
+  const requests = [];
+  let day = 26;
+  const { store } = setup(t, { list: (request) => {
+    requests.push(request);
+    if (request.offset) return previous.promise;
+    if (request.today === '2026-10-27') return next.promise;
+    return { items: [record(1)], total: 100 };
+  } }, () => new Date(2026, 9, day));
+
+  store.draftFilters.checkpoint = 'today';
+  await store.applyFilters();
+  assert.equal(requests.at(-1).today, '2026-10-26');
+  const stale = store.setPage(2);
+  await nextTick();
+  assert.equal(store.page, 2);
+
+  day = 27;
+  previous.resolve({ items: [record(2)], total: 100 });
+  const updated = store.updateToday();
+  assert.equal(store.page, 1);
+  assert.equal(await stale, false);
+  assert.equal(store.loading, true);
+  assert.equal(store.items[0].id, 1);
+  assert.equal(requests.at(-1).offset, 0);
+  assert.equal(requests.at(-1).today, '2026-10-27');
+  next.resolve({ items: [record(3)], total: 1 });
+  assert.equal(await updated, true);
+  assert.equal(store.items[0].id, 3);
+});
+
+test('returning to the registry refreshes a cached checkpoint list for the new local date', async (t) => {
+  const dates = [];
+  let day = 26;
+  const { store } = setup(t, { list: async ({ today }) => {
+    dates.push(today);
+    return { items: [], total: 0 };
+  } }, () => new Date(2026, 9, day));
+
+  store.draftFilters.checkpoint = 'overdue';
+  await store.applyFilters();
+  await store.ensureLoaded();
+  day = 27;
+  await store.ensureLoaded();
+  assert.deepEqual(dates, ['2026-10-26', '2026-10-27']);
+  assert.equal(store.today, '2026-10-27');
+});
+
+test('export captures the current date for an active checkpoint filter', async (t) => {
+  const exports = [];
+  let day = 26;
+  const { store } = setup(t, { export: async (request) => {
+    exports.push(request);
+    return { cancelled: false, count: 0 };
+  } }, () => new Date(2026, 9, day));
+
+  store.draftFilters.checkpoint = 'overdue';
+  await store.applyFilters();
+  day = 27;
+  assert.equal(await store.exportRecords(), true);
+  assert.equal(exports[0].filters.checkpoint, 'overdue');
+  assert.equal(exports[0].today, '2026-10-27');
+});
+
+test('an unfiltered date change updates display state and reuses the cached list', async (t) => {
+  const requests = [];
+  let day = 26;
+  const { store } = setup(t, {
+    list: async (request) => { requests.push(request); return { items: [], total: 0 }; },
+    export: async (request) => { requests.push(request); return { cancelled: false, count: 0 }; },
+  }, () => new Date(2026, 9, day));
+  await store.ensureLoaded();
+  store.draftFilters.checkpoint = 'today';
+  day = 27;
+
+  await store.updateToday();
+  await store.ensureLoaded();
+  assert.equal(store.today, '2026-10-27');
+  assert.equal(requests.length, 1);
+  await store.exportRecords();
+  assert.equal(requests.length, 2);
+  assert.ok(requests.every((request) => !Object.hasOwn(request, 'today')));
 });

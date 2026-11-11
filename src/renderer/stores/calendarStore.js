@@ -17,6 +17,7 @@ export function createCalendarStore({ id = 'calendar', getApp = useAppStore, ser
     const monthDays = shallowRef([]);
     const instructions = shallowRef([]);
     const tasks = shallowRef([]);
+    const checkpoints = shallowRef([]);
     const monthLoading = shallowRef(false);
     const dayLoading = shallowRef(false);
     const monthError = shallowRef('');
@@ -67,6 +68,12 @@ export function createCalendarStore({ id = 'calendar', getApp = useAppStore, ser
       } finally { if (current()) monthLoading.value = false; }
     }
 
+    function setDay(value = {}) {
+      instructions.value = value.instructions ?? [];
+      tasks.value = value.tasks ?? [];
+      checkpoints.value = value.checkpoints ?? [];
+    }
+
     async function fetchDay({ force = false } = {}) {
       const requestedDate = selectedDate.value;
       const key = keyFor(requestedDate);
@@ -74,22 +81,20 @@ export function createCalendarStore({ id = 'calendar', getApp = useAppStore, ser
       currentDayTicket = ticket;
       const source = generation.value;
       dayError.value = '';
-      if (!ready.value) { instructions.value = []; tasks.value = []; dayLoading.value = false; return; }
+      if (!ready.value) { setDay(); dayLoading.value = false; return; }
       if (!force && lastDay?.key === key) {
-        instructions.value = lastDay.value.instructions;
-        tasks.value = lastDay.value.tasks;
+        setDay(lastDay.value);
         dayLoading.value = false;
         return lastDay.value;
       }
-      instructions.value = [];
-      tasks.value = [];
+      setDay();
       dayLoading.value = true;
       const current = () => isCurrentRead(ticket, key, selectedDate.value);
       const accepts = () => isCurrentRead(currentDayTicket, key, selectedDate.value);
       try {
         const result = await dayFlight.run(key, async () => {
           const value = await service.day({ date: requestedDate, generation: source });
-          if (accepts()) { lastDay = { key, value }; instructions.value = value.instructions; tasks.value = value.tasks; }
+          if (accepts()) { lastDay = { key, value }; setDay(value); }
           return value;
         });
         return result;
@@ -115,8 +120,7 @@ export function createCalendarStore({ id = 'calendar', getApp = useAppStore, ser
       lastMonth = undefined;
       lastDay = undefined;
       monthDays.value = [];
-      instructions.value = [];
-      tasks.value = [];
+      setDay();
       monthLoading.value = false;
       dayLoading.value = false;
       monthError.value = '';
@@ -183,7 +187,7 @@ export function createCalendarStore({ id = 'calendar', getApp = useAppStore, ser
     });
 
     return {
-      month, selectedDate, monthDays, instructions, tasks, ready, generation,
+      month, selectedDate, monthDays, instructions, tasks, checkpoints, ready, generation,
       monthLoading, dayLoading, monthError, dayError, taskError, busyTaskId,
       acquire, fetchMonth, fetchDay, refresh, selectDate, changeMonth, saveTask, removeTask, toggleTask,
     };

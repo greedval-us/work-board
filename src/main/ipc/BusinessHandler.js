@@ -5,8 +5,8 @@ const RECORD_OPERATIONS = Object.freeze(['list', 'get', 'create', 'update', 'rem
 const ATTACHMENT_OPERATIONS = Object.freeze(['list', 'pick', 'release', 'download']);
 
 export class BusinessHandler {
-  constructor({ database, recordServices = {}, calendar, exportService, attachments, analytics }) {
-    Object.assign(this, { database, recordServices, calendar, exportService, attachments, analytics });
+  constructor({ database, recordServices = {}, calendar, exportService, controlCardExport, attachments, analytics }) {
+    Object.assign(this, { database, recordServices, calendar, exportService, controlCardExport, attachments, analytics });
   }
 
   guarded(operation) {
@@ -23,6 +23,7 @@ export class BusinessHandler {
       for (const method of RECORD_OPERATIONS) requests[channels[entityType][method]] = this.guarded(payload => service[method](payload));
     }
     requests[channels.instructions.export] = this.guarded((payload) => this.exportService.export(payload));
+    if (this.controlCardExport) requests[channels.instructions.exportControlCard] = this.guarded(payload => this.controlCardExport.export(payload));
     requests[channels.calendar.month] = this.guarded((payload) => this.calendar.month(payload));
     requests[channels.calendar.day] = this.guarded((payload) => this.calendar.day(payload));
     if (this.attachments) for (const method of ATTACHMENT_OPERATIONS) requests[channels.attachments[method]] = this.guarded(payload => this.attachments[method](payload));

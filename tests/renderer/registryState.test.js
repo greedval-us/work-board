@@ -55,6 +55,41 @@ test('registry query and results survive route scope disposal without a duplicat
   assert.equal(calls.length, before);
 });
 
+test('only the newest open can select a checkpoint when reads share an instruction', async (t) => {
+  const pending = deferred();
+  const { app, service } = fixture(t, { get: () => pending.promise });
+  const scope = effectScope();
+  t.after(() => scope.stop());
+  const state = scope.run(() => useRegistry(app, service));
+
+  const earlier = state.openRecord(1, '2026-10-23');
+  const later = state.openRecord(1, '2026-10-26');
+  assert.equal(state.selectedCheckpoint.value, '');
+  pending.resolve(record(1));
+
+  assert.equal(await earlier, false);
+  assert.equal(await later, true);
+  assert.equal(state.selected.value.id, 1);
+  assert.equal(state.selectedCheckpoint.value, '2026-10-26');
+});
+
+test('a checkpoint opened from a route is ignored if that route changes during the read', async (t) => {
+  const pending = deferred();
+  const { app, service } = fixture(t, { get: () => pending.promise });
+  const scope = effectScope();
+  t.after(() => scope.stop());
+  const state = scope.run(() => useRegistry(app, service));
+  let stillRequested = true;
+
+  const opening = state.openRecord(1, '2026-10-26', () => stillRequested);
+  stillRequested = false;
+  pending.resolve(record(1));
+
+  assert.equal(await opening, false);
+  assert.equal(state.selected.value, null);
+  assert.equal(state.selectedCheckpoint.value, '');
+});
+
 test('equal current reads share one pending IPC while a newer query defeats its late answer', async (t) => {
   const initial = deferred();
   const calls = [];

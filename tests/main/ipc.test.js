@@ -3,45 +3,83 @@ import { test } from 'node:test';
 import { IPCManager } from '../../src/main/ipc/IPCManager.js';
 import { registerIpcHandlers } from '../../src/main/ipc/registerIpcHandlers.js';
 import { AppError } from '../../src/main/utils/AppError.js';
+import { DatabaseService } from '../../src/main/database/DatabaseService.js';
+import { SettingsRepository } from '../../src/main/repositories/SettingsRepository.js';
+import { SettingsService } from '../../src/main/services/SettingsService.js';
 import { ValidationError } from '../../src/shared/registry.js';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-function fixture() {
+function fixture(t) {
   const handlers = new Map();
   const window = { isDestroyed: () => false, webContents: { mainFrame: {} } };
-  let theme = 'light';
+  const directory = mkdtempSync(path.join(tmpdir(), 'work-board-ipc-'));
+  const database = new DatabaseService({ filePath: path.join(directory, 'settings.sqlite') });
+  t.after(() => { database.close(); rmSync(directory, { recursive: true, force: true }); });
+  database.open();
   const manager = new IPCManager({
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler), removeHandler: (channel) => handlers.delete(channel) },
     appService: { getInfo: () => ({ name: 'Work Board' }) },
-    database: { getStatus: () => ({ ready: true }) },
-    settingsService: { get: () => ({ theme }), setTheme: (value) => { theme = value; return { theme }; } },
+    database,
+    settingsService: new SettingsService(new SettingsRepository(database)),
     getWindow: () => window,
     logger: { error() {} },
   });
   manager.init();
-  return { manager, handlers, window, event: { sender: window.webContents, senderFrame: window.webContents.mainFrame } };
+  return { manager, handlers, generation: database.getStatus().generation, event: { sender: window.webContents, senderFrame: window.webContents.mainFrame } };
 }
 
-test('IPC rejects other windows and child frames before changing local data', async () => {
-  const { handlers, event } = fixture();
+test('IPC rejects other windows and child frames before changing local data', async (t) => {
+  const { handlers, event, generation } = fixture(t);
+  const registryOptions = { source: [], executor: [], controlType: [] };
   const setTheme = handlers.get('settings:set-theme');
   for (const untrusted of [{ ...event, sender: {} }, { ...event, senderFrame: {} }]) {
-    const result = await setTheme(untrusted, { theme: 'dark' });
+    const result = await setTheme(untrusted, { theme: 'dark', generation });
     assert.equal(result.ok, false);
     assert.equal(result.error.code, 'PERMISSION_DENIED');
     assert.match(result.error.message, /источник/);
   }
-  assert.deepEqual(await handlers.get('settings:get')(event), { ok: true, value: { theme: 'light' } });
-  assert.deepEqual(await setTheme(event, { theme: 'dark' }), { ok: true, value: { theme: 'dark' } });
+  assert.deepEqual(await handlers.get('settings:get')(event, { generation }), { ok: true, value: { theme: 'light', registryOptions } });
+  assert.deepEqual(await setTheme(event, { theme: 'dark', generation }), { ok: true, value: { theme: 'dark', registryOptions } });
 });
 
-test('IPC setup and shutdown are idempotent and release all channels', () => {
-  const { manager, handlers } = fixture();
+test('adding a registry option over IPC requires a trusted sender and the active database generation', async (t) => {
+  const { handlers, event, generation } = fixture(t);
+  const addOption = handlers.get('settings:add-registry-option');
+  const input = { field: 'source', value: 'Канцелярия', generation };
+  assert.equal((await addOption({ ...event, senderFrame: {} }, input)).error.code, 'PERMISSION_DENIED');
+  assert.equal((await addOption(event, { ...input, generation: generation - 1 })).error.code, 'DATABASE_CHANGED');
+  assert.deepEqual(await addOption(event, input), {
+    ok: true, value: { theme: 'light', registryOptions: { source: ['Канцелярия'], executor: [], controlType: [] } },
+  });
+});
+
+test('editing and deleting registry options over IPC require a trusted sender and the active generation', async (t) => {
+  const { handlers, event, generation } = fixture(t);
+  await handlers.get('settings:add-registry-option')(event, { field: 'source', value: 'Архив', generation });
+  for (const [channel, payload, source] of [
+    ['settings:update-registry-option', { previousValue: 'Архив', value: 'Общий архив' }, ['Общий архив']],
+    ['settings:remove-registry-option', { value: 'Общий архив' }, []],
+  ]) {
+    const handler = handlers.get(channel);
+    const input = { field: 'source', generation, ...payload };
+    assert.equal((await handler({ ...event, senderFrame: {} }, input)).error.code, 'PERMISSION_DENIED');
+    assert.equal((await handler(event, { ...input, generation: generation - 1 })).error.code, 'DATABASE_CHANGED');
+    assert.deepEqual(await handler(event, input), {
+      ok: true, value: { theme: 'light', registryOptions: { source, executor: [], controlType: [] } },
+    });
+    const repeated = await handler(event, input);
+    assert.equal(repeated.error.code, 'VALIDATION');
+    assert.match(repeated.error.message, /вариант/);
+  }
+});
+
+test('IPC setup and shutdown are idempotent and release all channels', (t) => {
+  const { manager, handlers } = fixture(t);
   manager.init();
-  assert.equal(handlers.size, 4);
+  assert.equal(handlers.size, 7);
   manager.shutdown();
   manager.shutdown();
   assert.equal(handlers.size, 0);

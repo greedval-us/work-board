@@ -99,12 +99,21 @@ test('failed save retains the open record and reports error without publishing a
   assert.equal(app.pendingOperations, 0);
 });
 
+test('opening a record normally clears the selected checkpoint', async (t) => {
+  const { state } = setup(t);
+  assert.equal(await state.openRecord(7, '2026-10-26'), true);
+  assert.equal(state.selectedCheckpoint.value, '2026-10-26');
+  assert.equal(await state.openRecord(7), true);
+  assert.equal(state.selectedCheckpoint.value, '');
+});
+
 test('database switch closes a record and cannot update its old ID in the new database', async (t) => {
   const { app, state, requests } = setup(t);
-  await state.openRecord(7);
+  await state.openRecord(7, '2026-10-26');
   app.database = { ready: true, generation: 2 };
   assert.equal(await state.saveRecord(row(7)), false);
   assert.equal(state.selected.value, null);
+  assert.equal(state.selectedCheckpoint.value, '');
   assert.equal(requests.some(([type]) => type === 'update'), false);
 });
 
