@@ -41,9 +41,11 @@ test('theme changes only after persistence succeeds', async (t) => {
   assert.doesNotMatch(store.error, /Хранилище недоступно/);
 });
 
-test('registry options load for the active database and refresh after each saved change', async (t) => {
-  const first = { source: ['Канцелярия'], executor: [], controlType: [] };
-  const second = { source: [], executor: ['Иванов'], controlType: [] };
+test('registry and Ф‑21 options load for the active database and refresh after each saved change', async (t) => {
+  const first = { source: ['Канцелярия'], executor: [], department: ['Отдел кадров'], executorPhone: ['+7 900 100-20-30'] };
+  const second = { source: [], executor: ['Иванов'], department: ['Архив'], executorPhone: [] };
+  const oldPhone = '+7 900 123-45-67';
+  const newPhone = '+7 900 765-43-21';
   const store = bridge(t, {
     database: {
       getStatus: async () => ({ ready: true, generation: 1 }),
@@ -52,16 +54,16 @@ test('registry options load for the active database and refresh after each saved
     settings: {
       get: async (generation) => ({ theme: 'light', registryOptions: generation === 1 ? first : second }),
       addRegistryOption: async (field, value, generation) => {
-        assert.deepEqual([field, value, generation], ['controlType', 'Плановый', 2]);
-        return { theme: 'light', registryOptions: { ...second, controlType: [value] } };
+        assert.deepEqual([field, value, generation], ['executorPhone', oldPhone, 2]);
+        return { theme: 'light', registryOptions: { ...second, executorPhone: [value] } };
       },
       updateRegistryOption: async (field, previousValue, value, generation) => {
-        assert.deepEqual([field, previousValue, value, generation], ['controlType', 'Плановый', 'Ежемесячный', 2]);
-        return { theme: 'light', registryOptions: { ...second, controlType: [value] } };
+        assert.deepEqual([field, previousValue, value, generation], ['executorPhone', oldPhone, newPhone, 2]);
+        return { theme: 'light', registryOptions: { ...second, executorPhone: [value] } };
       },
       removeRegistryOption: async (field, value, generation) => {
         if (value === 'Удалённый вариант') throw new Error('Вариант не найден');
-        assert.deepEqual([field, value, generation], ['controlType', 'Ежемесячный', 2]);
+        assert.deepEqual([field, value, generation], ['executorPhone', newPhone, 2]);
         return { theme: 'light', registryOptions: second };
       },
     },
@@ -70,17 +72,80 @@ test('registry options load for the active database and refresh after each saved
   assert.deepEqual(store.registryOptions, first);
   await store.selectDatabase('open');
   assert.deepEqual(store.registryOptions, second);
-  assert.equal(await store.addRegistryOption('controlType', 'Плановый'), true);
-  assert.deepEqual(store.registryOptions, { ...second, controlType: ['Плановый'] });
-  assert.equal(await store.updateRegistryOption('controlType', 'Плановый', 'Ежемесячный'), true);
-  assert.deepEqual(store.registryOptions, { ...second, controlType: ['Ежемесячный'] });
-  assert.equal(await store.removeRegistryOption('controlType', 'Удалённый вариант'), false);
+  assert.equal(await store.addRegistryOption('executorPhone', oldPhone), true);
+  assert.deepEqual(store.registryOptions, { ...second, executorPhone: [oldPhone] });
+  assert.equal(await store.updateRegistryOption('executorPhone', oldPhone, newPhone), true);
+  assert.deepEqual(store.registryOptions, { ...second, executorPhone: [newPhone] });
+  assert.equal(await store.removeRegistryOption('executorPhone', 'Удалённый вариант'), false);
   assert.match(store.registryOptionsError, /Связь с приложением недоступна/);
   assert.equal(store.error, '');
-  assert.deepEqual(store.registryOptions, { ...second, controlType: ['Ежемесячный'] });
-  assert.equal(await store.removeRegistryOption('controlType', 'Ежемесячный'), true);
+  assert.deepEqual(store.registryOptions, { ...second, executorPhone: [newPhone] });
+  assert.equal(await store.removeRegistryOption('executorPhone', newPhone), true);
   assert.deepEqual(store.registryOptions, second);
   assert.equal(store.registryOptionsError, '');
+});
+
+test('adding and editing an executor send contacts in the same settings request', async (t) => {
+  const first = { department: 'Архив', executorPhone: '123' };
+  const updated = { department: '', executorPhone: '456' };
+  const calls = [];
+  const store = bridge(t, {
+    database: { getStatus: async () => ({ ready: true, generation: 4 }) },
+    settings: {
+      get: async () => ({ theme: 'light' }),
+      addRegistryOption: async (...args) => {
+        calls.push(['add', ...args]);
+        return { theme: 'light', executorContacts: [{ executor: 'Иванов', ...first }] };
+      },
+      updateRegistryOption: async (...args) => {
+        calls.push(['update', ...args]);
+        return { theme: 'light', executorContacts: [{ executor: 'Иванов', ...updated }] };
+      },
+    },
+  });
+  await store.initialize();
+  assert.equal(await store.addRegistryOption('executor', 'Иванов', first), true);
+  assert.equal(await store.updateRegistryOption('executor', 'Иванов', 'Иванов', updated), true);
+  assert.deepEqual(calls, [
+    ['add', 'executor', 'Иванов', 4, first],
+    ['update', 'executor', 'Иванов', 'Иванов', 4, updated],
+  ]);
+  assert.deepEqual(store.executorContacts, [{ executor: 'Иванов', ...updated }]);
+});
+
+test('executor contacts load per database and update only after a successful save', async (t) => {
+  const first = [{ executor: 'Иванов', department: 'Архив', executorPhone: '123' }];
+  const store = bridge(t, {
+    database: {
+      getStatus: async () => ({ ready: true, generation: 1 }),
+      open: async () => ({ cancelled: false, status: { ready: true, generation: 2 } }),
+    },
+    settings: {
+      get: async (generation) => ({ theme: 'light', executorContacts: generation === 1 ? first : [] }),
+      setExecutorContact: async (executor, contact, generation) => {
+        assert.deepEqual([executor, generation], ['Иванов', 2]);
+        if (contact.executorPhone === '999') throw new Error('Вариант не найден');
+        return {
+          theme: 'light',
+          executorContacts: contact.department || contact.executorPhone ? [{ executor, ...contact }] : [],
+        };
+      },
+    },
+  });
+
+  await store.initialize();
+  assert.deepEqual(store.executorContacts, first);
+  await store.selectDatabase('open');
+  assert.deepEqual(store.executorContacts, []);
+  const saved = { department: '', executorPhone: '456' };
+  assert.equal(await store.setExecutorContact('Иванов', saved), true);
+  assert.deepEqual(store.executorContacts, [{ executor: 'Иванов', ...saved }]);
+  assert.equal(await store.setExecutorContact('Иванов', { ...saved, executorPhone: '999' }), false);
+  assert.match(store.executorContactsError, /Связь с приложением недоступна/);
+  assert.deepEqual(store.executorContacts, [{ executor: 'Иванов', ...saved }]);
+  assert.equal(await store.setExecutorContact('Иванов', { department: '', executorPhone: '' }), true);
+  assert.deepEqual(store.executorContacts, []);
+  assert.equal(store.executorContactsError, '');
 });
 
 test('concurrent bootstrap callers share pending work and await initialized state', async (t) => {

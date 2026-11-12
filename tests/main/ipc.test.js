@@ -12,6 +12,27 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+const emptyRegistryOptions = { source: [], executor: [], department: [], executorPhone: [] };
+const defaultSettings = { theme: 'light', registryOptions: emptyRegistryOptions, executorContacts: [] };
+
+test('post-request background checks run only after trusted successful writes and cannot falsify a saved result', async () => {
+  const handlers = new Map(); const calls = [];
+  const unregister = registerIpcHandlers({
+    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler), removeHandler: channel => handlers.delete(channel) },
+    requests: { save: async value => { calls.push('saved'); return value; }, fail: () => { throw new Error('failed'); } },
+    isTrusted: event => event.trusted,
+    logger: { error: () => calls.push('logged') },
+    onSuccess: () => { calls.push('background'); throw new Error('observer failed'); },
+  });
+  assert.deepEqual(await handlers.get('save')({ trusted: true }, 12), { ok: true, value: 12 });
+  assert.deepEqual(calls, ['saved', 'background', 'logged']);
+  calls.length = 0;
+  assert.equal((await handlers.get('save')({ trusted: false }, 13)).ok, false);
+  assert.equal((await handlers.get('fail')({ trusted: true })).ok, false);
+  assert.deepEqual(calls, ['logged', 'logged']);
+  unregister();
+});
+
 function fixture(t) {
   const handlers = new Map();
   const window = { isDestroyed: () => false, webContents: { mainFrame: {} } };
@@ -33,7 +54,6 @@ function fixture(t) {
 
 test('IPC rejects other windows and child frames before changing local data', async (t) => {
   const { handlers, event, generation } = fixture(t);
-  const registryOptions = { source: [], executor: [], controlType: [] };
   const setTheme = handlers.get('settings:set-theme');
   for (const untrusted of [{ ...event, sender: {} }, { ...event, senderFrame: {} }]) {
     const result = await setTheme(untrusted, { theme: 'dark', generation });
@@ -41,8 +61,8 @@ test('IPC rejects other windows and child frames before changing local data', as
     assert.equal(result.error.code, 'PERMISSION_DENIED');
     assert.match(result.error.message, /источник/);
   }
-  assert.deepEqual(await handlers.get('settings:get')(event, { generation }), { ok: true, value: { theme: 'light', registryOptions } });
-  assert.deepEqual(await setTheme(event, { theme: 'dark', generation }), { ok: true, value: { theme: 'dark', registryOptions } });
+  assert.deepEqual(await handlers.get('settings:get')(event, { generation }), { ok: true, value: defaultSettings });
+  assert.deepEqual(await setTheme(event, { theme: 'dark', generation }), { ok: true, value: { ...defaultSettings, theme: 'dark' } });
 });
 
 test('adding a registry option over IPC requires a trusted sender and the active database generation', async (t) => {
@@ -52,7 +72,7 @@ test('adding a registry option over IPC requires a trusted sender and the active
   assert.equal((await addOption({ ...event, senderFrame: {} }, input)).error.code, 'PERMISSION_DENIED');
   assert.equal((await addOption(event, { ...input, generation: generation - 1 })).error.code, 'DATABASE_CHANGED');
   assert.deepEqual(await addOption(event, input), {
-    ok: true, value: { theme: 'light', registryOptions: { source: ['Канцелярия'], executor: [], controlType: [] } },
+    ok: true, value: { ...defaultSettings, registryOptions: { ...emptyRegistryOptions, source: ['Канцелярия'] } },
   });
 });
 
@@ -68,7 +88,7 @@ test('editing and deleting registry options over IPC require a trusted sender an
     assert.equal((await handler({ ...event, senderFrame: {} }, input)).error.code, 'PERMISSION_DENIED');
     assert.equal((await handler(event, { ...input, generation: generation - 1 })).error.code, 'DATABASE_CHANGED');
     assert.deepEqual(await handler(event, input), {
-      ok: true, value: { theme: 'light', registryOptions: { source, executor: [], controlType: [] } },
+      ok: true, value: { ...defaultSettings, registryOptions: { ...emptyRegistryOptions, source } },
     });
     const repeated = await handler(event, input);
     assert.equal(repeated.error.code, 'VALIDATION');
@@ -76,10 +96,26 @@ test('editing and deleting registry options over IPC require a trusted sender an
   }
 });
 
+test('setting executor contacts over IPC is scoped to the trusted sender and active database', async (t) => {
+  const { handlers, event, generation } = fixture(t);
+  const add = handlers.get('settings:add-registry-option');
+  const set = handlers.get('settings:set-executor-contact');
+  const executor = 'Иванов И. И.';
+  const department = 'Отдел контроля';
+  await add(event, { field: 'executor', value: executor, generation });
+  await add(event, { field: 'department', value: department, generation });
+  const input = { executor, contact: { department }, generation };
+  assert.equal((await set({ ...event, senderFrame: {} }, input)).error.code, 'PERMISSION_DENIED');
+  assert.equal((await set(event, { ...input, generation: generation - 1 })).error.code, 'DATABASE_CHANGED');
+  const result = await set(event, input);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.value.executorContacts, [{ executor, department, executorPhone: '' }]);
+});
+
 test('IPC setup and shutdown are idempotent and release all channels', (t) => {
   const { manager, handlers } = fixture(t);
   manager.init();
-  assert.equal(handlers.size, 7);
+  assert.equal(handlers.size, 8);
   manager.shutdown();
   manager.shutdown();
   assert.equal(handlers.size, 0);

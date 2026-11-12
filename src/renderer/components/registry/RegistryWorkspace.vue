@@ -3,6 +3,7 @@ import { nextTick, onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch
 import { onBeforeRouteLeave, onBeforeRouteUpdate, RouterLink, useRoute } from 'vue-router';
 import { Columns3, Download, FilePlus2, ListChecks, RefreshCw } from 'lucide-vue-next';
 import { useRegistry } from '../../composables/useRegistry.js';
+import { useRegistryRoute } from '../../composables/useNotificationNavigation.js';
 import { useAppStore } from '../../stores/appStore.js';
 import PageHeading from '../ui/PageHeading.vue';
 import InstructionDialog from './InstructionDialog.vue';
@@ -56,15 +57,8 @@ function updateDate() {
 const guardDraft = async () => editor.value ? editor.value.requestClose() : true;
 const unregisterGuard = app.registerUnsavedGuard(guardDraft);
 onBeforeRouteLeave(guardDraft);
-onBeforeRouteUpdate((to, from) => to.query.instruction === from.query.instruction ? true : guardDraft());
-
-watch([() => route.query.instruction, () => route.query.checkpoint, ready], ([id, checkpoint, isReady], [previousId] = []) => {
-  if (!isReady || !id || !/^\d+$/.test(String(id))) return;
-  const recordId = Number(id);
-  const date = typeof checkpoint === 'string' ? checkpoint : '';
-  if (id === previousId && selected.value?.id === recordId) selectedCheckpoint.value = date;
-  else openRecord(recordId, date, () => route.query.instruction === id && route.query.checkpoint === checkpoint);
-}, { immediate: true });
+const routeNavigation = useRegistryRoute({ app, route, selected, selectedCheckpoint, openRecord, requestClose: guardDraft });
+onBeforeRouteUpdate(routeNavigation.guardRouteUpdate);
 
 onMounted(() => { updateDate(); window.addEventListener('focus', updateDate); document.addEventListener('visibilitychange', updateDate); });
 onBeforeUnmount(() => { disposed = true; surfaceVersion++; unregisterGuard(); clearTimeout(midnightTimer); window.removeEventListener('focus', updateDate); document.removeEventListener('visibilitychange', updateDate); });

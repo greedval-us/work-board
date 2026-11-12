@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue';
 import { ArrowDown, ArrowUp } from 'lucide-vue-next';
+import { CONTROL_FREQUENCIES } from '../../../shared/controlSchedule.js';
 import { formatDate, getUrgency, INSTRUCTION_COLUMNS, INSTRUCTION_STATUSES } from '../../../shared/registry.js';
 
 const props = defineProps({ items: { type: Array, required: true }, sort: { type: Object, required: true }, loading: Boolean, wide: Boolean, today: { type: String, required: true } });
@@ -10,6 +11,7 @@ const rows = computed(() => props.items.map((item) => ({
   urgency: getUrgency(item, props.today),
   checkpointLabel: formatDate(item.nextCheckpoint),
   checkpointOverdue: Boolean(item.nextCheckpoint && item.nextCheckpoint < props.today),
+  frequencyLabel: item.controlFrequency ? CONTROL_FREQUENCIES[item.controlFrequency] : '',
   dates: [
     { key: 'deadline', value: item.deadline, showUrgency: !item.extendedUntil },
     { key: 'extendedUntil', value: item.extendedUntil, showUrgency: Boolean(item.extendedUntil) },
@@ -28,6 +30,10 @@ const columnLabels = { controlDate: 'На контроле с', incomingNumber: 
           <span v-if="column.key === 'nextCheckpoint'" class="registry-checkpoint-heading">
             <span class="registry-checkpoint-heading-full">{{ column.label }}</span>
             <span class="registry-checkpoint-heading-short">Ближ. контроль</span>
+          </span>
+          <span v-else-if="column.key === 'controlFrequency'" class="registry-frequency-heading">
+            <span class="registry-frequency-heading-full">{{ column.label }}</span>
+            <span class="registry-frequency-heading-short">Период</span>
           </span>
           <span v-else>{{ columnLabels[column.key] ?? column.label }}</span>
           <ArrowUp v-if="props.sort.field === column.key && props.sort.direction === 'asc'" :size="12" aria-hidden="true" />
@@ -61,7 +67,7 @@ const columnLabels = { controlDate: 'На контроле с', incomingNumber: 
             <span v-if="item.checkpointOverdue" class="registry-urgency registry-tone-danger" aria-hidden="true" title="Просрочено">Просрочено</span>
           </td>
           <td><span class="registry-cell-text" :title="item.executor">{{ item.executor }}</span></td>
-          <td><span class="registry-cell-text" :title="item.controlType">{{ item.controlType || '—' }}</span></td>
+          <td data-column="controlFrequency"><span class="registry-cell-text" :title="item.frequencyLabel">{{ item.frequencyLabel || '—' }}</span></td>
           <td><span class="registry-status" :class="`registry-status-${item.status}`">{{ INSTRUCTION_STATUSES[item.status] }}</span><span v-if="item.executionMark" class="registry-cell-summary registry-mark" :title="item.executionMark">{{ item.executionMark }}</span></td>
         </tr>
       </tbody>

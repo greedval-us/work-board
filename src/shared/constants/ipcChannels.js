@@ -7,6 +7,7 @@ export const IPC_CHANNELS = Object.freeze({
     addRegistryOption: 'settings:add-registry-option',
     updateRegistryOption: 'settings:update-registry-option',
     removeRegistryOption: 'settings:remove-registry-option',
+    setExecutorContact: 'settings:set-executor-contact',
   }),
   instructions: Object.freeze({
     list: 'instructions:list', get: 'instructions:get', create: 'instructions:create', update: 'instructions:update',
@@ -16,4 +17,5 @@ export const IPC_CHANNELS = Object.freeze({
   calendar: Object.freeze({ month: 'calendar:month', day: 'calendar:day' }),
   attachments: Object.freeze({ list: 'attachments:list', pick: 'attachments:pick', release: 'attachments:release', download: 'attachments:download' }),
   analytics: Object.freeze({ summary: 'analytics:summary' }),
+  notifications: Object.freeze({ list: 'notifications:list', acknowledge: 'notifications:acknowledge' }),
 });

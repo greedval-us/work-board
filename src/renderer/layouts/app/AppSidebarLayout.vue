@@ -7,6 +7,7 @@ import { useAppStore } from '../../stores/appStore.js';
 import { useAppearance } from '../../composables/useAppearance.js';
 import { useErrorStore } from '../../stores/errorStore.js';
 import ErrorBoundary from '../../components/ui/ErrorBoundary.vue';
+import NotificationCenter from '../../components/notifications/NotificationCenter.vue';
 
 const store = useAppStore();
 const errors = useErrorStore();
@@ -94,6 +95,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="toolbar-end">
           <span class="local-label"><span class="status-dot" :class="{ 'status-dot-ready': store.database?.ready }" />Локально</span>
+          <NotificationCenter />
           <button type="button" class="icon-button" :disabled="!store.database?.ready || store.saving || store.databaseSwitching"
             :aria-label="isDark ? 'Включить светлую тему' : 'Включить тёмную тему'" @click="toggleAppearance">
             <component :is="isDark ? Sun : Moon" :size="18" aria-hidden="true" />

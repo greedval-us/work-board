@@ -30,7 +30,7 @@ export function useRegistry(suppliedApp, service) {
     closeRecord();
     selectedGeneration = app.database.generation;
     selected.value = { id: null, controlDate: localDate(), incomingNumber: '', instructionNumber: '', source: '',
-      title: '', summary: '', deadline: '', extendedUntil: '', executor: '', controlType: '', status: INSTRUCTION_STATUS.PENDING, executionMark: '' };
+      title: '', summary: '', deadline: '', extendedUntil: '', executor: '', status: INSTRUCTION_STATUS.PENDING, executionMark: '' };
     return true;
   }
 

@@ -1,5 +1,6 @@
 import { ERROR_CODES, ValidationError, defaultErrorMessage, isErrorCode } from '../../shared/errors.js';
 import { AppError } from './AppError.js';
+import { CleanupError } from './cleanup.js';
 import { SQLITE_PRIMARY_CODE_MASK, SQLITE_RESULT } from '../database/sqliteErrors.js';
 
 const FAILURE_RULES = Object.freeze([
@@ -9,6 +10,7 @@ const FAILURE_RULES = Object.freeze([
 ]);
 
 export function publicError(error) {
+  if (error instanceof CleanupError) return publicError(error.cause);
   if (error instanceof AppError && isErrorCode(error.code)) {
     return { code: error.code, message: error.publicMessage };
   }

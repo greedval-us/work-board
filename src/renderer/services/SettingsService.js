@@ -6,4 +6,5 @@ export const settingsService = createDesktopService({
   addRegistryOption: ['settings', 'addRegistryOption'],
   updateRegistryOption: ['settings', 'updateRegistryOption'],
   removeRegistryOption: ['settings', 'removeRegistryOption'],
+  setExecutorContact: ['settings', 'setExecutorContact'],
 });

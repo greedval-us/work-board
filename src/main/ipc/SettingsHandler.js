@@ -14,15 +14,19 @@ export class SettingsHandler {
       },
       [channels.settings.addRegistryOption]: (payload) => {
         this.database.assertGeneration(payload?.generation);
-        return this.settingsService.addRegistryOption(payload?.field, payload?.value);
+        return this.settingsService.addRegistryOption(payload?.field, payload?.value, payload?.contact);
       },
       [channels.settings.updateRegistryOption]: (payload) => {
         this.database.assertGeneration(payload?.generation);
-        return this.settingsService.updateRegistryOption(payload?.field, payload?.previousValue, payload?.value);
+        return this.settingsService.updateRegistryOption(payload?.field, payload?.previousValue, payload?.value, payload?.contact);
       },
       [channels.settings.removeRegistryOption]: (payload) => {
         this.database.assertGeneration(payload?.generation);
         return this.settingsService.removeRegistryOption(payload?.field, payload?.value);
+      },
+      [channels.settings.setExecutorContact]: (payload) => {
+        this.database.assertGeneration(payload?.generation);
+        return this.settingsService.setExecutorContact(payload?.executor, payload?.contact);
       },
     };
   }

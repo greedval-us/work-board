@@ -1,8 +1,19 @@
-import { DEFAULT_SETTINGS, REGISTRY_OPTION_LABELS, validateRegistryOption, validateTheme } from '../../shared/constants/settings.js';
+import { CONTROL_CARD_OPTION_LABELS, DEFAULT_SETTINGS, REGISTRY_OPTION_LABELS, validateRegistryOption, validateTheme } from '../../shared/constants/settings.js';
 import { ValidationError } from '../../shared/errors.js';
-import { validateEnum } from '../../shared/validation.js';
+import { validateEnum, validateRecord, validateText } from '../../shared/validation.js';
 
 const registryOptionKey = field => `registryOptions.${field}`;
+const EXECUTOR_CONTACTS_KEY = 'executorContacts';
+
+function readExecutorContacts(value) {
+  if (value === undefined) return [];
+  const contacts = JSON.parse(value);
+  if (!Array.isArray(contacts) || contacts.some(contact => !contact || typeof contact.executor !== 'string'
+    || typeof contact.department !== 'string' || typeof contact.executorPhone !== 'string')) {
+    throw new TypeError('Контакты исполнителей имеют неверный формат.');
+  }
+  return contacts;
+}
 
 function readRegistryOptions(value, defaults) {
   if (value === undefined) return [...defaults];
@@ -37,7 +48,10 @@ export class SettingsRepository {
     const registryOptions = Object.fromEntries(Object.entries(DEFAULT_SETTINGS.registryOptions).map(([field, defaults]) => [
       field, readRegistryOptions(settings.get(registryOptionKey(field)), defaults),
     ]));
-    return { theme: validateTheme(settings.get('theme') ?? DEFAULT_SETTINGS.theme), registryOptions };
+    return {
+      theme: validateTheme(settings.get('theme') ?? DEFAULT_SETTINGS.theme), registryOptions,
+      executorContacts: readExecutorContacts(settings.get(EXECUTOR_CONTACTS_KEY)),
+    };
   }
 
   setTheme(theme) {
@@ -48,35 +62,84 @@ export class SettingsRepository {
     });
   }
 
-  addRegistryOption(field, value) {
+  addRegistryOption(field, value, contact) {
     const option = validateRegistryOption(field, value);
-    return this.#changeRegistryOptions(field, options => {
+    return this.#changeRegistryOptions(field, (options, settings) => {
       assertUniqueRegistryOption(field, options, option);
       options.push(option);
+      this.#applyOptionContact(settings, field, option, contact);
     });
   }
 
-  updateRegistryOption(field, previousValue, value) {
+  updateRegistryOption(field, previousValue, value, contact) {
     const option = validateRegistryOption(field, value);
-    return this.#changeRegistryOptions(field, options => {
+    return this.#changeRegistryOptions(field, (options, settings) => {
       const index = findRegistryOptionIndex(field, options, previousValue);
       assertUniqueRegistryOption(field, options, option, index);
       options[index] = option;
+      this.#applyOptionContact(settings, field, option, contact, previousValue);
     });
   }
 
   removeRegistryOption(field, value) {
     validateEnum(field, REGISTRY_OPTION_LABELS, 'Справочник');
-    return this.#changeRegistryOptions(field, options => {
+    return this.#changeRegistryOptions(field, (options, settings) => {
       options.splice(findRegistryOptionIndex(field, options, value), 1);
+      this.#replaceContactOption(settings, field, value, '');
     });
+  }
+
+  setExecutorContact(executor, value) {
+    return this.database.transaction(() => {
+      const settings = this.get();
+      findRegistryOptionIndex('executor', settings.registryOptions.executor, executor);
+      this.#saveExecutorContact(settings, executor, value);
+      return settings;
+    });
+  }
+
+  #applyOptionContact(settings, field, option, contact, previousValue) {
+    if (contact === undefined) {
+      if (previousValue !== undefined && previousValue !== option) {
+        this.#replaceContactOption(settings, field, previousValue, option);
+      }
+      return;
+    }
+    if (field !== 'executor') throw new ValidationError('Контакты можно указать только для исполнителя.');
+    this.#saveExecutorContact(settings, option, contact, previousValue);
+  }
+
+  #saveExecutorContact(settings, executor, value, previousExecutor = executor) {
+    const fields = validateRecord(value, 'Контакты исполнителя');
+    const contact = { executor };
+    for (const [field, label] of Object.entries(CONTROL_CARD_OPTION_LABELS)) {
+      const option = validateText(fields[field], label).trim();
+      if (option) findRegistryOptionIndex(field, settings.registryOptions[field], option);
+      contact[field] = option;
+    }
+    const contacts = settings.executorContacts.filter(item => item.executor !== previousExecutor && item.executor !== executor);
+    if (contact.department || contact.executorPhone) contacts.push(contact);
+    this.#saveExecutorContacts(settings, contacts);
+  }
+
+  #replaceContactOption(settings, field, previousValue, nextValue) {
+    if (!settings.executorContacts.some(contact => contact[field] === previousValue)) return;
+    const contacts = settings.executorContacts
+      .map(contact => contact[field] === previousValue ? { ...contact, [field]: nextValue } : contact)
+      .filter(contact => contact.executor && (contact.department || contact.executorPhone));
+    this.#saveExecutorContacts(settings, contacts);
+  }
+
+  #saveExecutorContacts(settings, contacts) {
+    this.#set(EXECUTOR_CONTACTS_KEY, JSON.stringify(contacts));
+    settings.executorContacts = contacts;
   }
 
   #changeRegistryOptions(field, change) {
     return this.database.transaction(() => {
       const settings = this.get();
       const options = settings.registryOptions[field];
-      change(options);
+      change(options, settings);
       this.#set(registryOptionKey(field), JSON.stringify(options));
       return settings;
     });

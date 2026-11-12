@@ -13,11 +13,13 @@ export const useAppStore = defineStore('app', () => {
   const database = ref(null);
   const theme = ref(DEFAULT_SETTINGS.theme);
   const registryOptions = shallowRef(DEFAULT_SETTINGS.registryOptions);
+  const executorContacts = shallowRef(DEFAULT_SETTINGS.executorContacts);
   const loading = ref(false);
   const initialized = ref(false);
   const saving = ref(false);
   const error = ref('');
   const registryOptionsError = ref('');
+  const executorContactsError = ref('');
   const revision = ref(0);
   const pendingOperations = ref(0);
   const databaseSwitching = ref(false);
@@ -31,7 +33,9 @@ export const useAppStore = defineStore('app', () => {
   function applySettings(settings) {
     theme.value = settings.theme;
     registryOptions.value = settings.registryOptions ?? DEFAULT_SETTINGS.registryOptions;
+    executorContacts.value = settings.executorContacts ?? DEFAULT_SETTINGS.executorContacts;
     registryOptionsError.value = '';
+    executorContactsError.value = '';
   }
 
   async function loadApplication() {
@@ -54,6 +58,7 @@ export const useAppStore = defineStore('app', () => {
     saving.value = true;
     error.value = '';
     registryOptionsError.value = '';
+    executorContactsError.value = '';
     try {
       const settings = await withOperation(() => operation(database.value.generation));
       applySettings(settings);
@@ -68,16 +73,24 @@ export const useAppStore = defineStore('app', () => {
     return saveSettings(generation => settingsService.setTheme(value, generation));
   }
 
-  function addRegistryOption(field, value) {
-    return saveSettings(generation => settingsService.addRegistryOption(field, value, generation), registryOptionsError);
+  function addRegistryOption(field, value, contact) {
+    return saveSettings(generation => settingsService.addRegistryOption(
+      field, value, generation, ...(contact === undefined ? [] : [contact]),
+    ), registryOptionsError);
   }
 
-  function updateRegistryOption(field, previousValue, value) {
-    return saveSettings(generation => settingsService.updateRegistryOption(field, previousValue, value, generation), registryOptionsError);
+  function updateRegistryOption(field, previousValue, value, contact) {
+    return saveSettings(generation => settingsService.updateRegistryOption(
+      field, previousValue, value, generation, ...(contact === undefined ? [] : [contact]),
+    ), registryOptionsError);
   }
 
   function removeRegistryOption(field, value) {
     return saveSettings(generation => settingsService.removeRegistryOption(field, value, generation), registryOptionsError);
+  }
+
+  function setExecutorContact(executor, contact) {
+    return saveSettings(generation => settingsService.setExecutorContact(executor, contact, generation), executorContactsError);
   }
 
   function touchData() { revision.value++; }
@@ -137,8 +150,9 @@ export const useAppStore = defineStore('app', () => {
   }
 
   return {
-    info, database, theme, registryOptions, loading, initialized, saving, error, registryOptionsError, revision, pendingOperations,
-    databaseSwitching, initialize, setTheme, addRegistryOption, updateRegistryOption, removeRegistryOption,
+    info, database, theme, registryOptions, executorContacts, loading, initialized, saving, error, registryOptionsError,
+    executorContactsError, revision, pendingOperations,
+    databaseSwitching, initialize, setTheme, addRegistryOption, updateRegistryOption, removeRegistryOption, setExecutorContact,
     touchData, withOperation, selectDatabase,
     registerUnsavedGuard, resolveUnsavedChanges, prepareToClose,
     hasUnsavedGuards: () => unsavedGuards.size > 0,

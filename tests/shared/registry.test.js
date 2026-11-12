@@ -19,9 +19,15 @@ test('instruction validation preserves identifiers and optional multiline text',
   assert.equal(data.summary, '  Первая строка\nВторая строка  ');
   const { incomingNumber, summary, executionMark, status, ...required } = instruction();
   assert.deepEqual(validateInstruction(required), instruction({
-    incomingNumber: '', source: '', summary: '', extendedUntil: '', controlType: '', executionMark: '', status: 'pending',
+    incomingNumber: '', source: '', summary: '', extendedUntil: '', executionMark: '', status: 'pending',
     controlSchedule: { frequency: '', firstDate: '', customDates: [], marks: [] },
   }));
+});
+
+test('instruction validation ignores a legacy control type from an older client', () => {
+  const data = validateInstruction(instruction({ controlType: 'Плановый' }));
+  assert.equal(Object.hasOwn(data, 'controlType'), false);
+  assert.equal(data.controlSchedule.frequency, '');
 });
 
 test('instruction validation uses the extended deadline for active checkpoint dates', () => {
@@ -51,7 +57,7 @@ test('required instruction fields and strict Gregorian dates reject invalid inpu
     ...['controlDate', 'instructionNumber', 'title', 'deadline', 'executor'].map(key => instruction({ [key]: ' ' })),
     ...['2026-02-29', '2024-02-30', '2026-13-01', '2026-00-01', '2026-10-00', '2026-1-03', '0000-01-01', '2026-10-23T00:00:00Z'].map(deadline => instruction({ deadline })),
     instruction({ status: 'done' }), instruction({ status: null }), instruction({ incomingNumber: 123 }),
-    instruction({ source: 123 }), instruction({ controlType: null }), null,
+    instruction({ source: 123 }), null,
   ];
   for (const data of invalid) {
     assert.throws(() => validateInstruction(data), error => error instanceof ValidationError && Boolean(error.publicMessage));
@@ -94,6 +100,8 @@ test('list requests constrain sort fields and pagination', () => {
     filters: emptyFilters(), sort: { field: 'controlDate', direction: 'desc' }, offset: 0, limit: 25,
   });
   assert.equal(normalizeListRequest({ offset: 50, limit: 50, sort: { field: 'executor', direction: 'asc' } }).offset, 50);
+  assert.deepEqual(normalizeListRequest({ sort: { field: 'controlFrequency', direction: 'asc' } }).sort, { field: 'controlFrequency', direction: 'asc' });
+  assert.throws(() => normalizeListRequest({ sort: { field: 'controlType' } }), ValidationError);
   for (const request of [{ offset: -1 }, { offset: null }, { offset: 0.5 }, { limit: 0 }, { limit: null }, { limit: 101 }, { limit: '25' }, { sort: { field: null } }, { sort: { direction: null } }, { sort: { field: 'id; DROP TABLE instructions', direction: 'asc' } }, { sort: { field: 'deadline', direction: 'DROP' } }]) {
     assert.throws(() => normalizeListRequest(request), ValidationError);
   }

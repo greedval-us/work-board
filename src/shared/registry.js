@@ -26,7 +26,6 @@ export function validateInstruction(value) {
     deadline: validateDate(data.deadline, 'Срок исполнения'),
     extendedUntil: extendedUntil === '' ? '' : validateDate(extendedUntil, 'Продлён до'),
     executor: text(data.executor, 'Исполнитель', true),
-    controlType: text(data.controlType, 'Вид контроля'),
     status: enumValue(data.status === undefined ? INSTRUCTION_STATUS.PENDING : data.status, INSTRUCTION_STATUSES, 'Статус'),
     executionMark: text(data.executionMark, 'Отметка об исполнении'),
   };

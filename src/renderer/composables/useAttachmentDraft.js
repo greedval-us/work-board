@@ -8,50 +8,72 @@ export function useAttachmentDraft(props, changes, { app = useAppStore(), servic
   const files = shallowRef([]); const loading = shallowRef(false); const busy = shallowRef(false);
   const error = shallowRef(''); const notice = shallowRef('');
   let version = 0; let disposed = false;
-  const current = () => !disposed && app.database?.ready && app.database.generation === props.generation;
   const request = () => ({ entityType: props.entityType, entityId: props.entityId, generation: props.generation });
+  let context = request();
+  const selectedTokens = new Set(changes.value.add.map(file => file.token));
+  const current = (source = context) => !disposed && source === context && app.database?.ready
+    && app.database.generation === source.generation && props.generation === source.generation
+    && props.entityType === source.entityType && props.entityId === source.entityId;
   const rows = computed(() => attachmentRows(files.value, changes.value));
   const visibleCount = computed(() => rows.value.filter(file => !file.removed).length);
-  function release(selections) {
-    if (service.release && selections.length && app.database?.generation === props.generation) {
-      // Selection tokens hold no files; closing/discarding a form releases their memory.
-      void service.release({ ...request(), tokens: selections.map(file => file.token) }).catch(() => {});
-    }
+  async function release(tokens, source) {
+    // Old generations are cleared by main when the next selection starts.
+    if (!service.release || !tokens.length || app.database?.generation !== source.generation) return;
+    try { await service.release({ ...source, tokens }); }
+    catch { /* Tokens hold no files; failed best-effort cleanup must not block the editor. */ }
+  }
+  function releaseSelected() {
+    const tokens = [...selectedTokens];
+    selectedTokens.clear();
+    void release(tokens, context);
+    return tokens;
   }
   async function load() {
     const ticket = ++version;
+    const source = context;
     files.value = []; error.value = '';
-    if (!props.entityId) { loading.value = false; return; }
+    if (!source.entityId) { loading.value = false; return; }
     loading.value = true;
-    try { const result = await service.list(request()); if (current() && ticket === version) files.value = result; }
-    catch (cause) { if (current() && ticket === version) error.value = errorMessage(cause, 'Не удалось загрузить вложения.'); }
+    try { const result = await service.list(source); if (current(source) && ticket === version) files.value = result; }
+    catch (cause) { if (current(source) && ticket === version) error.value = errorMessage(cause, 'Не удалось загрузить вложения.'); }
     finally { if (ticket === version && !disposed) loading.value = false; }
   }
   async function perform(operation) {
-    if (busy.value || !current()) return;
+    const source = context;
+    if (busy.value || !current(source)) return;
     busy.value = true; error.value = ''; notice.value = '';
-    try { await app.withOperation(operation); }
-    catch (cause) { if (current()) error.value = errorMessage(cause, 'Не удалось выполнить действие с файлом.'); }
+    try { await app.withOperation(() => operation(source)); }
+    catch (cause) { if (current(source)) error.value = errorMessage(cause, 'Не удалось выполнить действие с файлом.'); }
     finally { if (!disposed) busy.value = false; }
   }
   function pick() {
-    return perform(async () => {
-      const result = await service.pick(request());
-      if (current() && !result.cancelled) changes.value = appendAttachmentSelections(changes.value, result.files);
+    return perform(async source => {
+      const result = await service.pick(source);
+      if (result.cancelled) return;
+      if (!current(source)) { await release(result.files.map(file => file.token), source); return; }
+      for (const file of result.files) selectedTokens.add(file.token);
+      changes.value = appendAttachmentSelections(changes.value, result.files);
     });
   }
   function download(file) {
-    return perform(async () => {
-      const result = await service.download({ ...request(), id: file.id });
-      if (current() && !result.cancelled) notice.value = `Файл «${file.name}» сохранён.`;
+    return perform(async source => {
+      const result = await service.download({ ...source, id: file.id });
+      if (current(source) && !result.cancelled) notice.value = `Файл «${file.name}» сохранён.`;
     });
   }
   function toggleRemove(file) {
     if (busy.value || !current()) return;
-    if (file.token) release([file]);
+    if (file.token && selectedTokens.delete(file.token)) void release([file.token], context);
     changes.value = toggleAttachmentRemoval(changes.value, file);
   }
-  watch(() => [props.entityType, props.entityId, props.generation], load, { immediate: true });
-  onScopeDispose(() => { release(changes.value.add); disposed = true; version++; });
+  watch(() => [props.entityType, props.entityId, props.generation], () => {
+    const tokens = releaseSelected();
+    if (tokens.length) changes.value = { ...changes.value, add: changes.value.add.filter(file => !tokens.includes(file.token)) };
+    context = request();
+    notice.value = '';
+    void load();
+  }, { flush: 'sync' });
+  void load();
+  onScopeDispose(() => { disposed = true; version++; releaseSelected(); });
   return { files, rows, visibleCount, loading, busy, error, notice, load, pick, download, toggleRemove };
 }

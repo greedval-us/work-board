@@ -21,10 +21,10 @@ test('Ф‑21 fills the matching fields in the original two-part Word form', asy
   }, [{ date: '2026-11-15', text: 'Первый этап\nРезультат & сверка' }]);
 
   assert.match(xml, /КОНТРОЛЬНАЯ КАРТОЧКА/);
-  assert.match(xml, /№ 0005\/к от 03\.11\.2026/);
-  assert.match(xml, /\. № 001\/в от 04\.11\.2026/);
+  assert.ok(xml.includes('№ 0005/к 03.11.2026'), 'The signed number and separate date have no automatic «от»');
+  assert.ok(xml.includes('. № 001/в 04.11.2026'), 'The incoming number and separate date have no automatic «от»');
   assert.match(xml, /Управление/);
-  assert.match(xml, /Делопроизводство[\s\S]*?Канцелярия[\s\S]*?123-45/);
+  assert.doesNotMatch(xml, /Делопроизводство|Канцелярия|123-45/);
   assert.match(xml, /Срок исполнения:[\s\S]*?20\.11\.2026[\s\S]*?Продлен до:[\s\S]*?30\.11\.2026/);
   assert.match(card, /Вид и краткое содержание СДМ:[\s\S]*?Письмо &amp; приложение/);
   assert.match(card, /Содержание поручения \(резолюции\):[\s\S]*?Проверить &lt;данные&gt;<\/w:t><w:br\/><w:t xml:space="preserve">Передать \{\{summary\}\}/);
@@ -35,12 +35,36 @@ test('Ф‑21 fills the matching fields in the original two-part Word form', asy
   assert.equal(archive.file('customXml/item1.xml'), null);
 });
 
-test('Ф‑21 leaves optional fields empty and preserves the blank verification lines', async () => {
-  const { xml, history } = await report();
-  assert.match(xml, /№ _+ от _+/);
-  assert.match(xml, /\. № _+ от _+/);
-  assert.match(xml, /\(дата\)/);
-  assert.doesNotMatch(xml, /\{\{|undefined/);
+test('Ф‑21 keeps a manually entered «от» only once in each number', async () => {
+  const { xml } = await report({
+    instructionNumber: '674/5676/654-77 от 11.11.2026', incomingNumber: '567 от 11.11.2026',
+  });
+  for (const numberLine of ['№ 674/5676/654-77 от 11.11.2026', '. № 567 от 11.11.2026']) {
+    assert.ok(xml.includes(numberLine));
+    assert.equal(xml.includes(`${numberLine} от`), false);
+  }
+});
+
+test('Ф‑21 shows three writing lines and leaves other empty fields and the verification table intact', async () => {
+  const { xml, card, history } = await report();
+  const removalRows = [...card.matchAll(/<w:tr(?=[\s>])[^>]*>[\s\S]*?<\/w:tr>/g)].slice(-7)
+    .map(([row]) => row.match(/<w:tc>[\s\S]*?<\/w:tc>/g));
+  assert.equal(removalRows.length, 7);
+  for (const [left, right] of removalRows) {
+    assert.match(left, /<w:right w:val="nil"/);
+    assert.match(right, /<w:left w:val="nil"/);
+  }
+  assert.deepEqual(removalRows.map(([, cell]) => [
+    cell.match(/<w:top w:val="([^"]+)"/)?.[1], cell.match(/<w:bottom w:val="([^"]+)"/)?.[1],
+  ]), [
+    ['nil', 'single'], ['nil', 'single'],
+    ['single', 'single'], ['single', 'single'],
+    ['single', 'single'], ['single', 'single'],
+    ['single', 'nil'],
+  ]);
+  assert.ok(xml.includes(`№ ${'\u2007'.repeat(11)} ${'\u2007'.repeat(16)}`));
+  assert.ok(xml.includes(`. № ${'\u2007'.repeat(14)} ${'\u2007'.repeat(11)}`));
+  assert.doesNotMatch(xml, /\{\{|undefined|_{2,}/);
   assert.equal(history.match(/<w:tr(?=[\s>])/g).length, 21);
 });
 
@@ -55,4 +79,22 @@ test('Ф‑21 carries all dated marks in order beyond the number of blank rows',
   assert.deepEqual([...history.matchAll(/>(\d{2}\.11\.2026)</g)].map(([, date]) => date),
     marks.map(({ date }) => `${date.slice(8)}.11.2026`).reverse());
   assert.match(history, /26\.11\.2026[\s\S]*?Запись 26/);
+});
+
+test('Ф‑21 dates and sorts checkpoint history by execution date with legacy and planned-date tie breakers', async () => {
+  const { history } = await report({}, [
+    { date: '2026-11-10', actualDate: '2026-11-05', text: 'Поздний план' },
+    { date: '2026-11-20', actualDate: '2026-11-04', text: 'Раннее исполнение' },
+    { date: '2026-11-01', actualDate: '2026-11-06', text: 'Позднее исполнение' },
+    { date: '2026-11-05', text: 'Старая отметка' },
+  ]);
+  const filledRows = [...history.matchAll(/<w:tr(?=[\s>])[^>]*>[\s\S]*?<\/w:tr>/g)]
+    .map(([row]) => row).filter(row => /\d{2}\.11\.2026/.test(row));
+  assert.deepEqual(filledRows.map(row => row.match(/\d{2}\.11\.2026/)[0]), [
+    '04.11.2026', '05.11.2026', '05.11.2026', '06.11.2026',
+  ]);
+  assert.match(filledRows[0], /Раннее исполнение/);
+  assert.match(filledRows[1], /Старая отметка/);
+  assert.match(filledRows[2], /Поздний план/);
+  assert.match(filledRows[3], /Позднее исполнение/);
 });

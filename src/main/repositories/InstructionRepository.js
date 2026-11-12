@@ -1,20 +1,23 @@
 import {
   localDate, normalizeListRequest, normalizeSearch, validateId, validateInstruction, ValidationError,
 } from '../../shared/registry.js';
-import { emptyControlSchedule, getNextControlCheckpoint, listControlCheckpoints } from '../../shared/controlSchedule.js';
+import { CONTROL_FREQUENCIES, emptyControlSchedule, getNextControlCheckpoint, listControlCheckpoints } from '../../shared/controlSchedule.js';
 import { EFFECTIVE_INSTRUCTION_DEADLINE_SQL } from '../database/instructionDeadline.js';
 import { AppError } from '../utils/AppError.js';
 
 const COLUMNS = `id, control_date AS controlDate, incoming_number AS incomingNumber,
   instruction_number AS instructionNumber, source, title, summary, deadline, extended_until AS extendedUntil,
-  executor, control_type AS controlType, status,
+  executor, status,
   execution_mark AS executionMark, created_at AS createdAt, updated_at AS updatedAt`;
 const NEXT_CHECKPOINT_SQL = `next_instruction_checkpoint(control_schedule, ${EFFECTIVE_INSTRUCTION_DEADLINE_SQL})`;
+const CONTROL_FREQUENCY_SQL = `NULLIF(json_extract(NULLIF(control_schedule, ''), '$.frequency'), '')`;
+const frequencyCases = Object.keys(CONTROL_FREQUENCIES).filter(Boolean)
+  .map((frequency, index) => `WHEN '${frequency}' THEN ${index}`).join(' ');
 
 const SORT_COLUMNS = Object.freeze({
   id: 'id', controlDate: 'control_date', incomingNumber: 'incoming_number', instructionNumber: 'instruction_number_search',
   source: 'source', title: 'title', summary: 'summary', deadline: 'deadline', extendedUntil: 'extended_until',
-  nextCheckpoint: 'nextCheckpoint', executor: 'executor_search', controlType: 'control_type',
+  nextCheckpoint: 'nextCheckpoint', executor: 'executor_search', controlFrequency: `CASE controlFrequency ${frequencyCases} END`,
   status: 'status', executionMark: 'execution_mark_search',
 });
 
@@ -62,11 +65,11 @@ function queryParts(request) {
     values.push(today ?? localDate());
   }
   const direction = sort.direction.toUpperCase();
-  const nulls = sort.field === 'nextCheckpoint' ? ' NULLS LAST' : '';
+  const nulls = sort.field === 'nextCheckpoint' || sort.field === 'controlFrequency' ? ' NULLS LAST' : '';
   const order = `ORDER BY ${SORT_COLUMNS[sort.field]} ${direction}${nulls}`;
   return {
     where: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '', values, offset, limit,
-    columns: `${COLUMNS}, ${checkpointDate ? '?' : NEXT_CHECKPOINT_SQL} AS nextCheckpoint`,
+    columns: `${COLUMNS}, ${checkpointDate ? '?' : NEXT_CHECKPOINT_SQL} AS nextCheckpoint, ${CONTROL_FREQUENCY_SQL} AS controlFrequency`,
     selectValues: checkpointDate ? [checkpointDate, ...values] : values,
     order: sort.field === 'id' ? order : `${order}, id ${direction}`,
   };
@@ -76,7 +79,7 @@ function parameters(data) {
   const schedule = data.controlSchedule;
   return [
     data.controlDate, data.incomingNumber, data.instructionNumber, data.source, data.title, data.summary,
-    data.deadline, data.extendedUntil, data.executor, data.controlType, data.status, data.executionMark,
+    data.deadline, data.extendedUntil, data.executor, data.status, data.executionMark,
     normalizeSearch(data.instructionNumber), normalizeSearch(data.executor), normalizeSearch(data.executionMark),
     schedule.frequency || schedule.marks.length ? JSON.stringify(schedule) : '',
   ];
@@ -87,7 +90,7 @@ function withControlSchedule({ controlSchedule, ...row }) {
 }
 
 function registryRow(row) {
-  return { ...row, nextCheckpoint: row.nextCheckpoint ?? '' };
+  return { ...row, nextCheckpoint: row.nextCheckpoint ?? '', controlFrequency: row.controlFrequency ?? '' };
 }
 
 export class InstructionRepository {
@@ -119,7 +122,7 @@ export class InstructionRepository {
 
   scheduledForCalendar() {
     return this.database.connection.prepare(`SELECT id, title, instruction_number AS instructionNumber,
-      executor, status, deadline, extended_until AS extendedUntil, control_schedule AS controlSchedule
+      executor, status, deadline, extended_until AS extendedUntil, control_schedule AS controlSchedule, created_at AS createdAt
       FROM instructions WHERE control_schedule <> '' ORDER BY id`)
       .all().map(withControlSchedule);
   }
@@ -129,9 +132,9 @@ export class InstructionRepository {
     const now = new Date().toISOString();
     const result = this.database.connection.prepare(`INSERT INTO instructions (
       control_date, incoming_number, instruction_number, source, title, summary, deadline, extended_until,
-      executor, control_type, status, execution_mark,
+      executor, status, execution_mark,
       instruction_number_search, executor_search, execution_mark_search, control_schedule, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(...parameters(data), now, now);
     return this.get(Number(result.lastInsertRowid));
   }
@@ -143,7 +146,7 @@ export class InstructionRepository {
     const data = validateInstruction({ ...existing, ...changes });
     this.database.connection.prepare(`UPDATE instructions SET
       control_date = ?, incoming_number = ?, instruction_number = ?, source = ?, title = ?, summary = ?, deadline = ?, extended_until = ?,
-      executor = ?, control_type = ?, status = ?, execution_mark = ?, instruction_number_search = ?, executor_search = ?,
+      executor = ?, status = ?, execution_mark = ?, instruction_number_search = ?, executor_search = ?,
       execution_mark_search = ?, control_schedule = ?, updated_at = ? WHERE id = ?`)
       .run(...parameters(data), new Date().toISOString(), id);
     return this.get(id);

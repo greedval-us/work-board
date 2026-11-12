@@ -97,9 +97,9 @@ test('opening a version 3 database preserves instruction data and initializes th
   createLegacyRegistryDatabase(filePath, 3);
   database.replace({ filePath });
   assert.equal(database.getStatus().schemaVersion, 6);
-  const { instructionNumber, executor, source, controlType, deadline, extendedUntil } = new InstructionRepository(database).get(17);
-  assert.deepEqual({ instructionNumber, executor, source, controlType, deadline, extendedUntil }, {
-    instructionNumber: '007/Б', executor: 'Иванов И. И.', source: '', controlType: '', deadline: '2026-10-26', extendedUntil: '',
+  const { instructionNumber, executor, source, deadline, extendedUntil } = new InstructionRepository(database).get(17);
+  assert.deepEqual({ instructionNumber, executor, source, deadline, extendedUntil }, {
+    instructionNumber: '007/Б', executor: 'Иванов И. И.', source: '', deadline: '2026-10-26', extendedUntil: '',
   });
 });
 
@@ -109,10 +109,11 @@ test('opening a version 4 database keeps existing instruction details and defaul
   createLegacyRegistryDatabase(filePath, 4);
   database.replace({ filePath });
   assert.equal(database.getStatus().schemaVersion, 6);
-  const { source, controlType, deadline, extendedUntil } = new InstructionRepository(database).get(17);
-  assert.deepEqual({ source, controlType, deadline, extendedUntil }, {
-    source: 'Архив', controlType: 'Плановый', deadline: '2026-10-26', extendedUntil: '',
+  const { source, deadline, extendedUntil } = new InstructionRepository(database).get(17);
+  assert.deepEqual({ source, deadline, extendedUntil }, {
+    source: 'Архив', deadline: '2026-10-26', extendedUntil: '',
   });
+  assert.equal(database.connection.prepare('SELECT control_type FROM instructions WHERE id = 17').get().control_type, 'Плановый');
 });
 
 test('a version 4 database with missing instruction fields is rejected', (t) => {

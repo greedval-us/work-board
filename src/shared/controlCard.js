@@ -1,10 +1,12 @@
+import { REGISTRY_OPTION_LIMITS } from './constants/settings.js';
 import { validateDate } from './dates.js';
 import { ValidationError } from './errors.js';
 import { validateRecord, validateText } from './validation.js';
 
 export const CONTROL_CARD_FIELD_LIMITS = Object.freeze({
-  instructionNumber: 200, incomingNumber: 200, source: 500, office: 500, officePhone: 100,
-  title: 500, summary: 20_000, executor: 500, department: 500, executorPhone: 100,
+  instructionNumber: 200, incomingNumber: 200, source: 500,
+  title: 500, summary: 20_000, executor: 500,
+  department: REGISTRY_OPTION_LIMITS.department, executorPhone: REGISTRY_OPTION_LIMITS.executorPhone,
   executionMark: 10_000, removalMark: 500,
 });
 
@@ -13,14 +15,20 @@ const DATE_LABELS = Object.freeze({
   deadline: 'Срок исполнения', extendedUntil: 'Продлён до', removalDate: 'Дата снятия с контроля',
 });
 
-export function controlCardFields(record) {
+export function executorContactFor(executor, contacts = []) {
+  const name = typeof executor === 'string' ? executor.trim().toLowerCase() : '';
+  const contact = contacts.find(item => item.executor.toLowerCase() === name);
+  return { department: contact?.department ?? '', executorPhone: contact?.executorPhone ?? '' };
+}
+
+export function controlCardFields(record, contacts = []) {
   return {
     instructionNumber: record.instructionNumber ?? '', documentDate: '',
     incomingNumber: record.incomingNumber ?? '', incomingDate: '',
-    source: record.source ?? '', office: '', officePhone: '',
+    source: record.source ?? '',
     title: record.title ?? '', summary: record.summary ?? '',
     deadline: record.deadline ?? '', extendedUntil: record.extendedUntil ?? '',
-    executor: record.executor ?? '', department: '', executorPhone: '',
+    executor: record.executor ?? '', ...executorContactFor(record.executor, contacts),
     executionMark: record.executionMark ?? '', removalMark: '', removalDate: '',
   };
 }

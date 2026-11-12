@@ -4,6 +4,11 @@ import { registerIpcHandlers } from './registerIpcHandlers.js';
 import { BusinessHandler } from './BusinessHandler.js';
 import { IPC_CHANNELS } from '../../shared/constants/ipcChannels.js';
 
+const REMINDER_CHANGE_CHANNELS = new Set([
+  IPC_CHANNELS.database.create, IPC_CHANNELS.database.open,
+  ...['instructions', 'tasks'].flatMap(entity => ['create', 'update', 'remove'].map(method => IPC_CHANNELS[entity][method])),
+]);
+
 export class IPCManager {
   #unregister = null;
 
@@ -17,6 +22,7 @@ export class IPCManager {
     this.#unregister = registerIpcHandlers({
       ipcMain,
       logger,
+      onSuccess: channel => { if (REMINDER_CHANGE_CHANNELS.has(channel)) this.options.onDataChanged?.(); },
       requests: {
         ...new AppHandler(appService, database).requests(),
         ...new SettingsHandler(settingsService, database).requests(),

@@ -18,17 +18,29 @@ import { AttachmentStorage } from './attachments/AttachmentStorage.js';
 import { RecordService } from './services/RecordService.js';
 import { ENTITY_TYPES } from '../shared/constants/entities.js';
 import { AnalyticsRepository } from './repositories/AnalyticsRepository.js';
+import { NotificationStateRepository } from './repositories/NotificationStateRepository.js';
+import { NotificationService } from './services/NotificationService.js';
+import { NativeNotificationScheduler } from './notifications/NativeNotificationScheduler.js';
 
 // Composition root: platform dependencies enter here; repositories and services
 // do not create windows or discover each other through global state.
-export function createApplicationServices({ app, ipcMain, dialog, getWindow, logger }) {
+export function createApplicationServices({ app, ipcMain, dialog, getWindow, logger, nativeNotifications, onNotificationOpen }) {
   const database = new DatabaseService();
   let ipc;
+  let reminderScheduler;
   try {
     const location = new DatabaseLocation({ userData: app.getPath('userData'), database });
     location.restore();
     const instructions = new InstructionRepository(database);
     const tasks = new TaskRepository(database);
+    const settings = new SettingsRepository(database);
+    const notifications = new NotificationService({ instructions, tasks,
+      repository: new NotificationStateRepository(database),
+      getDeliveryStatus: () => reminderScheduler?.getStatus() ?? { mode: 'in-app', error: '' },
+    });
+    if (nativeNotifications) reminderScheduler = new NativeNotificationScheduler({
+      ...nativeNotifications, database, notifications, logger, onOpen: onNotificationOpen,
+    });
     const attachments = new AttachmentService({
       database, instructions, tasks, dialog, getWindow,
       repository: new AttachmentRepository(database),
@@ -41,23 +53,28 @@ export function createApplicationServices({ app, ipcMain, dialog, getWindow, log
     };
     ipc = new IPCManager({
       ipcMain, database, appService: new AppService(app),
-      settingsService: new SettingsService(new SettingsRepository(database)),
+      settingsService: new SettingsService(settings),
       recordServices, calendar: new CalendarService(instructions, tasks), attachments,
       analytics: new AnalyticsService({ repository: new AnalyticsRepository(database) }),
+      notifications,
       selection: new DatabaseSelectionService({ database, location, dialog, getWindow }),
       exportService: new ExcelExportService({ database, instructions, dialog, getWindow }),
-      controlCardExport: new ControlCardExportService({ database, instructions, dialog, getWindow }),
-      getWindow, logger,
+      controlCardExport: new ControlCardExportService({ database, instructions, settings, dialog, getWindow }),
+      getWindow, logger, onDataChanged: () => reminderScheduler?.check(),
     });
     ipc.init();
   } catch (cause) {
+    reminderScheduler?.stop();
     ipc?.shutdown();
     database.close();
     throw cause;
   }
   return {
+    startNotifications() { return reminderScheduler?.start() ?? false; },
+    checkNotifications() { reminderScheduler?.check(); },
+    getNotificationStatus() { return reminderScheduler?.getStatus() ?? { mode: 'in-app', error: '' }; },
     shutdown() {
-      try { ipc.shutdown(); }
+      try { reminderScheduler?.stop(); ipc.shutdown(); }
       finally { database.close(); }
     },
   };

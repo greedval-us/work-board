@@ -1,4 +1,5 @@
 import { getUrgency, INSTRUCTION_STATUS, INSTRUCTION_STATUSES } from '../../shared/registry.js';
+import { formatDate } from '../../shared/dates.js';
 import { getTaskPriorityPresentation } from './taskPriorities.js';
 
 function presentRecord(item, today, completed, detail) {
@@ -21,7 +22,8 @@ export function presentCalendarCheckpoints(checkpoints, today) {
   const rows = checkpoints.map(item => {
     if (item.mark.trim()) {
       marked += 1;
-      return { ...item, urgency: { tone: 'success', label: 'Есть отметка' } };
+      const label = item.actualDate && item.actualDate !== item.date ? `Исполнено ${formatDate(item.actualDate)}` : 'Есть отметка';
+      return { ...item, urgency: { tone: 'success', label } };
     }
     const urgency = getUrgency({ deadline: item.date, status: INSTRUCTION_STATUS.PENDING }, today);
     return { ...item, urgency: urgency.tone === 'info' ? { ...urgency, label: 'По графику' } : urgency };

@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { app, dialog } from 'electron';
+import { app, dialog, ipcMain } from 'electron';
+import { createWindow } from '../src/main/app.js';
+import { createApplicationServices } from '../src/main/createApplicationServices.js';
+import { startDesktopApplication } from '../src/main/startDesktopApplication.js';
+import log from '../src/main/utils/logger.js';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import { addCalendarDays, formatDate, localDate } from '../src/shared/registry.js';
@@ -26,9 +30,15 @@ const firstCheckpointMark = 'Первый промежуточный контр�
 const nextCheckpointCell = '.registry-table tbody td[data-column=nextCheckpoint]';
 const nextCheckpointTime = `${nextCheckpointCell} time[datetime]`;
 const nextCheckpointHeader = 'Ближайший промежуточный контроль';
+const controlFrequencyCell = '.registry-table tbody td[data-column=controlFrequency]';
+const controlFrequencyHeader = 'Промежуточный контроль';
+const dailyControl = 'Ежедневно';
+const customControl = 'Другое (даты вручную)';
 const overdueColor = 'FFB32630';
-const registrySelections = { source: 'Канцелярия', executor: 'Иванов И.И.', controlType: 'Плановый' };
-const renamedRegistrySelections = { source: 'Секретариат', executor: 'Петров П.П.', controlType: 'Внеплановый' };
+const registrySelections = { source: 'Канцелярия', executor: 'Иванов И.И.' };
+const reportSelections = { department: 'Отдел контроля', executorPhone: '+7 900 555-01-23' };
+const settingsSelections = { ...registrySelections, ...reportSelections };
+const renamedSelections = { source: 'Секретариат', executor: 'Петров П.П.', department: 'Управление контроля', executorPhone: '103' };
 const createFiles = [firstFile, secondFile];
 let openingFile = null;
 let cancelNextControlCardSave;
@@ -66,11 +76,14 @@ app.once('browser-window-created', (_event, window) => {
   const optionForm = (field) => `[data-registry-option="${field}"]`;
   const optionRow = (field, value) =>
     `.registry-option-group:has(> ${optionForm(field)}) [data-registry-option-value=${JSON.stringify(value)}]`;
-  const addRegistryOption = async (field, value) => {
+  const addRegistryOption = async (field, value, contacts = {}) => {
     const form = optionForm(field);
     const input = `${form} input`;
     await wait(`document.querySelector(${JSON.stringify(input)})?.matches(':enabled')`);
     await fill(input, { 0: value });
+    for (const [contact, selected] of Object.entries(contacts)) {
+      await fill(`${form} select[name=${contact}]`, { 0: selected });
+    }
     await js(`document.querySelector(${JSON.stringify(form)}).requestSubmit()`);
     await wait(`document.querySelector(${JSON.stringify(input)})?.value === ''`);
   };
@@ -100,17 +113,54 @@ app.once('browser-window-created', (_event, window) => {
       await js("document.querySelector('.registry-options-hint a').click()");
       await wait("Boolean(document.querySelector('#registry-options-title'))");
       await wait("!document.querySelector('.registry-instruction-dialog[open]')");
-      for (const [field, option] of Object.entries(registrySelections)) {
+      assert.deepEqual(await js("[...document.querySelectorAll('[data-registry-option]')].map(form => form.dataset.registryOption)"),
+        ['source', 'executor', 'department', 'executorPhone']);
+      for (const [field, option] of Object.entries({ source: registrySelections.source, ...reportSelections })) {
         await addRegistryOption(field, option);
       }
-      const configuredOptions = { source: ['Канцелярия'], executor: ['Иванов И.И.'], controlType: ['Плановый'] };
-      assert.deepEqual((await api('settings', 'get', generation)).registryOptions, configuredOptions);
+      const executorContact = { executor: registrySelections.executor, ...reportSelections };
+      await addRegistryOption('executor', executorContact.executor, reportSelections);
+      const configuredOptions = Object.fromEntries(Object.entries(settingsSelections).map(([field, value]) => [field, [value]]));
+      const configuredSettings = await api('settings', 'get', generation);
+      assert.deepEqual(configuredSettings.registryOptions, configuredOptions);
+      assert.deepEqual(configuredSettings.executorContacts, [executorContact]);
+      for (const field of Object.keys(reportSelections)) {
+        assert.equal(await js(`document.querySelector(${JSON.stringify(`${optionForm('executor')} select[name=${field}]`)}).value`), '');
+      }
+
+      const executorRow = optionRow('executor', executorContact.executor);
+      const executorEditInput = `${executorRow} input[name=value]`;
+      const executorEditPhone = `${executorRow} select[name=executorPhone]`;
+      await js(`document.querySelector(${JSON.stringify(`${executorRow} button[data-option-action=edit]`)}).click()`);
+      await wait(`document.querySelector(${JSON.stringify(executorEditInput)})?.value === ${JSON.stringify(executorContact.executor)}`);
+      for (const [field, value] of Object.entries(reportSelections)) {
+        assert.equal(await js(`document.querySelector(${JSON.stringify(`${executorRow} select[name=${field}]`)}).value`), value);
+      }
+      await screenshot('settings-executor-inline.png');
+      await fill(executorEditPhone, { 0: '' });
+      const executorEditSubmit = `${executorRow} button[type=submit]`;
+      await wait(`document.querySelector(${JSON.stringify(executorEditSubmit)})?.matches(':enabled')`);
+      await js(`document.querySelector(${JSON.stringify(executorEditSubmit)}).click()`);
+      await wait(`!document.querySelector(${JSON.stringify(executorEditInput)})`);
+      const editedSettings = await api('settings', 'get', generation);
+      assert.deepEqual(editedSettings.registryOptions, configuredOptions);
+      assert.deepEqual(editedSettings.executorContacts, [{ ...executorContact, executorPhone: '' }]);
+
+      const contactsForm = 'form[data-executor-contacts]';
+      await wait(`document.querySelector('${contactsForm} [name=executor]')?.matches(':enabled')`);
+      for (const [field, option] of Object.entries(executorContact)) {
+        await fill(`${contactsForm} [name=${field}]`, { 0: option });
+      }
+      await click('Сохранить', `${contactsForm} button[type=submit]`);
+      await wait(`document.querySelector('${contactsForm} [role=status]')?.textContent.trim() === 'Контакты сохранены.'`);
+      assert.deepEqual((await api('settings', 'get', generation)).executorContacts, [executorContact]);
 
       await navigate('/', 'Реестр указаний');
       await click('Добавить указание', '.registry-toolbar button');
       await wait("Boolean(document.querySelector('.registry-instruction-dialog[open]'))");
       await verifyEntrance('.registry-instruction-dialog', 'instruction card');
       assert.equal(await js("document.querySelector('.registry-form-grid').disabled"), false);
+      assert.equal(await js("Boolean(document.querySelector('.registry-instruction-dialog select[name=controlType]'))"), false);
       for (const [field, option] of Object.entries(registrySelections)) {
         const selector = `.registry-form-grid select[name="${field}"]`;
         await wait(`[...document.querySelector(${JSON.stringify(selector)})?.options ?? []].some(option => option.value === ${JSON.stringify(option)})`);
@@ -134,6 +184,7 @@ app.once('browser-window-created', (_event, window) => {
       assert.equal(created.incomingNumber, '0017');
       assert.equal(created.deadline, originalDeadline);
       assert.equal(created.extendedUntil, today);
+      assert.equal(created.controlFrequency, 'daily');
       const savedSchedule = (await api('instructions', 'get', { id: created.id, generation })).controlSchedule;
       assert.deepEqual(savedSchedule, { frequency: 'daily', firstDate: originalDeadline, customDates: [], marks: [] });
       for (const [field, option] of Object.entries(registrySelections)) assert.equal(created[field], option);
@@ -143,7 +194,10 @@ app.once('browser-window-created', (_event, window) => {
       assert.equal(headings[4], 'Откуда');
       assert.equal(headings[6], 'Резолюция');
       assert.equal(headings[8], 'Продлён до');
-      assert.equal(headings[11], 'Вид контроля');
+      assert.deepEqual(await js(`(() => {
+        const header = document.querySelector('.registry-table th[data-column=controlFrequency]');
+        return { position: header.cellIndex, title: header.title };
+      })()`), { position: 11, title: controlFrequencyHeader });
       assert.deepEqual(await js(`(() => {
         const header = document.querySelector('.registry-table th[data-column=nextCheckpoint]');
         return { position: header.cellIndex, title: header.title };
@@ -152,7 +206,7 @@ app.once('browser-window-created', (_event, window) => {
       assert.equal(cells[0], String(created.id));
       assert.equal(cells[4], registrySelections.source);
       assert.equal(cells[10], registrySelections.executor);
-      assert.equal(cells[11], registrySelections.controlType);
+      assert.equal(cells[11], dailyControl);
       assert.equal(await js("document.querySelector('.registry-row td:nth-child(9) time').dateTime"), today);
       assert.equal(await js("document.querySelector('.registry-row td:nth-child(9) .registry-urgency').textContent"), 'Срок сегодня');
       assert.equal(await js(`document.querySelector('${nextCheckpointTime}.registry-checkpoint-overdue')?.dateTime`), originalDeadline);
@@ -170,6 +224,7 @@ app.once('browser-window-created', (_event, window) => {
       await click('Применить', '.registry-filters button');
       await wait("document.querySelector('.registry-count')?.textContent === '27' && document.querySelectorAll('.registry-table tbody tr').length === 25");
       assert.equal(await js(`document.querySelector('${nextCheckpointCell}:not(:has(time))')?.textContent.trim()`), '—');
+      assert.equal(await js(`document.querySelector('${controlFrequencyCell}')?.textContent.trim()`), '—');
       await screenshot('registry-light.png');
       await resizeSweep('registry');
       await js("document.querySelector('.registry-column-toggle').click()");
@@ -212,7 +267,9 @@ app.once('browser-window-created', (_event, window) => {
       assert.equal(worksheet.rowCount, 28);
       assert.equal(worksheet.columnCount, 13);
       assert.equal(worksheet.getCell('J1').value, nextCheckpointHeader);
-      const exported = worksheet.getRows(2, 27).find(row => row.getCell(4).value === created.instructionNumber);
+      assert.equal(worksheet.getCell('L1').value, controlFrequencyHeader);
+      const exportedRows = worksheet.getRows(2, 27);
+      const exported = exportedRows.find(row => row.getCell(4).value === created.instructionNumber);
       assert.ok(exported, 'Saved instruction is missing from Excel');
       assert.equal(exported.getCell(1).value, String(created.id));
       assert.equal(exported.getCell(5).value, registrySelections.source);
@@ -221,9 +278,12 @@ app.once('browser-window-created', (_event, window) => {
       assert.equal(exported.getCell(10).value, formatDate(originalDeadline));
       assert.equal(exported.getCell(10).font.color?.argb, overdueColor);
       assert.equal(exported.getCell(11).value, registrySelections.executor);
-      assert.equal(exported.getCell(12).value, registrySelections.controlType);
+      assert.equal(exported.getCell(12).value, dailyControl);
       assert.match(exported.getCell(13).value, /Ожидается ответ/);
-      const todayCheckpoint = worksheet.getRows(2, 27).find(row => row.getCell(4).value === 'К-0').getCell(10);
+      const manualSchedule = exportedRows.find(row => row.getCell(4).value === 'К-0');
+      assert.equal(manualSchedule.getCell(12).value, customControl);
+      assert.equal(exportedRows.find(row => row.getCell(4).value === 'К-1').getCell(12).value ?? '', '');
+      const todayCheckpoint = manualSchedule.getCell(10);
       assert.equal(todayCheckpoint.value, formatDate(today));
       assert.notEqual(todayCheckpoint.font.color?.argb, overdueColor);
       assert.match(JSON.stringify(workbook.getWorksheet('Параметры').getSheetValues()), /иванов/);
@@ -258,6 +318,9 @@ app.once('browser-window-created', (_event, window) => {
         [created.instructionNumber]: { date: today, overdue: false },
         'К-0': { date: today, overdue: false },
       });
+      assert.deepEqual(await js(`Object.fromEntries([...document.querySelectorAll('.registry-row')].map(row => [
+        row.cells[3].textContent.trim(), row.querySelector('[data-column=controlFrequency]').textContent.trim(),
+      ]))`), { [created.instructionNumber]: dailyControl, 'К-0': customControl });
       const todayCheckpointLink = `.registry-row:has(td:first-child [title="${created.id}"]) button.registry-checkpoint-link`;
       const todayCheckpointEditor = `.registry-instruction-dialog[open] [data-checkpoint-date="${today}"] textarea`;
       await js(`document.querySelector(${JSON.stringify(todayCheckpointLink)}).click()`);
@@ -329,9 +392,24 @@ app.once('browser-window-created', (_event, window) => {
       assert.equal(prefilledReport.extendedUntil, today);
       assert.equal(prefilledReport.documentDate, '');
       assert.equal(prefilledReport.incomingDate, '');
+      assert.equal(Object.hasOwn(prefilledReport, 'office'), false);
+      assert.equal(Object.hasOwn(prefilledReport, 'officePhone'), false);
       assert.equal(await js(`document.querySelector('${controlCardDialog} form').checkValidity()`), true);
-      const reportPhone = '+7 900 555-01-23';
-      await fill(reportField('executorPhone'), { 0: reportPhone });
+      for (const [field, option] of Object.entries(reportSelections)) {
+        const selector = reportField(field);
+        assert.equal(prefilledReport[field], option);
+        assert.deepEqual(await js(`(() => {
+          const select = document.querySelector(${JSON.stringify(selector)});
+          return [...select.options].map(option => option.value);
+        })()`), ['', option]);
+      }
+      await fill(reportField('executor'), { 0: 'Иванов А.А.' });
+      for (const field of Object.keys(reportSelections)) {
+        assert.equal(await js(`document.querySelector(${JSON.stringify(reportField(field))}).value`), '');
+      }
+      await fill(reportField('executor'), { 0: executorContact.executor });
+      assert.equal(await js(`document.querySelector(${JSON.stringify(reportField('department'))}).value`), executorContact.department);
+      await fill(reportField('executorPhone'), { 0: '' });
       await fill(reportField('executionMark'), { 0: '' });
 
       const cancellation = Promise.withResolvers();
@@ -341,18 +419,33 @@ app.once('browser-window-created', (_event, window) => {
       cancellation.resolve();
       await wait(`document.querySelector('${controlCardSave}')?.matches(':enabled')`);
       assert.equal(existsSync(controlCardFile), false);
-      assert.equal(await js(`document.querySelector(${JSON.stringify(reportField('executorPhone'))}).value`), reportPhone);
+      assert.equal(await js(`document.querySelector(${JSON.stringify(reportField('executorPhone'))}).value`), '');
 
-      await click('Сохранить Word', controlCardSave);
-      await wait(`document.querySelector('${controlCardDialog} [role=status]')?.textContent.trim() === 'Контрольная карточка сохранена.'`);
-      const reportBytes = readFileSync(controlCardFile);
-      const report = await JSZip.loadAsync(reportBytes);
-      const reportXml = await report.file('word/document.xml').async('string');
-      const reportText = Array.from(reportXml.matchAll(/<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>/g), match => match[1]).join(' ');
-      for (const value of [created.instructionNumber, created.incomingNumber, created.executor, reportPhone, firstCheckpointMark]) {
+      const saveReport = async () => {
+        await click('Сохранить Word', controlCardSave);
+        await wait(`document.querySelector('${controlCardDialog} [role=status]')?.textContent.trim() === 'Контрольная карточка сохранена.'`);
+        const bytes = readFileSync(controlCardFile);
+        const report = await JSZip.loadAsync(bytes);
+        const xml = await report.file('word/document.xml').async('string');
+        const content = Array.from(xml.matchAll(/<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>/g), match => match[1]).join(' ');
+        return { bytes, content };
+      };
+      const manuallyClearedReport = await saveReport();
+      assert.ok(manuallyClearedReport.content.includes(executorContact.department));
+      assert.ok(!manuallyClearedReport.content.includes(executorContact.executorPhone));
+      assert.deepEqual((await api('settings', 'get', generation)).executorContacts, [executorContact]);
+      await js(`document.querySelector('${controlCardDialog} .registry-close-button').click()`);
+      await wait(`!document.querySelector('${controlCardDialog}')`);
+      await click('Ф‑21 в Word', '.registry-instruction-dialog .registry-control-card-open');
+      await wait(`Boolean(document.querySelector('${controlCardDialog}'))`);
+      assert.equal(await js(`document.querySelector(${JSON.stringify(reportField('executorPhone'))}).value`), executorContact.executorPhone);
+      await fill(reportField('executionMark'), { 0: '' });
+      const { bytes: reportBytes, content: reportText } = await saveReport();
+      for (const value of [created.instructionNumber, created.incomingNumber, created.executor, ...Object.values(reportSelections), firstCheckpointMark]) {
         assert.ok(reportText.includes(value), `Value missing in control card: ${value}`);
       }
       assert.ok(!reportText.includes(instructionBeforeExport.executionMark));
+      assert.doesNotMatch(reportText, /Делопроизводство/);
       assert.deepEqual(await api('instructions', 'get', { id: created.id, generation }), instructionBeforeExport);
       writeFileSync(path.join(output, 'control-card-f21.docx'), reportBytes);
       await js(`document.querySelector('${controlCardDialog} .registry-close-button').click()`);
@@ -388,8 +481,8 @@ app.once('browser-window-created', (_event, window) => {
       assert.deepEqual((await api('instructions', 'get', { id: created.id, generation })).controlSchedule, {
         frequency: 'custom', firstDate: '', customDates: [originalDeadline],
         marks: [
-          { date: originalDeadline, text: firstCheckpointMark },
-          { date: today, text: 'Промежуточный отчёт проверен' },
+          { date: originalDeadline, text: firstCheckpointMark, actualDate: today },
+          { date: today, text: 'Промежуточный отчёт проверен', actualDate: today },
         ],
       });
       await navigate('/calendar', 'Календарь и задачи');
@@ -573,8 +666,8 @@ app.once('browser-window-created', (_event, window) => {
       await screenshot('registry-dark.png');
 
       await navigate('/settings', 'Настройки');
-      for (const [field, savedValue] of Object.entries(registrySelections)) {
-        const renamedValue = renamedRegistrySelections[field];
+      for (const [field, savedValue] of Object.entries(settingsSelections)) {
+        const renamedValue = renamedSelections[field];
         const savedRow = optionRow(field, savedValue);
         const renamedRow = optionRow(field, renamedValue);
         const editButton = `${savedRow} button[data-option-action=edit]`;
@@ -589,9 +682,10 @@ app.once('browser-window-created', (_event, window) => {
         await js(`document.querySelector(${JSON.stringify(saveButton)}).click()`);
         await wait(`!document.querySelector(${JSON.stringify(savedRow)}) && Boolean(document.querySelector(${JSON.stringify(renamedRow)}))`);
         assert.deepEqual((await api('settings', 'get', generation)).registryOptions[field], [renamedValue]);
-        assert.equal((await api('instructions', 'get', { id: created.id, generation }))[field], savedValue);
+        if (Object.hasOwn(registrySelections, field)) {
+          assert.equal((await api('instructions', 'get', { id: created.id, generation }))[field], savedValue);
+        }
 
-        // Re-add the original choice so deletion also acts on a value stored in an instruction.
         await addRegistryOption(field, savedValue);
         await wait(`document.querySelector(${JSON.stringify(removeButton)})?.matches(':enabled')`);
         if (field === 'source') {
@@ -607,15 +701,21 @@ app.once('browser-window-created', (_event, window) => {
         await js(`document.querySelector(${JSON.stringify(removeButton)}).click()`);
         await wait(`!document.querySelector(${JSON.stringify(savedRow)})`);
         assert.deepEqual((await api('settings', 'get', generation)).registryOptions[field], [renamedValue]);
-        assert.equal((await api('instructions', 'get', { id: created.id, generation }))[field], savedValue);
+        if (Object.hasOwn(registrySelections, field)) {
+          assert.equal((await api('instructions', 'get', { id: created.id, generation }))[field], savedValue);
+        }
       }
-      const updatedOptions = { source: ['Секретариат'], executor: ['Петров П.П.'], controlType: ['Внеплановый'] };
+      const updatedOptions = Object.fromEntries(Object.entries(renamedSelections).map(([field, value]) => [field, [value]]));
+      const updatedContact = { executor: renamedSelections.executor, department: renamedSelections.department, executorPhone: renamedSelections.executorPhone };
+      assert.deepEqual((await api('settings', 'get', generation)).executorContacts, [updatedContact]);
 
       await click('Создать другую базу', '.storage-button');
       await wait("document.querySelector('.file-path')?.textContent.includes('another.sqlite')");
       const next = await api('database', 'getStatus');
       assert.notEqual(next.generation, generation);
-      assert.deepEqual((await api('settings', 'get', next.generation)).registryOptions, { source: [], executor: [], controlType: [] });
+      const nextSettings = await api('settings', 'get', next.generation);
+      assert.deepEqual(nextSettings.registryOptions, { source: [], executor: [], department: [], executorPhone: [] });
+      assert.deepEqual(nextSettings.executorContacts, []);
       assert.equal((await api('instructions', 'list', { generation: next.generation })).total, 0);
       assert.equal((await api('analytics', 'summary', { generation: next.generation })).totals.total, 0);
       await assert.rejects(api('instructions', 'update', { id: created.id, data: { title: 'Wrong DB' }, generation }));
@@ -625,7 +725,9 @@ app.once('browser-window-created', (_event, window) => {
       await click('Открыть базу', '.storage-button');
       await wait("document.querySelector('.file-path')?.textContent.includes('selected-controls.sqlite')");
       const reopened = await api('database', 'getStatus');
-      assert.deepEqual((await api('settings', 'get', reopened.generation)).registryOptions, updatedOptions);
+      const reopenedSettings = await api('settings', 'get', reopened.generation);
+      assert.deepEqual(reopenedSettings.registryOptions, updatedOptions);
+      assert.deepEqual(reopenedSettings.executorContacts, [updatedContact]);
       assert.equal((await api('calendar', 'day', { date: today, generation: reopened.generation })).checkpoints[0].mark,
         'Промежуточный отчёт проверен');
       assert.equal((await api('instructions', 'list', { generation: reopened.generation })).total, 27);
@@ -636,10 +738,10 @@ app.once('browser-window-created', (_event, window) => {
       await navigate('/', 'Реестр указаний');
       await click('Добавить указание', '.registry-toolbar button');
       await wait("Boolean(document.querySelector('.registry-instruction-dialog[open]'))");
-      for (const [field, options] of Object.entries(updatedOptions)) {
+      for (const field of Object.keys(registrySelections)) {
         const actual = await js(`[...document.querySelector(${JSON.stringify(instructionField(field))}).options]
           .map(option => option.value).filter(Boolean)`);
-        assert.deepEqual(actual, options, `New instruction dropdown for ${field}`);
+        assert.deepEqual(actual, updatedOptions[field], `New instruction dropdown for ${field}`);
       }
       await js("document.querySelector('.registry-instruction-dialog .registry-close-button').click()");
       await wait("!document.querySelector('.registry-instruction-dialog[open]')");
@@ -647,11 +749,22 @@ app.once('browser-window-created', (_event, window) => {
       await fill('.registry-filter-fields input,.registry-filter-fields select', { 0: '0001/К' });
       await click('Применить', '.registry-filters button');
       await wait("document.querySelector('.registry-count')?.textContent === '1'");
+      assert.equal(await js(`document.querySelector('${controlFrequencyCell}')?.textContent.trim()`), customControl);
       await js("document.querySelector('.registry-table tbody tr').click()");
       await wait("Boolean(document.querySelector('.registry-instruction-dialog[open]'))");
       for (const [field, option] of Object.entries(registrySelections)) {
         assert.equal(await js(`document.querySelector(${JSON.stringify(instructionField(field))}).value`), option);
       }
+      await click('Ф‑21 в Word', '.registry-instruction-dialog .registry-control-card-open');
+      await wait(`Boolean(document.querySelector('${controlCardDialog}'))`);
+      for (const field of Object.keys(reportSelections)) {
+        const selector = reportField(field);
+        assert.deepEqual(await js(`[...document.querySelector(${JSON.stringify(selector)}).options].map(option => option.value)`),
+          ['', renamedSelections[field]]);
+        assert.equal(await js(`document.querySelector(${JSON.stringify(selector)}).value`), '');
+      }
+      await js(`document.querySelector('${controlCardDialog} .registry-close-button').click()`);
+      await wait(`!document.querySelector('${controlCardDialog}')`);
       await click('Удалить', '.registry-instruction-dialog button');
       await wait("Boolean(document.querySelector('.registry-confirm-dialog[open]'))");
       await click('Удалить', '.registry-confirm-dialog button');
@@ -668,6 +781,103 @@ app.once('browser-window-created', (_event, window) => {
       await wait("!document.querySelector('.calendar-task-dialog[open]') && !document.querySelector('.calendar-task-open')");
       assert.equal((await api('calendar', 'day', { date: today, generation: reopened.generation })).tasks.length, 0);
       assert.equal(existsSync(path.join(firstFile + '.files', taskFiles[0].relativePath)), false);
+
+      // Move one weekly occurrence and record its actual execution retrospectively.
+      const checkpointFrom = addCalendarDays(today, -7);
+      const checkpointTo = addCalendarDays(today, -5);
+      const actualDate = addCalendarDays(today, -6);
+      const movable = await api('instructions', 'create', {
+        generation: reopened.generation,
+        data: { ...created, instructionNumber: 'ПЕРЕНОС-1', title: 'Перенос отдельной контрольной даты',
+          controlDate: addCalendarDays(today, -14), deadline: addCalendarDays(today, 14), extendedUntil: '', status: 'pending',
+          controlSchedule: { frequency: 'weekly', firstDate: checkpointFrom, customDates: [], marks: [] },
+        },
+      });
+      const movedEditor = `.registry-instruction-dialog [data-checkpoint-date="${checkpointTo}"]`;
+      await js(`location.hash = ${JSON.stringify(`#/?instruction=${movable.id}&checkpoint=${checkpointFrom}`)}`);
+      await wait(`document.activeElement === document.querySelector('[data-checkpoint-date="${checkpointFrom}"] textarea')`);
+      await fill('[name=control-planned-date]', { 0: checkpointTo });
+      await click('Перенести', '.control-schedule-move');
+      await wait(`document.activeElement === document.querySelector('${movedEditor} textarea')`);
+      await fill('[name=control-actual-date]', { 0: actualDate });
+      await fill(`${movedEditor} textarea`, { 0: 'Исполнено в другой день' });
+      await js("document.querySelector('.registry-instruction-form').requestSubmit()");
+      await wait("!document.querySelector('.registry-instruction-dialog[open]')");
+      const savedMove = await api('instructions', 'get', { id: movable.id, generation: reopened.generation });
+      assert.deepEqual(savedMove.controlSchedule, {
+        frequency: 'weekly', firstDate: checkpointFrom, customDates: [],
+        moves: [{ from: checkpointFrom, to: checkpointTo }],
+        marks: [{ date: checkpointTo, text: 'Исполнено в другой день', actualDate }],
+      });
+      const movedQuery = { generation: reopened.generation, filters: { instructionNumber: 'ПЕРЕНОС-1' } };
+      assert.equal((await api('instructions', 'list', movedQuery)).items[0].nextCheckpoint, today);
+      assert.equal((await api('calendar', 'day', { date: checkpointFrom, generation: reopened.generation })).checkpoints.some(row => row.instructionId === movable.id), false);
+      const movedCalendar = (await api('calendar', 'day', { date: checkpointTo, generation: reopened.generation })).checkpoints.find(row => row.instructionId === movable.id);
+      assert.equal(movedCalendar.actualDate, actualDate);
+      await navigate('/calendar', 'Календарь и задачи');
+      await js(`location.hash = ${JSON.stringify(`#/?instruction=${movable.id}&checkpoint=${checkpointTo}`)}`);
+      await wait(`document.activeElement === document.querySelector('${movedEditor} textarea')`);
+      assert.equal(await js("document.querySelector('[name=control-actual-date]').value"), actualDate);
+      await screenshot('checkpoint-dates.png');
+      await click('Отменить перенос', '.control-schedule-cancel-move');
+      await wait(`document.activeElement === document.querySelector('[data-checkpoint-date="${checkpointFrom}"] textarea')`);
+      await js("document.querySelector('.registry-instruction-form').requestSubmit()");
+      await wait("!document.querySelector('.registry-instruction-dialog[open]')");
+      const restoredCheckpoint = (await api('instructions', 'get', { id: movable.id, generation: reopened.generation })).controlSchedule;
+      assert.equal(restoredCheckpoint.moves, undefined);
+      assert.deepEqual(restoredCheckpoint.marks, [{ date: checkpointFrom, text: 'Исполнено в другой день', actualDate }]);
+      await api('instructions', 'remove', { id: movable.id, generation: reopened.generation });
+      await navigate('/calendar', 'Календарь и задачи');
+      console.log('Individual checkpoint move and retrospective execution date passed.');
+      // Reminder popups, persistent read receipts and repeatable deep links.
+      const reminderTask = await api('tasks', 'create', { generation: reopened.generation,
+        data: { title: 'Напоминание: проверить отчёт', date: addCalendarDays(today, -1) } });
+      const reminderDate = addCalendarDays(today, 1);
+      const reminderInstruction = await api('instructions', 'create', { generation: reopened.generation,
+        data: { ...created, instructionNumber: 'УВЕДОМЛЕНИЕ-1', title: 'Напоминание: промежуточный доклад',
+          controlDate: addCalendarDays(today, -1), deadline: addCalendarDays(today, 3), extendedUntil: '', status: 'pending',
+          controlSchedule: { frequency: 'custom', customDates: [today], marks: [], moves: [{ from: today, to: reminderDate }] },
+        } });
+      await js("window.dispatchEvent(new Event('focus'))");
+      await wait("Boolean(document.querySelector('.notification-popup'))");
+      await js("document.querySelector('[data-notification-action=show-list]').click()");
+      await wait("document.querySelector('.notification-panel')?.textContent.includes('Напоминание: проверить отчёт')");
+      assert.ok(await js(`document.querySelector('.notification-panel')?.textContent.includes(${JSON.stringify(formatDate(reminderDate))})`));
+      await screenshot('deadline-notifications.png');
+      await resize(720, 640);
+      assert.equal(await js('document.documentElement.scrollWidth > innerWidth'), false);
+      assert.equal(await js("(() => { const r = document.querySelector('.notification-panel').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight; })()"), true);
+      await screenshot('deadline-notifications-compact.png');
+      await resizeDefault();
+      await click('Прочитать все', '.notification-panel button');
+      await wait("!document.querySelector('.notification-count')");
+      const reminderState = await api('notifications', 'list', { generation: reopened.generation });
+      assert.ok(reminderState.items.every(item => !item.unread));
+      const openReminderTask = async () => {
+        await js("[...document.querySelectorAll('.notification-record')].find(node => node.textContent.includes('Напоминание: проверить отчёт')).click()");
+        await wait("document.querySelector('.calendar-task-dialog[open] [name=task-title]')?.value === 'Напоминание: проверить отчёт'");
+        await js("document.querySelector('[aria-label=\"Закрыть карточку задачи\"]').click()");
+        await wait("!document.querySelector('.calendar-task-dialog[open]')");
+      };
+      await openReminderTask();
+      await js("document.querySelector('.notification-bell').click()");
+      await openReminderTask();
+      await js("document.querySelector('.notification-bell').click()");
+      await js("[...document.querySelectorAll('.notification-record')].find(node => node.textContent.includes('УВЕДОМЛЕНИЕ-1') && node.textContent.includes('Промежуточный контроль')).click()");
+      await wait(`document.activeElement === document.querySelector('[data-checkpoint-date="${reminderDate}"] textarea')`);
+      await js("document.querySelector('.registry-instruction-dialog .registry-close-button').click()");
+      await wait("!document.querySelector('.registry-instruction-dialog[open]')");
+      await api('tasks', 'update', { generation: reopened.generation, id: reminderTask.id, data: { completed: true } });
+      await api('instructions', 'remove', { generation: reopened.generation, id: reminderInstruction.id });
+      await js("window.dispatchEvent(new Event('focus'))");
+      await js("document.querySelector('.notification-bell').click()");
+      await wait("!document.querySelector('.notification-panel')?.textContent.includes('Напоминание:')");
+      await pressKey('Escape');
+      await wait("!document.querySelector('.notification-panel')");
+      assert.equal(await js("document.activeElement === document.querySelector('.notification-bell')"), true);
+      await api('tasks', 'remove', { generation: reopened.generation, id: reminderTask.id });
+      await navigate('/calendar', 'Календарь и задачи');
+      console.log('Deadline notification popup, bell receipts, task reopen and moved-checkpoint navigation passed.');
       // Reduced motion must remove visual delays without changing focus or editing.
       await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
       await wait("matchMedia('(prefers-reduced-motion: reduce)').matches");
@@ -705,4 +915,11 @@ app.once('browser-window-created', (_event, window) => {
   });
 });
 
-await import('../src/main/index.js');
+// Keep fallback/in-app scenarios; native delivery and tray have a separate smoke.
+startDesktopApplication({ app, dialog, ipcMain, createWindow, createServices: createApplicationServices,
+  createTray: () => { throw new Error('Tray unavailable in fallback smoke scenario.'); },
+  buildMenu: template => template, logger: { error: (...args) => {
+    if (args.some(value => value?.message === 'Tray unavailable in fallback smoke scenario.')) return;
+    log.error(...args);
+  } },
+});

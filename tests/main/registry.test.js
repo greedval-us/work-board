@@ -45,17 +45,16 @@ test('migration upgrades legacy settings once and preserves existing values', ()
 
 test('instruction CRUD persists full data and accepts duplicate text identifiers', (t) => {
   const { instructions, database, filePath } = fixture(t);
-  const created = instructions.create(instruction({ source: 'Канцелярия', controlType: 'Плановый' }));
+  const created = instructions.create(instruction({ source: 'Канцелярия' }));
   assert.equal(typeof created.id, 'number');
   assert.equal(created.incomingNumber, '001/А');
   assert.equal(created.summary, '  Текст\nподробностей  ');
   assert.equal(created.source, 'Канцелярия');
-  assert.equal(created.controlType, 'Плановый');
   assert.match(created.createdAt, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(instructions.create(instruction()).instructionNumber, '007/Б');
   const changed = instructions.update(created.id, {
     title: 'Другой отчёт', status: 'completed', executionMark: '  Принят\nбез замечаний  ',
-    source: '', controlType: 'Внеплановый',
+    source: '',
   });
   assert.equal(changed.createdAt, created.createdAt);
   assert.equal(changed.title, 'Другой отчёт');
@@ -65,10 +64,28 @@ test('instruction CRUD persists full data and accepts duplicate text identifiers
   assert.equal(reopened.executionMark, '  Принят\nбез замечаний  ');
   assert.equal(reopened.status, 'completed');
   assert.equal(reopened.source, '');
-  assert.equal(reopened.controlType, 'Внеплановый');
   assert.deepEqual(instructions.remove(created.id), { removed: true });
   assert.equal(instructions.get(created.id), null);
   assert.equal(instructions.list().total, 1);
+});
+
+test('saving checkpoint schedules leaves the legacy control type intact and exposes only the current frequency', (t) => {
+  const { instructions, database } = fixture(t);
+  const created = instructions.create(instruction());
+  database.connection.prepare('UPDATE instructions SET control_type = ? WHERE id = ?').run('Плановый', created.id);
+  assert.equal(instructions.list().items[0].controlFrequency, '');
+  assert.equal(Object.hasOwn(instructions.get(created.id), 'controlType'), false);
+
+  const marks = [{ date: '2026-10-23', text: 'Доклад получен' }];
+  instructions.update(created.id, { controlSchedule: { frequency: 'daily', firstDate: '2026-10-23', marks } });
+  const [scheduled] = instructions.all();
+  assert.equal(scheduled.controlFrequency, 'daily');
+  assert.equal(Object.hasOwn(scheduled, 'controlType'), false);
+  assert.equal(Object.hasOwn(scheduled, 'controlSchedule'), false);
+
+  instructions.update(created.id, { controlSchedule: { marks } });
+  assert.equal(instructions.list().items[0].controlFrequency, '');
+  assert.equal(database.connection.prepare('SELECT control_type FROM instructions WHERE id = ?').get(created.id).control_type, 'Плановый');
 });
 
 test('invalid mutations and missing records produce safe errors without losing persisted data', (t) => {
@@ -111,7 +128,7 @@ test('date ranges follow extensions while preserving the original deadline', (t)
   const extensionRange = { deadlineFrom: '2026-11-01', deadlineTo: '2026-11-01' };
   assert.deepEqual(instructions.list({ filters: originalRange }), { items: [], total: 0 });
   const { controlSchedule, ...row } = extended;
-  assert.deepEqual(instructions.list({ filters: extensionRange }), { items: [{ ...row, nextCheckpoint: '' }], total: 1 });
+  assert.deepEqual(instructions.list({ filters: extensionRange }), { items: [{ ...row, nextCheckpoint: '', controlFrequency: '' }], total: 1 });
   assert.equal(instructions.get(extended.id).deadline, '2026-10-26');
   assert.equal(instructions.get(extended.id).extendedUntil, '2026-11-01');
   assert.throws(() => instructions.update(extended.id, { deadline: '2026-11-02' }), ValidationError);
@@ -136,16 +153,29 @@ test('stable sorting and pagination preserve totals while all returns every matc
   assert.equal(instructions.list({ offset: 99 }).total, 3);
 });
 
-test('registry queries sort and return source and control type', (t) => {
+test('registry queries sort and return source', (t) => {
   const { instructions } = fixture(t);
-  const a = instructions.create(instruction({ source: 'Янтарь', controlType: 'Проверка' }));
-  const b = instructions.create(instruction({ source: 'Архив', controlType: 'Аудит' }));
+  const a = instructions.create(instruction({ source: 'Янтарь' }));
+  const b = instructions.create(instruction({ source: 'Архив' }));
   assert.deepEqual(instructions.list({ sort: { field: 'source', direction: 'asc' } }).items.map(({ id, source }) => [id, source]), [
     [b.id, 'Архив'], [a.id, 'Янтарь'],
   ]);
-  assert.deepEqual(instructions.all({ sort: { field: 'controlType', direction: 'desc' } }).map(({ id, controlType }) => [id, controlType]), [
-    [a.id, 'Проверка'], [b.id, 'Аудит'],
-  ]);
+});
+
+test('registry sorts by checkpoint frequency with unscheduled instructions last in both directions', (t) => {
+  const { instructions } = fixture(t);
+  const frequencies = ['daily', 'weekly', 'monthly', 'quarterly', 'yearly'];
+  const blank = instructions.create(instruction());
+  const custom = instructions.create(instruction({ controlSchedule: { frequency: 'custom', customDates: ['2026-10-24'] } }));
+  const recurring = frequencies.map(frequency => instructions.create(instruction({ controlSchedule: { frequency, firstDate: '2026-10-23' } })));
+  const asc = { field: 'controlFrequency', direction: 'asc' };
+  const desc = { field: 'controlFrequency', direction: 'desc' };
+
+  assert.deepEqual(instructions.all({ sort: asc }).map(row => row.controlFrequency), [...frequencies, 'custom', '']);
+  assert.deepEqual(instructions.all({ sort: desc }).map(row => row.id), [custom.id, ...recurring.map(row => row.id).reverse(), blank.id]);
+  const page = instructions.list({ sort: asc, offset: 2, limit: 1 });
+  assert.equal(page.total, 7);
+  assert.deepEqual(page.items.map(row => row.controlFrequency), ['monthly']);
 });
 
 test('registry sorts by ID, original deadline and extension with stable pagination', (t) => {

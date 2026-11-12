@@ -14,17 +14,17 @@ export function useTaskEditor({ task, date, generation, saveTask, removeTask }) 
   const busy = shallowRef(false);
   const error = shallowRef('');
 
-  async function perform(operation) {
+  async function perform(operation, fallback) {
     if (busy.value) return false;
     busy.value = true;
     error.value = '';
     try { await operation(); return true; }
-    catch (cause) { error.value = errorMessage(cause, 'Не удалось сохранить задачу.'); return false; }
+    catch (cause) { error.value = errorMessage(cause, fallback); return false; }
     finally { busy.value = false; }
   }
 
-  function save() { return perform(() => saveTask(task?.id ?? null, { ...validateTask(draft), attachments: snapshotAttachmentChanges(draft.attachments) }, generation)); }
-  function remove() { return task ? perform(() => removeTask(task.id, generation)) : Promise.resolve(false); }
+  function save() { return perform(() => saveTask(task?.id ?? null, { ...validateTask(draft), attachments: snapshotAttachmentChanges(draft.attachments) }, generation), 'Не удалось сохранить задачу.'); }
+  function remove() { return task ? perform(() => removeTask(task.id, generation), 'Не удалось удалить задачу.') : Promise.resolve(false); }
 
   return { draft, dirty, busy, error, save, remove };
 }

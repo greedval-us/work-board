@@ -1,7 +1,5 @@
-import { randomUUID } from 'node:crypto';
-import { rename, rm, writeFile } from 'node:fs/promises';
-import path from 'node:path';
 import { localDate, normalizeListRequest } from '../../shared/registry.js';
+import { writeAtomicFile } from '../files/atomicFile.js';
 import { createRegistryWorkbook } from './RegistryWorkbook.js';
 
 export class ExcelExportService {
@@ -10,6 +8,7 @@ export class ExcelExportService {
   async export(request) {
     this.database.assertGeneration(request.generation);
     const normalized = normalizeListRequest(request);
+    const snapshotDatabasePath = this.database.filePath;
     const exportedAt = new Date();
     if (normalized.filters.checkpoint && !normalized.today) normalized.today = localDate(exportedAt);
     // Snapshot all matching rows before the asynchronous native dialog.
@@ -20,13 +19,11 @@ export class ExcelExportService {
       properties: ['createDirectory', 'showOverwriteConfirmation'],
     });
     if (result.canceled || !result.filePath) return { cancelled: true, count: rows.length };
-    const filePath = result.filePath.toLowerCase().endsWith('.xlsx') ? result.filePath : `${result.filePath}.xlsx`;
-    const temporary = path.join(path.dirname(filePath), `.${path.basename(filePath)}.${randomUUID()}.tmp`);
-    try {
-      const workbook = createRegistryWorkbook({ rows, request: normalized, exportedAt });
-      await writeFile(temporary, Buffer.from(await workbook.xlsx.writeBuffer()), { flag: 'wx' });
-      await rename(temporary, filePath);
-    } finally { await rm(temporary, { force: true }); }
+    const selected = result.filePath.toLowerCase().endsWith('.xlsx') ? result.filePath : `${result.filePath}.xlsx`;
+    const workbook = createRegistryWorkbook({ rows, request: normalized, exportedAt });
+    const filePath = await writeAtomicFile(selected, Buffer.from(await workbook.xlsx.writeBuffer()), {
+      getDatabasePaths: () => [snapshotDatabasePath, this.database.filePath],
+    });
     return { cancelled: false, filePath, count: rows.length };
   }
 }

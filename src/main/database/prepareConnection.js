@@ -5,10 +5,13 @@ import { migrate } from './migrations.js';
 import { DATABASE_CONFIG } from './databaseConfig.js';
 import { inspectDatabase } from './inspectDatabase.js';
 import { AppError } from '../utils/AppError.js';
+import { rethrowAfterCleanup } from '../utils/cleanup.js';
 
 export function discardConnection({ connection, created }, filePath) {
-  connection?.close();
-  if (created) rmSync(filePath, { force: true });
+  const removeCreatedFile = () => { if (created) rmSync(filePath, { force: true }); };
+  try { connection?.close(); }
+  catch (error) { rethrowAfterCleanup(error, [removeCreatedFile]); }
+  removeCreatedFile();
 }
 
 export function prepareConnection(filePath, create) {
@@ -28,5 +31,7 @@ export function prepareConnection(filePath, create) {
     migrate(connection);
     connection.exec(`PRAGMA application_id = ${DATABASE_CONFIG.APPLICATION_ID}`);
     return { connection, created };
-  } catch (error) { discardConnection({ connection, created }, filePath); throw error; }
+  } catch (error) {
+    rethrowAfterCleanup(error, [() => discardConnection({ connection, created }, filePath)]);
+  }
 }

@@ -7,5 +7,5 @@ export const WORKBOOK_CONFIG = Object.freeze({
 });
 export const INSTRUCTION_COLUMN_WIDTHS = Object.freeze({
   id: 20, controlDate: 23, incomingNumber: 20, instructionNumber: 20, source: 32, title: 40,
-  summary: 65, deadline: 21, extendedUntil: 19, nextCheckpoint: 28, executor: 30, controlType: 26, executionMark: 50,
+  summary: 65, deadline: 21, extendedUntil: 19, nextCheckpoint: 28, executor: 30, controlFrequency: 27, executionMark: 50,
 });

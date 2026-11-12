@@ -50,3 +50,18 @@ test('existing task edits and deletion remain attached to their source database'
   assert.equal(await editor.remove(), true);
   assert.deepEqual(removed, { id: 10, generation: 6 });
 });
+
+test('failed task deletion reports the failed action and preserves the editable draft', async () => {
+  const editor = useTaskEditor({
+    task: { id: 10, title: 'Контроль', date: '2026-10-23', description: '', priority: 'urgent', completed: true },
+    generation: 6,
+    removeTask: async () => { throw new Error('private SQLite failure'); },
+  });
+  editor.draft.description = 'Несохранённый текст';
+  assert.equal(await editor.remove(), false);
+  assert.match(editor.error.value, /удалить задачу/i);
+  assert.doesNotMatch(editor.error.value, /private|SQLite/);
+  assert.equal(editor.draft.description, 'Несохранённый текст');
+  assert.equal(editor.dirty.value, true);
+  assert.equal(editor.busy.value, false);
+});

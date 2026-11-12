@@ -17,6 +17,7 @@ module.exports = {
   linux: { icon: 'src/public/icons/app-512.png' },
   nsis: {
     oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true,
+    createStartMenuShortcut: true,
     installerIcon: 'src/public/icons/app.ico', uninstallerIcon: 'src/public/icons/app.ico',
   },
 };

@@ -53,3 +53,18 @@ test('checkpoint marks take precedence over date urgency, including historical c
   assert.equal(open, 3);
   assert.equal(marked, 1);
 });
+
+test('checkpoint labels distinguish a different execution date without moving the planned date', () => {
+  const { rows, open, marked } = presentCalendarCheckpoints([
+    { date: '2026-11-02', actualDate: '2026-10-28', mark: 'Доклад получен', scheduled: true },
+    { date: '2026-11-03', actualDate: '2026-11-03', mark: 'В срок', scheduled: true },
+    { date: '2026-11-04', mark: 'Старая отметка', scheduled: false },
+  ], '2026-11-05');
+  assert.deepEqual(rows.map(({ date, urgency }) => [date, urgency]), [
+    ['2026-11-02', { tone: 'success', label: 'Исполнено 28.10.2026' }],
+    ['2026-11-03', { tone: 'success', label: 'Есть отметка' }],
+    ['2026-11-04', { tone: 'success', label: 'Есть отметка' }],
+  ]);
+  assert.equal(open, 0);
+  assert.equal(marked, 3);
+});

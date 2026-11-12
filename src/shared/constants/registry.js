@@ -32,13 +32,13 @@ export const INSTRUCTION_COLUMNS = Object.freeze([
   { key: 'extendedUntil', label: 'Продлён до' },
   { key: 'nextCheckpoint', label: 'Ближайший промежуточный контроль' },
   { key: 'executor', label: 'Исполнитель' },
-  { key: 'controlType', label: 'Вид контроля' },
+  { key: 'controlFrequency', label: 'Промежуточный контроль' },
   { key: 'executionMark', label: 'Отметка об исполнении' },
 ].map(Object.freeze));
 
 export const INSTRUCTION_FIELDS = Object.freeze([
   'controlDate', 'incomingNumber', 'instructionNumber', 'source', 'title', 'summary',
-  'deadline', 'extendedUntil', 'executor', 'controlType', 'status', 'executionMark',
+  'deadline', 'extendedUntil', 'executor', 'status', 'executionMark',
 ]);
 export const TASK_FIELDS = Object.freeze(['title', 'date', 'description', 'priority', 'completed']);
 export const REGISTRY_PAGINATION = Object.freeze({

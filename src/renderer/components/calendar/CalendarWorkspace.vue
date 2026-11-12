@@ -1,15 +1,17 @@
 <script setup>
 import { onBeforeUnmount, shallowRef, watch } from 'vue';
-import { onBeforeRouteLeave } from 'vue-router';
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from 'vue-router';
 import { CalendarDays, Plus, RefreshCw } from 'lucide-vue-next';
 import PageHeading from '../ui/PageHeading.vue';
 import MonthCalendar from './MonthCalendar.vue';
 import CalendarDayLists from './CalendarDayLists.vue';
 import TaskDialog from './TaskDialog.vue';
 import { useCalendar } from '../../composables/useCalendar.js';
+import { useCalendarTaskRoute } from '../../composables/useNotificationNavigation.js';
 import { useAppStore } from '../../stores/appStore.js';
 
 const app = useAppStore();
+const route = useRoute();
 const calendar = useCalendar();
 const {
   today, month, selectedDate, grid, instructions, tasks, checkpoints, ready, generation,
@@ -18,11 +20,15 @@ const {
 const editing = shallowRef(null);
 const editor = shallowRef(null);
 
-function newTask() { editing.value = { task: null, date: selectedDate.value, generation: generation.value }; }
-function editTask(task) { editing.value = { task, date: task.date, generation: generation.value }; }
+function newTask() { taskNavigation.cancelPending(); editing.value = { task: null, date: selectedDate.value, generation: generation.value }; }
+function editTask(task) { taskNavigation.cancelPending(); editing.value = { task, date: task.date, generation: generation.value }; }
+function closeTask() { taskNavigation.cancelPending(); editing.value = null; }
 function canLeave() { return editor.value?.requestClose() ?? true; }
+const taskNavigation = useCalendarTaskRoute({ app, route, calendar, editing, requestClose: canLeave });
+const { error: navigationError, loading: openingTask } = taskNavigation;
 
 onBeforeRouteLeave(canLeave);
+onBeforeRouteUpdate(taskNavigation.guardRouteUpdate);
 const unregister = app.registerUnsavedGuard(canLeave);
 watch(generation, () => { editing.value = null; });
 onBeforeUnmount(unregister);
@@ -45,6 +51,7 @@ onBeforeUnmount(unregister);
     </div>
 
     <template v-else>
+      <p v-if="openingTask" role="status">Открытие задачи…</p>
       <div v-if="monthError" class="calendar-alert" role="alert">
         <p>{{ monthError }}</p>
         <button class="calendar-button" @click="calendar.fetchMonth"><RefreshCw :size="15" aria-hidden="true" /> Повторить</button>
@@ -56,15 +63,15 @@ onBeforeUnmount(unregister);
         />
         <CalendarDayLists
           :date="selectedDate" :instructions="instructions" :tasks="tasks" :checkpoints="checkpoints" :today="today" :loading="dayLoading"
-          :error="dayError" :task-error="taskError" :busy-task-id="busyTaskId" :disabled="app.databaseSwitching"
+          :error="dayError" :task-error="navigationError || taskError" :busy-task-id="busyTaskId" :disabled="app.databaseSwitching"
           @new-task="newTask" @open-task="editTask" @toggle-task="calendar.toggleTask" @retry="calendar.fetchDay"
         />
       </div>
     </template>
 
     <TaskDialog
-      v-if="editing" ref="editor" :task="editing.task" :date="editing.date" :generation="editing.generation"
-      :save-task="calendar.saveTask" :remove-task="calendar.removeTask" @close="editing = null"
+      v-if="editing" :key="`${editing.generation}:${editing.task?.id ?? 'new'}`" ref="editor" :task="editing.task" :date="editing.date" :generation="editing.generation"
+      :save-task="calendar.saveTask" :remove-task="calendar.removeTask" @close="closeTask"
     />
   </section>
 </template>

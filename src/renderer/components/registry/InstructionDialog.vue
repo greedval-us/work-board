@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, shallowRef, u
 import { FileText, Trash2, X } from 'lucide-vue-next';
 import { instructionDeadline, INSTRUCTION_STATUSES } from '../../../shared/registry.js';
 import { ENTITY_TYPES } from '../../../shared/constants/entities.js';
-import { REGISTRY_OPTION_LABELS } from '../../../shared/constants/settings.js';
+import { INSTRUCTION_OPTION_LABELS } from '../../../shared/constants/settings.js';
 import { createDialogMotion } from '../../infrastructure/dialogMotion.js';
 import ConfirmDialog from './ConfirmDialog.vue';
 import ControlCardDialog from './ControlCardDialog.vue';
@@ -31,7 +31,7 @@ const errorId = useId();
 const form = reactive(createInstructionDraft(props.record));
 const app = useAppStore();
 const generation = app.database?.generation;
-const optionsMissing = computed(() => Object.keys(REGISTRY_OPTION_LABELS).some(field => !app.registryOptions[field].length));
+const optionsMissing = computed(() => Object.keys(INSTRUCTION_OPTION_LABELS).some(field => !app.registryOptions[field].length));
 const attachmentBusy = shallowRef(false);
 const initialValue = JSON.stringify(form);
 const initialSchedule = JSON.stringify(form.controlSchedule);
@@ -130,14 +130,14 @@ defineExpose({ requestClose, dirty, enterSurface, leaveSurface });
         <div class="registry-dialog-body">
           <p v-if="props.error" :id="errorId" ref="errorElement" class="registry-form-error" role="alert" tabindex="-1">{{ props.error }}</p>
           <p v-if="optionsMissing" class="registry-help registry-options-hint">
-            Добавьте значения в раздел «Списки для реестра» в <RouterLink to="/settings">настройках</RouterLink>.
+            Добавьте варианты для карточки указания в <RouterLink to="/settings">настройках</RouterLink>.
           </p>
           <fieldset class="registry-form-grid" :disabled="busy || !props.canEdit" :aria-describedby="props.error ? errorId : undefined">
             <label class="registry-field"><span>Дата постановки на контроль *</span><input v-model="form.controlDate" name="controlDate" type="date" required /></label>
             <label class="registry-field"><span>Входящий номер</span><input v-model="form.incomingNumber" name="incomingNumber" type="text" :maxlength="INSTRUCTION_FORM_LIMITS.incomingNumber" placeholder="Например, 001/в" /></label>
             <label class="registry-field"><span>Подписной номер *</span><input ref="instructionNumber" v-model="form.instructionNumber" name="instructionNumber" type="text" required :maxlength="INSTRUCTION_FORM_LIMITS.instructionNumber" /></label>
             <label class="registry-field">
-              <span>{{ REGISTRY_OPTION_LABELS.source }}</span>
+              <span>{{ INSTRUCTION_OPTION_LABELS.source }}</span>
               <select v-model="form.source" name="source">
                 <option value="">Не указано</option>
                 <option v-for="value in optionsFor('source')" :key="value" :value="value">{{ value }}</option>
@@ -148,20 +148,13 @@ defineExpose({ requestClose, dirty, enterSurface, leaveSurface });
             <label class="registry-field"><span>Срок исполнения *</span><input v-model="form.deadline" name="deadline" type="date" required /></label>
             <label class="registry-field"><span>Продлён до</span><input v-model="form.extendedUntil" name="extendedUntil" type="date" :min="form.deadline || undefined" /></label>
             <label class="registry-field">
-              <span>{{ REGISTRY_OPTION_LABELS.executor }} *</span>
+              <span>{{ INSTRUCTION_OPTION_LABELS.executor }} *</span>
               <select v-model="form.executor" name="executor" required>
                 <option value="" disabled>Выберите исполнителя</option>
                 <option v-for="value in optionsFor('executor')" :key="value" :value="value">{{ value }}</option>
               </select>
             </label>
-            <label class="registry-field">
-              <span>{{ REGISTRY_OPTION_LABELS.controlType }}</span>
-              <select v-model="form.controlType" name="controlType">
-                <option value="">Не указано</option>
-                <option v-for="value in optionsFor('controlType')" :key="value" :value="value">{{ value }}</option>
-              </select>
-            </label>
-            <label class="registry-field registry-field-wide"><span>Статус исполнения *</span><select v-model="form.status" name="status" required><option v-for="(label, value) in INSTRUCTION_STATUSES" :key="value" :value="value">{{ label }}</option></select></label>
+            <label class="registry-field"><span>Статус исполнения *</span><select v-model="form.status" name="status" required><option v-for="(label, value) in INSTRUCTION_STATUSES" :key="value" :value="value">{{ label }}</option></select></label>
             <label class="registry-field registry-field-wide"><span>Отметка об исполнении</span><textarea v-model="form.executionMark" name="executionMark" rows="3" :maxlength="INSTRUCTION_FORM_LIMITS.executionMark" placeholder="Комментарий к исполнению" /></label>
           </fieldset>
           <InstructionControlSchedule ref="scheduleEditor" v-model="form.controlSchedule" :control-date="form.controlDate"

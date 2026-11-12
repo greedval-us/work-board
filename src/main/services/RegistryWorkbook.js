@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import { CHECKPOINT_FILTER_LABELS, formatDate, INSTRUCTION_COLUMNS, INSTRUCTION_STATUSES, localDate, normalizeListRequest } from '../../shared/registry.js';
+import { CONTROL_FREQUENCIES } from '../../shared/controlSchedule.js';
 import { WORKBOOK_CONFIG as config, INSTRUCTION_COLUMN_WIDTHS } from '../config/workbook.js';
 
 export function createRegistryWorkbook({ rows, request = {}, exportedAt = new Date() }) {
@@ -16,6 +17,7 @@ export function createRegistryWorkbook({ rows, request = {}, exportedAt = new Da
     const row = sheet.addRow({ ...item, id: item.id == null ? '' : String(item.id), controlDate: formatDate(item.controlDate),
       deadline: formatDate(item.deadline), extendedUntil: formatDate(item.extendedUntil),
       nextCheckpoint: formatDate(item.nextCheckpoint),
+      controlFrequency: item.controlFrequency ? CONTROL_FREQUENCIES[item.controlFrequency] ?? '' : '',
       executionMark: [INSTRUCTION_STATUSES[item.status], item.executionMark].filter(Boolean).join(' — ') });
     row.alignment = alignment;
     row.font = font;

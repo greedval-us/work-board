@@ -1,11 +1,12 @@
 <script setup>
 import { computed, nextTick, shallowRef, useId, useTemplateRef, watch, watchEffect } from 'vue';
 import { ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-vue-next';
-import { CONTROL_FREQUENCIES, CONTROL_MARK_LIMIT, listControlCheckpoints } from '../../../shared/controlSchedule.js';
+import { CONTROL_FREQUENCIES, CONTROL_MARK_LIMIT, listControlCheckpoints, moveControlCheckpoint } from '../../../shared/controlSchedule.js';
 import { DATE_LIMITS } from '../../../shared/constants/dates.js';
 import { daysInMonth, formatDate, localDate, validateDate } from '../../../shared/dates.js';
 import { getUrgency, INSTRUCTION_STATUS } from '../../../shared/registry.js';
 import { moveMonth } from '../../domain/calendarDates.js';
+import { errorMessage } from '../../infrastructure/errorMessage.js';
 
 const props = defineProps({
   controlDate: { type: String, default: '' },
@@ -19,25 +20,30 @@ const customDateInput = useTemplateRef('customDateInput');
 const sectionId = useId();
 const customDate = shallowRef('');
 const openDate = shallowRef(isDate(props.selectedDate) ? props.selectedDate : '');
+const plannedDate = shallowRef(openDate.value);
+const moveError = shallowRef('');
+const actualDateDrafts = shallowRef({});
 const editedHistoryDate = shallowRef('');
 const month = shallowRef(openDate.value ? openDate.value.slice(0, 7) : startingMonth(schedule.value));
 const recurring = computed(() => schedule.value.frequency && schedule.value.frequency !== 'custom');
 const custom = computed(() => schedule.value.frequency === 'custom');
-const configuredDates = computed(() => new Set(custom.value ? schedule.value.customDates : []));
+const configuredDates = computed(() => new Set(custom.value ? effectiveCustomDates(schedule.value) : []));
 const invalidCustomDate = computed(() => [...configuredDates.value].find(date => !inControlPeriod(date)));
-const duplicateDate = computed(() => configuredDates.value.has(customDate.value));
+const invalidCheckpointDate = computed(() => invalidCustomDate.value || schedule.value.moves?.find(move => !inControlPeriod(move.to))?.to);
+const duplicateDate = computed(() => configuredDates.value.has(customDate.value) || schedule.value.customDates.includes(customDate.value));
 const canAddDate = computed(() => !props.disabled && inControlPeriod(customDate.value) && !duplicateDate.value);
 const showPreview = computed(() => Boolean(recurring.value || configuredDates.value.size || schedule.value.marks.length || editedHistoryDate.value));
-const marksByDate = computed(() => new Map(schedule.value.marks.map(({ date, text }) => [date, text])));
+const marksByDate = computed(() => new Map(schedule.value.marks.map(mark => [mark.date, mark])));
 
 const rows = computed(() => {
   const [year, monthNumber] = month.value.split('-').map(Number);
   const from = `${month.value}-01`;
   const to = `${month.value}-${daysInMonth(year, monthNumber)}`;
+  const moves = new Map((schedule.value.moves ?? []).map(move => [move.from, move.to]));
   const validSchedule = {
     ...schedule.value,
     firstDate: inControlPeriod(schedule.value.firstDate) ? schedule.value.firstDate : '',
-    customDates: [...configuredDates.value].filter(inControlPeriod),
+    customDates: schedule.value.customDates.filter(date => inControlPeriod(moves.get(date) ?? date)),
   };
   const checkpoints = listControlCheckpoints(validSchedule, { from, to, deadline: props.deadline });
   const byDate = new Map(checkpoints.map(row => [row.date, row]));
@@ -45,13 +51,20 @@ const rows = computed(() => {
   for (const date of [...configuredDates.value, editedHistoryDate.value]) {
     if (date >= from && date <= to && !byDate.has(date)) byDate.set(date, { date, mark: '', scheduled: false });
   }
+  // A changed control period must not hide a move that the user needs to repair or cancel.
+  for (const [originalDate, date] of moves) {
+    if (date < from || date > to) continue;
+    const row = byDate.get(date) ?? { date, mark: marksByDate.value.get(date)?.text ?? '', scheduled: false };
+    byDate.set(date, { ...row, originalDate, scheduled: row.scheduled && inControlPeriod(date) });
+  }
   const today = localDate();
   return [...byDate.values()].sort((left, right) => left.date.localeCompare(right.date)).map(row => {
     const configured = configuredDates.value.has(row.date);
     return {
       ...row,
       configured,
-      canOpen: Boolean(row.scheduled || row.mark || editedHistoryDate.value === row.date),
+      movable: Boolean(row.scheduled || row.originalDate),
+      canOpen: Boolean(row.scheduled || row.originalDate || row.mark || editedHistoryDate.value === row.date),
       status: checkpointStatus(row, today, configured),
     };
   });
@@ -66,12 +79,18 @@ function inControlPeriod(date) {
   return isDate(date) && (!props.controlDate || date >= props.controlDate) && (!props.deadline || date <= props.deadline);
 }
 
+function effectiveCustomDates(value) {
+  const moves = new Map((value.moves ?? []).map(move => [move.from, move.to]));
+  return value.customDates.map(date => moves.get(date) ?? date).sort();
+}
+
 function startingMonth(value) {
   const today = localDate();
   const recentMark = value.marks.at(-1)?.date;
   if (value.frequency === 'custom' && value.customDates.length) {
-    const upcoming = value.customDates.find(date => date >= today);
-    return (upcoming || value.customDates.at(-1)).slice(0, 7);
+    const dates = effectiveCustomDates(value);
+    const upcoming = dates.find(date => date >= today);
+    return (upcoming || dates.at(-1)).slice(0, 7);
   }
   if (value.frequency && isDate(value.firstDate)) {
     if (value.firstDate > today) return value.firstDate.slice(0, 7);
@@ -86,21 +105,24 @@ function selectFrequency(frequency) {
   const fixed = frequency && frequency !== 'custom';
   const firstDate = fixed ? schedule.value.firstDate || (inControlPeriod(props.controlDate) ? props.controlDate : '') : '';
   const updated = { ...schedule.value, frequency, firstDate, customDates: [] };
+  delete updated.moves;
   schedule.value = updated;
   customDate.value = '';
   showMonth(startingMonth(updated));
 }
 
 function selectFirstDate(date) {
-  if (props.disabled) return;
-  schedule.value = { ...schedule.value, firstDate: date };
+  if (props.disabled || date === schedule.value.firstDate) return;
+  const updated = { ...schedule.value, firstDate: date };
+  delete updated.moves;
+  schedule.value = updated;
   if (isDate(date)) showMonth(date.slice(0, 7));
 }
 
 function addCustomDate() {
   if (!canAddDate.value) return;
   const date = customDate.value;
-  schedule.value = { ...schedule.value, customDates: [...configuredDates.value, date].sort() };
+  schedule.value = { ...schedule.value, customDates: [...schedule.value.customDates, date].sort() };
   customDate.value = '';
   showMonth(date.slice(0, 7));
   customDateInput.value?.focus();
@@ -108,8 +130,14 @@ function addCustomDate() {
 
 function removeCustomDate(date) {
   if (props.disabled) return;
-  schedule.value = { ...schedule.value, customDates: schedule.value.customDates.filter(value => value !== date) };
-  if (openDate.value === date && !marksByDate.value.get(date)?.trim()) toggleMark(date);
+  const originalDate = schedule.value.moves?.find(move => move.to === date)?.from ?? date;
+  const updated = { ...schedule.value, customDates: schedule.value.customDates.filter(value => value !== originalDate) };
+  if (updated.moves) {
+    updated.moves = updated.moves.filter(move => move.from !== originalDate);
+    if (!updated.moves.length) delete updated.moves;
+  }
+  schedule.value = updated;
+  if (openDate.value === date && !marksByDate.value.get(date)?.text.trim()) toggleMark(date);
   customDateInput.value?.focus();
 }
 
@@ -117,6 +145,8 @@ function showMonth(value) {
   if (!isDate(`${value}-01`)) return;
   month.value = value;
   openDate.value = '';
+  plannedDate.value = '';
+  moveError.value = '';
   editedHistoryDate.value = '';
 }
 
@@ -127,15 +157,76 @@ function selectMonth(event) {
 
 function toggleMark(date) {
   openDate.value = openDate.value === date ? '' : date;
+  plannedDate.value = openDate.value;
+  moveError.value = '';
   editedHistoryDate.value = '';
+}
+
+function actualDateDraft(row) {
+  const mark = marksByDate.value.get(row.date);
+  return actualDateDrafts.value[row.date] ?? {
+    date: mark?.actualDate ?? (mark ? row.date : localDate()),
+    explicit: Boolean(mark?.actualDate || !mark),
+  };
+}
+
+function updateActualDate(row, date) {
+  if (props.disabled) return;
+  actualDateDrafts.value = { ...actualDateDrafts.value, [row.date]: { date, explicit: true } };
+  const mark = marksByDate.value.get(row.date);
+  if (mark?.text) updateMark(row, mark.text);
 }
 
 function updateMark(row, text) {
   if (props.disabled) return;
   if (!row.scheduled) editedHistoryDate.value = row.date;
+  const draft = actualDateDraft(row);
+  actualDateDrafts.value = { ...actualDateDrafts.value, [row.date]: draft };
   const marks = schedule.value.marks.filter(mark => mark.date !== row.date);
-  if (text) marks.push({ date: row.date, text });
+  if (text) marks.push({ date: row.date, text, ...(draft.explicit ? { actualDate: draft.date } : {}) });
   schedule.value = { ...schedule.value, marks: marks.sort((left, right) => left.date.localeCompare(right.date)) };
+}
+
+function updatePlannedDate(date) {
+  if (props.disabled) return;
+  plannedDate.value = date;
+  moveError.value = '';
+}
+
+async function moveCheckpoint(row, date = plannedDate.value) {
+  if (props.disabled || !row.movable || date === row.date) return;
+  try {
+    const updated = moveControlCheckpoint(schedule.value, row.date, date, { controlDate: props.controlDate, deadline: props.deadline });
+    const drafts = { ...actualDateDrafts.value };
+    if (drafts[row.date]) {
+      const actualDate = updated.marks.find(mark => mark.date === date)?.actualDate;
+      drafts[date] = actualDate ? { date: actualDate, explicit: true } : drafts[row.date];
+      delete drafts[row.date];
+    }
+    actualDateDrafts.value = drafts;
+    schedule.value = updated;
+    showMonth(date.slice(0, 7));
+    openDate.value = date;
+    plannedDate.value = date;
+    await focusMark(date);
+  } catch (error) {
+    moveError.value = errorMessage(error, 'Не удалось перенести дату контроля.');
+  }
+}
+
+async function cancelMove(row) {
+  if (props.disabled || !row.originalDate) return;
+  if (inControlPeriod(row.originalDate)) return moveCheckpoint(row, row.originalDate);
+  const updated = { ...schedule.value, moves: schedule.value.moves.filter(move => move.from !== row.originalDate) };
+  if (!updated.moves.length) delete updated.moves;
+  schedule.value = updated;
+  moveError.value = '';
+  if (marksByDate.value.get(row.date)?.text.trim()) await focusMark(row.date);
+  else {
+    openDate.value = '';
+    plannedDate.value = '';
+    editedHistoryDate.value = '';
+  }
 }
 
 function checkpointStatus(row, today, configured) {
@@ -145,16 +236,21 @@ function checkpointStatus(row, today, configured) {
   return urgency.tone === 'info' ? { ...urgency, label: 'По графику' } : urgency;
 }
 
+async function focusMark(date) {
+  await nextTick();
+  if (openDate.value !== date) return false;
+  const input = section.value?.querySelector(`[data-checkpoint-date="${date}"] textarea`);
+  input?.focus();
+  return Boolean(input && input.ownerDocument.activeElement === input);
+}
+
 async function focusSelectedDate() {
   const date = props.selectedDate;
   if (!isDate(date)) return false;
   showMonth(date.slice(0, 7));
   openDate.value = date;
-  await nextTick();
-  if (props.selectedDate !== date) return false;
-  const input = section.value?.querySelector(`[data-checkpoint-date="${date}"] textarea`);
-  input?.focus();
-  return Boolean(input && input.ownerDocument.activeElement === input);
+  plannedDate.value = date;
+  return focusMark(date);
 }
 
 watch(() => props.selectedDate, focusSelectedDate);
@@ -194,9 +290,9 @@ defineExpose({ focusSelectedDate });
     </fieldset>
     <p v-if="duplicateDate" class="registry-help" role="status">Эта дата уже в графике.</p>
     <p v-else-if="custom && !configuredDates.size" class="registry-help">Добавьте даты промежуточного контроля.</p>
-    <p v-if="invalidCustomDate" class="control-schedule-warning">
-      Дата {{ formatDate(invalidCustomDate) }} вне периода контроля.
-      <button type="button" class="registry-inline-action" @click="showMonth(invalidCustomDate.slice(0, 7))">Показать дату</button>
+    <p v-if="invalidCheckpointDate" class="control-schedule-warning">
+      Дата {{ formatDate(invalidCheckpointDate) }} вне периода контроля.
+      <button type="button" class="registry-inline-action" @click="showMonth(invalidCheckpointDate.slice(0, 7))">Показать дату</button>
     </p>
 
     <div v-if="showPreview" class="control-schedule-preview">
@@ -223,16 +319,44 @@ defineExpose({ focusSelectedDate });
               <time :datetime="row.date">{{ formatDate(row.date) }}</time>
               <span class="registry-status" :class="row.status.tone && `registry-tone-${row.status.tone}`">{{ row.status.label }}</span>
               <span v-if="row.mark && !row.scheduled" class="registry-help">Вне текущего графика</span>
+              <span v-if="row.originalDate" class="registry-help">Перенесено с {{ formatDate(row.originalDate) }}</span>
               <ChevronDown v-if="row.canOpen" class="control-schedule-chevron" :size="15" aria-hidden="true" />
             </component>
             <button v-if="row.configured" type="button" class="registry-button control-schedule-remove"
               :aria-label="`Убрать дату ${formatDate(row.date)} из графика`" :disabled="props.disabled" @click="removeCustomDate(row.date)"><X :size="15" aria-hidden="true" /></button>
           </div>
-          <label v-if="row.canOpen && openDate === row.date" class="registry-field control-schedule-mark">
-            <span>Отметка об исполнении</span>
-            <textarea rows="2" :readonly="props.disabled" :maxlength="CONTROL_MARK_LIMIT" :value="marksByDate.get(row.date) ?? ''"
-              :aria-label="`Отметка об исполнении за ${formatDate(row.date)}`" @input="updateMark(row, $event.target.value)" />
-          </label>
+          <div v-if="row.canOpen && openDate === row.date" class="control-schedule-editor">
+            <template v-if="row.movable">
+              <div class="control-schedule-reschedule">
+                <label class="registry-field">
+                  <span>Плановая дата контроля</span>
+                  <input name="control-planned-date" type="date" :value="plannedDate" :readonly="props.disabled"
+                    :min="props.controlDate || DATE_LIMITS.MIN" :max="props.deadline || DATE_LIMITS.MAX"
+                    @input="updatePlannedDate($event.target.value)" @keydown.enter.prevent="moveCheckpoint(row)" />
+                </label>
+                <button type="button" class="registry-button control-schedule-move" :disabled="props.disabled || !plannedDate || plannedDate === row.date"
+                  @click="moveCheckpoint(row)">Перенести</button>
+                <button v-if="row.originalDate" type="button" class="registry-button control-schedule-cancel-move" :disabled="props.disabled"
+                  @click="cancelMove(row)">Отменить перенос</button>
+              </div>
+              <p class="registry-help">Изменится только эта дата. Остальной график сохранится.</p>
+              <p v-if="row.originalDate && !inControlPeriod(row.originalDate)" class="registry-help">
+                Исходная дата вне периода контроля. При отмене переноса отметка сохранится в истории.
+              </p>
+              <p v-if="moveError" class="control-schedule-error" role="alert">{{ moveError }}</p>
+            </template>
+            <label class="registry-field control-schedule-actual-date">
+              <span>Фактическая дата исполнения</span>
+              <input name="control-actual-date" type="date" :readonly="props.disabled" :required="Boolean(marksByDate.get(row.date)?.text.trim())"
+                :value="actualDateDraft(row).date" :min="DATE_LIMITS.MIN" :max="DATE_LIMITS.MAX"
+                @input="updateActualDate(row, $event.target.value)" />
+            </label>
+            <label class="registry-field control-schedule-mark">
+              <span>Отметка об исполнении</span>
+              <textarea rows="2" :readonly="props.disabled" :maxlength="CONTROL_MARK_LIMIT" :value="marksByDate.get(row.date)?.text ?? ''"
+                :aria-label="`Отметка об исполнении за ${formatDate(row.date)}`" @input="updateMark(row, $event.target.value)" />
+            </label>
+          </div>
         </li>
       </ul>
     </div>
@@ -264,6 +388,11 @@ button.control-schedule-row-details:focus-visible { outline-offset: -3px; }
 .control-schedule-chevron { margin-left: auto; color: var(--muted); }
 [aria-expanded='true'] .control-schedule-chevron { transform: rotate(180deg); }
 .control-schedule-row .control-schedule-remove { min-height: 32px; padding: 5px 7px; margin-right: 4px; border-color: transparent; color: var(--muted); }
-.control-schedule-mark { padding: 10px 12px 12px; }
+.control-schedule-editor { display: grid; gap: 10px; padding: 10px 12px 12px; }
+.control-schedule-reschedule { display: flex; align-items: end; flex-wrap: wrap; gap: 8px; }
+.control-schedule-reschedule .registry-field { flex: 1 1 190px; }
+.control-schedule-reschedule .registry-button { min-height: 40px; }
+.control-schedule-actual-date { max-width: 280px; }
+.control-schedule-error { color: var(--error); font-size: 12px; }
 .control-schedule-mark textarea { min-height: 65px; }
 </style>

@@ -7,7 +7,8 @@ test('Excel exports all registry columns, leading zeros, literal formula text an
   const rows = Array.from({ length: 31 }, (_, index) => ({
     id: Number.MAX_SAFE_INTEGER - index, controlDate: '2026-10-23', incomingNumber: '0007', instructionNumber: `00${index}`,
     source: 'Канцелярия', title: '=HYPERLINK("https://example.invalid")', summary: 'Полный текст\nВторая строка',
-    deadline: '2026-10-31', extendedUntil: index ? '' : '2026-11-10', executor: 'Иванов И.И.', controlType: 'Плановый', status: 'in_progress', executionMark: 'Проверка',
+    deadline: '2026-10-31', extendedUntil: index ? '' : '2026-11-10', executor: 'Иванов И.И.',
+    controlFrequency: ['weekly', '', 'custom'][index % 3], status: 'in_progress', executionMark: 'Проверка',
   }));
   const workbook = createRegistryWorkbook({ rows, request: { filters: { executor: 'ИВАНОВ', deadlineFrom: '2026-10-01' } }, exportedAt: new Date('2026-10-23T09:00:00Z') });
   const loaded = new ExcelJS.Workbook();
@@ -34,8 +35,10 @@ test('Excel exports all registry columns, leading zeros, literal formula text an
   assert.equal(data.getCell('I3').value ?? '', '');
   assert.equal(data.getCell('J1').value, 'Ближайший промежуточный контроль');
   assert.equal(data.getCell('K2').value, 'Иванов И.И.');
-  assert.equal(data.getCell('L1').value, 'Вид контроля');
-  assert.equal(data.getCell('L2').value, 'Плановый');
+  assert.equal(data.getCell('L1').value, 'Промежуточный контроль');
+  assert.equal(data.getCell('L2').value, 'Еженедельно');
+  assert.equal(data.getCell('L3').value ?? '', '');
+  assert.equal(data.getCell('L4').value, 'Другое (даты вручную)');
   assert.match(data.getCell('M2').value, /В работе.*Проверка/);
   const metadata = JSON.stringify(loaded.getWorksheet('Параметры').getSheetValues());
   assert.match(metadata, /ИВАНОВ/);

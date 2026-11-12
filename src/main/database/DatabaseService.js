@@ -3,6 +3,7 @@ import path from 'node:path';
 import { prepareConnection, discardConnection } from './prepareConnection.js';
 import { AppError } from '../utils/AppError.js';
 import { runTransaction } from './transaction.js';
+import { rethrowAfterCleanup } from '../utils/cleanup.js';
 
 export class DatabaseService {
   #connection = null;
@@ -27,7 +28,7 @@ export class DatabaseService {
     if (!create && this.#connection && this.filePath === filePath) { persist(filePath); return this.getStatus(); }
     const { connection, created } = prepareConnection(filePath, create);
     try { persist(filePath); }
-    catch (error) { discardConnection({ connection, created }, filePath); throw error; }
+    catch (error) { rethrowAfterCleanup(error, [() => discardConnection({ connection, created }, filePath)]); }
     const oldConnection = this.#connection;
     this.#connection = connection;
     this.filePath = filePath;

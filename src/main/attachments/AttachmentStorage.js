@@ -6,6 +6,7 @@ import { ATTACHMENT_FILE_NAME_PATTERN, ATTACHMENT_STORAGE, DATABASE_FILE_SUFFIXE
 import { ENTITY_TYPES } from '../../shared/constants/entities.js';
 import { ValidationError } from '../../shared/registry.js';
 import { AppError } from '../utils/AppError.js';
+import { copyAtomicFile } from '../files/atomicFile.js';
 
 // Owns a single save's temporary files, including compensation after SQL rollback.
 class AttachmentWriteBatch {
@@ -125,21 +126,9 @@ export class AttachmentStorage {
   }
 
   async download(prepared, filePath, assertCurrent) {
-    const destination = path.resolve(filePath);
-    const databasePath = path.resolve(this.database.filePath).toLowerCase();
-    const lower = destination.toLowerCase();
-    if (this.#databaseFiles(databasePath).includes(lower) || lower.startsWith(path.resolve(prepared.root).toLowerCase() + path.sep)) {
-      throw new ValidationError('Выберите место вне рабочей базы и папки вложений.');
-    }
-    const temporary = path.join(path.dirname(destination), `.${randomUUID()}${ATTACHMENT_STORAGE.DOWNLOAD_TEMP_SUFFIX}`);
-    try {
-      this.storedPath(prepared.root, prepared.relativePath);
-      await copyFile(prepared.source, temporary, constants.COPYFILE_EXCL);
-      assertCurrent();
-      renameSync(temporary, destination);
-    } finally {
-      try { await unlink(temporary); }
-      catch (error) { if (error.code !== 'ENOENT') this.logger.error('Не удалось удалить временный файл.', error); }
-    }
+    this.storedPath(prepared.root, prepared.relativePath);
+    await copyAtomicFile(prepared.source, filePath, {
+      getDatabasePaths: () => [this.database.filePath], assertCurrent,
+    });
   }
 }

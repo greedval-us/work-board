@@ -2,8 +2,12 @@ import { INSTRUCTION_FIELDS } from '../../shared/registry.js';
 import { emptyControlSchedule } from '../../shared/controlSchedule.js';
 import { emptyAttachmentChanges, snapshotAttachmentChanges } from './attachments.js';
 
-function snapshotControlSchedule({ frequency, firstDate, customDates, marks }) {
-  return { frequency, firstDate, customDates: [...customDates], marks: marks.map(({ date, text }) => ({ date, text })) };
+function snapshotControlSchedule({ frequency, firstDate, customDates, marks, moves }) {
+  return {
+    frequency, firstDate, customDates: [...customDates],
+    marks: marks.map(({ date, text, actualDate }) => ({ date, text, ...(actualDate === undefined ? {} : { actualDate }) })),
+    ...(moves === undefined ? {} : { moves: moves.map(({ from, to }) => ({ from, to })) }),
+  };
 }
 
 export function createInstructionDraft(record) {

@@ -6,6 +6,7 @@ import { useErrorStore } from './stores/errorStore.js';
 import { installErrorHandling } from './infrastructure/installErrorHandling.js';
 import './style.css';
 import './styles/motion.css';
+import './styles/notifications.css';
 
 const app = createApp(App);
 const pinia = createPinia();
