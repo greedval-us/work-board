@@ -19,7 +19,7 @@ app.setPath('userData', userData);
 const filePath = path.join(userData, 'background.sqlite');
 const seed = new DatabaseService({ filePath });
 seed.open(); new DatabaseLocation({ userData, database: seed }).save(filePath); seed.close();
-const output = path.join(PROJECT_ROOT, 'output'); mkdirSync(output, { recursive: true });
+const output = process.env.WORK_BOARD_SMOKE_OUTPUT ?? path.join(PROJECT_ROOT, 'output'); mkdirSync(output, { recursive: true });
 const wake = new EventEmitter();
 const notifications = [];
 const errors = [];

@@ -15,6 +15,7 @@ const panelId = useId();
 const titleId = useId();
 const expanded = shallowRef(false);
 const panelStyle = shallowRef({});
+const nativePopover = typeof HTMLElement.prototype.showPopover === 'function';
 let restoreFocus = false;
 
 const shortDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value.slice(8)}.${value.slice(5, 7)}` : value;
@@ -55,21 +56,42 @@ async function afterToggle(event) {
   else if (restoreFocus || document.activeElement === document.body) toggle.value?.focus({ preventScroll: true });
 }
 
-function closePanel() { panel.value?.hidePopover(); toggle.value?.focus({ preventScroll: true }); }
+function closePanel() {
+  if (nativePopover) panel.value?.hidePopover();
+  else { beforeToggle({ newState: 'closed' }); void afterToggle({ newState: 'closed' }); }
+  toggle.value?.focus({ preventScroll: true });
+}
+function toggleFallback() {
+  if (nativePopover) return;
+  if (expanded.value) closePanel();
+  else { beforeToggle({ newState: 'open' }); void afterToggle({ newState: 'open' }); }
+}
+function dismissFallback(event) {
+  if (!nativePopover && expanded.value && !panel.value?.contains(event.target) && !toggle.value?.contains(event.target)) {
+    // Clicking another control must keep focus on that control.
+    expanded.value = false;
+  }
+}
 function apply() {
   emit('apply');
   if (!props.filters.deadlineFrom || !props.filters.deadlineTo || props.filters.deadlineFrom <= props.filters.deadlineTo) closePanel();
 }
 function reset() { emit('reset'); closePanel(); }
 function resize() { if (expanded.value) positionPanel(); }
-onMounted(() => window.addEventListener('resize', resize));
-onBeforeUnmount(() => window.removeEventListener('resize', resize));
+onMounted(() => {
+  window.addEventListener('resize', resize);
+  if (!nativePopover) document.addEventListener('pointerdown', dismissFallback);
+});
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', resize);
+  if (!nativePopover) document.removeEventListener('pointerdown', dismissFallback);
+});
 </script>
 
 <template>
   <div ref="filterbar" class="registry-filter-container">
     <div class="registry-filterbar">
-      <button ref="toggle" type="button" class="registry-button registry-filter-toggle" :class="{ 'registry-filter-toggle-active': appliedConditions.length }" :popovertarget="panelId" :aria-controls="panelId" :aria-expanded="expanded" :disabled="props.disabled"><SlidersHorizontal :size="15" aria-hidden="true" />Фильтры<span v-if="appliedConditions.length" class="registry-filter-count">{{ appliedConditions.length }}</span></button>
+      <button ref="toggle" type="button" class="registry-button registry-filter-toggle" :class="{ 'registry-filter-toggle-active': appliedConditions.length }" :popovertarget="nativePopover ? panelId : undefined" :aria-controls="panelId" :aria-expanded="expanded" :disabled="props.disabled" @click="toggleFallback"><SlidersHorizontal :size="15" aria-hidden="true" />Фильтры<span v-if="appliedConditions.length" class="registry-filter-count">{{ appliedConditions.length }}</span></button>
       <div class="registry-filter-summary" :aria-label="`Применено: ${summary}`" :title="summary">
         <span v-if="!appliedConditions.length" class="registry-filter-all">Все указания</span>
         <span v-for="condition in appliedConditions" :key="condition.key" class="registry-filter-chip" :title="condition.detail">{{ condition.label }}</span>
@@ -77,7 +99,8 @@ onBeforeUnmount(() => window.removeEventListener('resize', resize));
       <span v-if="props.changed" class="registry-draft-label" title="Изменения фильтров ещё не применены"><span class="registry-draft-dot" aria-hidden="true" /><span>Не применено</span></span>
       <button v-if="appliedConditions.length || props.changed" type="button" class="registry-button registry-filter-reset" :disabled="props.disabled" aria-label="Сбросить фильтры" title="Сбросить фильтры" @click="reset"><RotateCcw :size="15" aria-hidden="true" /></button>
     </div>
-    <div :id="panelId" ref="panel" popover="auto" class="registry-filters registry-filter-panel" :style="panelStyle" :aria-labelledby="titleId" @beforetoggle="beforeToggle" @toggle="afterToggle" @keydown.esc.prevent.stop="closePanel">
+    <Teleport to="body" :disabled="nativePopover">
+    <div :id="panelId" ref="panel" :popover="nativePopover ? 'auto' : undefined" :data-open="expanded" :data-fallback="nativePopover ? undefined : true" :hidden="!nativePopover && !expanded" class="registry-filters registry-filter-panel" :style="panelStyle" :aria-labelledby="titleId" @beforetoggle="beforeToggle" @toggle="afterToggle" @keydown.esc.prevent.stop="closePanel">
       <form aria-label="Фильтры реестра" @submit.prevent="apply">
         <div class="registry-filter-panel-heading"><h2 :id="titleId">Фильтры</h2><button type="button" class="registry-button registry-filter-close" aria-label="Закрыть фильтры" @click="closePanel"><X :size="17" aria-hidden="true" /></button></div>
         <fieldset class="registry-filter-fields" :disabled="props.disabled">
@@ -92,5 +115,6 @@ onBeforeUnmount(() => window.removeEventListener('resize', resize));
         <div class="registry-filter-footer"><p v-if="props.error" class="registry-inline-error" role="alert">{{ props.error }}</p><p v-else class="registry-help">Все условия — одновременно. Даты включительно.</p><div class="registry-actions"><button class="registry-button" type="button" :disabled="props.disabled" @click="reset">Сбросить</button><button class="registry-button registry-button-primary" type="submit" :disabled="props.disabled">Применить</button></div></div>
       </form>
     </div>
+    </Teleport>
   </div>
 </template>

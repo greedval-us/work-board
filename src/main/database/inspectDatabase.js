@@ -1,5 +1,5 @@
 import { existsSync, statSync } from 'node:fs';
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync } from './sqlite.js';
 import { migrations } from './migrations.js';
 import { DATABASE_CONFIG, REQUIRED_DATABASE_COLUMNS } from './databaseConfig.js';
 import { AppError } from '../utils/AppError.js';

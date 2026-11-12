@@ -35,6 +35,12 @@ jobs:
         run: npm run build:win -- --publish never
       - name: Verify packaged application
         run: npm run test:package
+      - name: Build Windows 7–10 x86 without publishing
+        run: npm run build:win:legacy -- --publish never
+      - name: Verify legacy packaged application
+        run: npm run test:package:legacy
+      - name: Real legacy Electron x86 smoke
+        run: npm run test:desktop:legacy
       - name: Save Windows artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -42,6 +48,8 @@ jobs:
           path: |
             release/*.exe
             release/*.blockmap
+            release/legacy-win32/*.exe
+            release/legacy-win32/*.blockmap
           if-no-files-found: error
           retention-days: 14
           compression-level: 0

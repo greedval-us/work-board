@@ -1,0 +1,11 @@
+{
+  "name": "work-board",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "better-sqlite3": "9.6.0",
+    "electron-log": "5.4.3",
+    "exceljs": "4.4.0",
+    "jszip": "3.10.2"
+  }
+}

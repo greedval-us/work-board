@@ -11,5 +11,5 @@ export default defineConfig({
   cacheDir: '../../.cache/vite',
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   server: { host: DEV_SERVER.HOST, port: DEV_SERVER.PORT, strictPort: true },
-  build: { outDir: '../../build/renderer', emptyOutDir: true },
+  build: { outDir: '../../build/renderer', emptyOutDir: true, target: 'chrome108' },
 });

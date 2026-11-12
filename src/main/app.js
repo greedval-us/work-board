@@ -1,15 +1,15 @@
 import { app, BrowserWindow, Menu } from 'electron';
-import { fileURLToPath } from 'node:url';
+import { appPath } from './utils/appPaths.js';
 import { DEV_SERVER } from '../shared/constants/runtime.js';
 import { WINDOW_OPTIONS } from './config/window.js';
 
 export function createWindow() {
   const window = new BrowserWindow({
     title: 'Work Board',
-    icon: fileURLToPath(new URL('../../build/renderer/icons/app-256.png', import.meta.url)),
+    icon: appPath('build/renderer/icons/app-256.png'),
     ...WINDOW_OPTIONS,
     webPreferences: {
-      preload: fileURLToPath(new URL('../../build/main/preload.cjs', import.meta.url)),
+      preload: appPath('build/main/preload.cjs'),
       contextIsolation: true, nodeIntegration: false, sandbox: true,
     },
   });
@@ -28,7 +28,7 @@ export function createWindow() {
   }
   const loaded = devUrl
     ? window.loadURL(devUrl)
-    : window.loadFile(fileURLToPath(new URL('../../build/renderer/index.html', import.meta.url)));
+    : window.loadFile(appPath('build/renderer/index.html'));
   if (devUrl && process.env.WORK_BOARD_DEVTOOLS === '1') window.webContents.openDevTools({ mode: 'detach' });
   return { window, loaded };
 }

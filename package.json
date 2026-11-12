@@ -21,6 +21,8 @@
   "scripts": {
     "icons": "node scripts/generateIcons.mjs",
     "test:package": "node scripts/checkPackage.mjs",
+    "test:package:legacy": "node scripts/checkPackage.mjs --legacy",
+    "test:desktop:legacy": "node scripts/checkLegacyDesktop.mjs",
     "dev": "npm run build:preload && concurrently -k -s first \"vite\" \"vite build --config vite.preload.config.js --watch\" \"wait-on http://127.0.0.1:5173 build/main/preload.cjs && cross-env WORK_BOARD_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
     "start": "npm run build:client && electron .",
     "build:preload": "vite build --config vite.preload.config.js",
@@ -28,6 +30,8 @@
     "build": "npm run build:client",
     "pack:win": "npm run build:client && electron-builder --config electron-builder.config.cjs --win --dir",
     "build:win": "npm run build:client && electron-builder --config electron-builder.config.cjs --win nsis portable",
+    "prepare:win:legacy": "npm run build:client && vite build --config vite.legacy.config.js && node scripts/prepareLegacyWindows.mjs",
+    "build:win:legacy": "npm run prepare:win:legacy && electron-builder --config electron-builder.legacy.config.cjs --win nsis portable --ia32",
     "test": "node --test tests/main/*.test.js tests/shared/*.test.js tests/renderer/*.test.js",
     "test:desktop": "npm run build:client && node scripts/checkDesktop.mjs",
     "check": "npm test && npm run build:client"

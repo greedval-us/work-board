@@ -98,3 +98,15 @@ test('Ф‑21 dates and sorts checkpoint history by execution date with legacy a
   assert.match(filledRows[2], /Поздний план/);
   assert.match(filledRows[3], /Позднее исполнение/);
 });
+
+test('Ф‑21 sorts history without requiring toSorted or mutating the saved marks', async () => {
+  const marks = [
+    { date: '2026-11-20', text: 'Поздняя отметка' },
+    { date: '2026-11-05', text: 'Ранняя отметка' },
+  ];
+  Object.defineProperty(marks, 'toSorted', { value: undefined });
+  Object.freeze(marks);
+  const { history } = await report({}, marks);
+  assert.match(history, /05\.11\.2026[\s\S]*?Ранняя отметка[\s\S]*?20\.11\.2026[\s\S]*?Поздняя отметка/);
+  assert.equal(marks[0].date, '2026-11-20');
+});

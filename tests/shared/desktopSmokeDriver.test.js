@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { EventEmitter } from 'node:events';
 import { createContext, runInContext } from 'node:vm';
 import { DesktopSmokeDriver, assertWorkspaceFits } from '../../scripts/lib/DesktopSmokeDriver.mjs';
 
@@ -9,6 +10,22 @@ function rendererDriver(state) {
     timing: { conditionAttempts: 2, conditionPollMs: 0 },
   });
 }
+
+test('desktop smoke records renderer failures from both Electron console event formats', async () => {
+  const webContents = Object.assign(new EventEmitter(), { setBackgroundThrottling() {} });
+  const window = Object.assign(new EventEmitter(), {
+    webContents, setOpacity() {}, setSkipTaskbar() {}, setIgnoreMouseEvents() {},
+  });
+  const driver = new DesktopSmokeDriver(window, {});
+  driver.prepare();
+  webContents.emit('console-message', {}, 3, 'Legacy renderer failed');
+  webContents.emit('console-message', { level: 'error', message: 'Modern renderer failed' });
+  webContents.emit('console-message', {}, 2, 'Legacy warning');
+  webContents.emit('console-message', { level: 'warning', message: 'Modern warning' });
+  webContents.emit('preload-error', {}, 'preload.cjs', new Error('Preload failed'));
+  await Promise.resolve();
+  assert.deepEqual(driver.errors, ['Legacy renderer failed', 'Modern renderer failed', 'Preload failed']);
+});
 
 test('desktop smoke IPC returns envelope values and preserves application failure codes', async () => {
   const driver = rendererDriver({ window: { desktopAPI: { database: {

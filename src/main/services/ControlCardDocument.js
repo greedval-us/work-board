@@ -1,8 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import JSZip from 'jszip';
 import { formatDate } from '../../shared/dates.js';
+import { appPath } from '../utils/appPaths.js';
 
-const TEMPLATE = new URL('../templates/control-card-f21.docx', import.meta.url);
+const TEMPLATE = appPath('src/main/templates/control-card-f21.docx');
 const DOCUMENT = 'word/document.xml';
 const HISTORY_SECTION = /<!--F21_CHECKS_BEGIN-->([\s\S]*?)<!--F21_CHECKS_END-->/;
 const TABLE_ROW = /<w:tr(?=[\s>])[^>]*>[\s\S]*?<\/w:tr>/g;
@@ -46,7 +47,7 @@ function templateValues(fields, recordId) {
 
 function fillHistory(fragment, marks) {
   const rows = fragment.match(TABLE_ROW);
-  const sortedMarks = marks.toSorted((left, right) => (left.actualDate ?? left.date).localeCompare(right.actualDate ?? right.date)
+  const sortedMarks = [...marks].sort((left, right) => (left.actualDate ?? left.date).localeCompare(right.actualDate ?? right.date)
     || left.date.localeCompare(right.date));
   return Array.from({ length: Math.max(rows.length, sortedMarks.length) }, (_, index) => {
     const { date = '', actualDate, text = '' } = sortedMarks[index] ?? {};

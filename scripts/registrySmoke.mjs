@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync } from '../src/main/database/sqlite.js';
 import { app, dialog, ipcMain } from 'electron';
 import { createWindow } from '../src/main/app.js';
 import { createApplicationServices } from '../src/main/createApplicationServices.js';
@@ -12,6 +12,7 @@ import JSZip from 'jszip';
 import { addCalendarDays, formatDate, localDate } from '../src/shared/registry.js';
 import { PROJECT_ROOT } from './lib/runtime.mjs';
 import { DesktopSmokeDriver } from './lib/DesktopSmokeDriver.mjs';
+import { deferred } from './lib/deferred.mjs';
 
 const SMOKE_TIMEOUT_MS = 80_000;
 const userData = process.env.WORK_BOARD_SMOKE_USER_DATA;
@@ -61,7 +62,7 @@ dialog.showOpenDialog = async (_window, { title }) => {
   return openingFile ? { canceled: false, filePaths: [openingFile] } : { canceled: true, filePaths: [] };
 };
 const timeout = setTimeout(() => { console.error('Registry desktop smoke timed out.'); app.exit(1); }, SMOKE_TIMEOUT_MS);
-const output = path.join(PROJECT_ROOT, 'output');
+const output = process.env.WORK_BOARD_SMOKE_OUTPUT ?? path.join(PROJECT_ROOT, 'output');
 mkdirSync(output, { recursive: true });
 
 app.once('browser-window-created', (_event, window) => {
@@ -251,13 +252,13 @@ app.once('browser-window-created', (_event, window) => {
       await openFilters();
       await fill('.registry-filter-fields input,.registry-filter-fields select', { 0: 'Черновик фильтра' });
       await pressKey('Escape');
-      await wait("!document.querySelector('.registry-filters:popover-open') && document.activeElement?.classList.contains('registry-filter-toggle')");
+      await wait("!document.querySelector('.registry-filters[data-open=true]') && document.activeElement?.classList.contains('registry-filter-toggle')");
       assert.equal(await js("document.querySelector('.registry-count').textContent"), '27');
       await openFilters();
       assert.equal(await js("document.querySelector('[data-filter=instructionNumber]').value"), 'Черновик фильтра');
       await fill('.registry-filter-fields input,.registry-filter-fields select', { 0: '' });
       await click('Применить', '.registry-filters button');
-      await wait("!document.querySelector('.registry-filters:popover-open')");
+      await wait("!document.querySelector('.registry-filters[data-open=true]')");
       await click('Выгрузить Excel', '.registry-toolbar button');
       await wait("document.querySelector('.registry-notice')?.textContent.includes('27')");
       assert.equal(existsSync(exportFile), true);
@@ -412,7 +413,7 @@ app.once('browser-window-created', (_event, window) => {
       await fill(reportField('executorPhone'), { 0: '' });
       await fill(reportField('executionMark'), { 0: '' });
 
-      const cancellation = Promise.withResolvers();
+      const cancellation = deferred();
       cancelNextControlCardSave = cancellation.promise;
       await click('Сохранить Word', controlCardSave);
       await wait(`document.querySelector('${controlCardSave}')?.disabled`);
@@ -891,7 +892,7 @@ app.once('browser-window-created', (_event, window) => {
       await openFilters();
       assert.equal(await js("document.querySelector('.registry-filters').getAnimations().filter(a=>a.playState==='running').length"), 0);
       await pressKey('Escape');
-      await wait("!document.querySelector('.registry-filters:popover-open')");
+      await wait("!document.querySelector('.registry-filters[data-open=true]')");
       await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
       await js("document.querySelector('nav a[href=\"#/calendar\"]').click(); document.querySelector('nav a[href=\"#/settings\"]').click(); document.querySelector('nav a[href=\"#/\"]').click()");
       await wait("document.querySelector('h1')?.textContent === 'Реестр указаний' && location.hash === '#/' && !document.querySelector('.workspace-enter-active,.workspace-leave-active')");

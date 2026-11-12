@@ -79,8 +79,9 @@ export class DesktopSmokeDriver {
     window.setSkipTaskbar(true);
     window.setIgnoreMouseEvents(true);
     window.webContents.on('preload-error', (_event, _path, error) => this.errors.push(error.message));
-    window.webContents.on('console-message', (details) => {
-      if (details.level === 'error') this.errors.push(details.message);
+    window.webContents.on('console-message', (details, legacyLevel, legacyMessage) => {
+      // Electron 22 emits positional arguments; recent versions use details.
+      if (legacyLevel === 3 || details.level === 'error') this.errors.push(legacyMessage ?? details.message);
     });
   };
 
@@ -120,7 +121,7 @@ export class DesktopSmokeDriver {
 
   openFilters = async () => {
     await this.js("document.querySelector('.registry-filter-toggle').click()");
-    await this.wait("Boolean(document.querySelector('.registry-filters:popover-open')) && document.querySelector('.registry-filter-toggle').getAttribute('aria-expanded') === 'true' && Boolean(document.activeElement?.closest('.registry-filters'))");
+    await this.wait("Boolean(document.querySelector('.registry-filters[data-open=true]')) && document.querySelector('.registry-filter-toggle').getAttribute('aria-expanded') === 'true' && Boolean(document.activeElement?.closest('.registry-filters'))");
   };
 
   pressKey = async (keyCode, modifiers = []) => {

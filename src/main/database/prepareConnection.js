@@ -1,6 +1,6 @@
 import { closeSync, mkdirSync, openSync, rmSync } from 'node:fs';
 import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync } from './sqlite.js';
 import { migrate } from './migrations.js';
 import { DATABASE_CONFIG } from './databaseConfig.js';
 import { inspectDatabase } from './inspectDatabase.js';

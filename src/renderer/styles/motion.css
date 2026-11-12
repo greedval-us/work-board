@@ -55,6 +55,13 @@
 @starting-style {
   .registry-filter-panel:popover-open { opacity: 0; transform: translate3d(0, -6px, 0) scale(.98); }
 }
+/* Chromium 108 has no Popover API. The teleported fallback stays above the page. */
+.registry-filter-panel[data-fallback] { z-index: 40; }
+.registry-filter-panel[data-fallback][data-open='true'] { opacity: 1; transform: none; pointer-events: auto; animation: legacy-filter-enter 240ms var(--motion-ease-out); }
+@keyframes legacy-filter-enter {
+  from { opacity: 0; transform: translate3d(0, -6px, 0) scale(.98); }
+  to { opacity: 1; transform: none; }
+}
 
 :is(.registry-dialog, .calendar-task-dialog, .calendar-confirm-dialog) { transform-origin: center; }
 :is(.registry-dialog, .calendar-task-dialog, .calendar-confirm-dialog)::backdrop {

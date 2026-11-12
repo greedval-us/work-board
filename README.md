@@ -88,6 +88,37 @@ JavaScript, ESM, Composition API. Данные хранятся в выбран�
 Для разработки и CI используется Node.js **24** из `.nvmrc` и npm.
 Минимальная версия в `package.json` — 22.13.
 
+Для **Windows 7 SP1 / 8 / 8.1 / 10, 32 бита** предусмотрена отдельная сборка:
+
+```powershell
+npm ci
+npm run build:win:legacy -- --publish never
+npm run test:package:legacy
+npm run test:desktop:legacy
+```
+
+Установщик `Work Board Setup 0.1.0-win7-10-ia32.exe` и portable
+`Work Board 0.1.0-win7-10-ia32.exe` находятся в `release/legacy-win32/`.
+Эта x86-сборка работает также на 64-разрядной Windows через WOW64. Node.js на
+компьютере пользователя устанавливать не требуется. Сборка выполняется на современной Windows
+с Node.js 24; требования к машине разработчика не являются требованиями к установленной программе.
+
+Совместимый профиль использует Electron 22.3.27 (Node 16 / Chromium 108) и
+better-sqlite3 9.6.0, основной код собирается в CommonJS. Зависимости фиксируются
+отдельным `packaging/legacy/package-lock.json`; нативный SQLite скачивается для
+Electron ABI 110 / ia32. Они устанавливаются только в `.cache/legacy-win32/app`,
+не заменяя современный Electron и зависимости разработки. Файлы базы и вложений
+совместимы с современной сборкой. После обновления общих runtime-зависимостей
+нужно синхронно обновлять legacy manifest и lockfile.
+
+Electron 22 — последняя ветка для Windows 7/8/8.1; её поддержка завершена
+([объявление Electron](https://www.electronjs.org/blog/windows-7-to-8-1-deprecation-notice)).
+Для Windows 10/11 x64 остаётся современная сборка `npm run build:win`.
+Автоматические проверки legacy запускают настоящий Electron x86 на машине сборки:
+проверяют запуск, SQLite, экспорт, фильтры, календарь и фоновые напоминания,
+а также разрядность EXE и содержимое portable. Они не заменяют проверку на отдельной
+машине с Windows 7/8/8.1; внешний вид и доставка системных уведомлений зависят от Windows.
+
 ```sh
 npm ci
 npm run dev
