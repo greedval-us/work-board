@@ -185,3 +185,28 @@ for (const selectedGeneration of [1, 2]) test(`a native click during bootstrap i
   await flush();
   assert.equal(store.openRequest, selectedGeneration === 1 ? 1 : 0);
 });
+
+test('concurrent notification reads share IPC while a newer revision owns loading and the displayed snapshot', async t => {
+  const previous = deferred();
+  const fresh = deferred();
+  let calls = 0;
+  const { app, store } = setup(t, {
+    list: () => ++calls === 1 ? previous.promise : fresh.promise,
+  });
+  const first = store.refresh();
+  const duplicate = store.refresh();
+  await flush();
+  assert.equal(calls, 1);
+  app.revision++;
+  const latest = store.refresh();
+  await flush();
+  previous.resolve(snapshot([reminder({ popupPending: false })]));
+  assert.deepEqual(await Promise.all([first, duplicate]), [true, true]);
+  assert.deepEqual(store.items, []);
+  assert.equal(store.loading, true);
+  fresh.resolve(snapshot([reminder({ unread: false, popupPending: false })]));
+  assert.equal(await latest, true);
+  assert.equal(store.unreadCount, 0);
+  assert.equal(store.loading, false);
+  assert.equal(calls, 2);
+});

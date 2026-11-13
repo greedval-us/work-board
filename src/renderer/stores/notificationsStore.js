@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { computed, onScopeDispose, shallowRef, watch } from 'vue';
 import { errorMessage } from '../infrastructure/errorMessage.js';
-import { createRequestScope, createSingleFlight } from '../infrastructure/requestScope.js';
+import { createRequestChannel } from '../infrastructure/requestScope.js';
 import { notificationService } from '../services/NotificationService.js';
 import { useAppStore } from './appStore.js';
 
@@ -27,8 +27,7 @@ export function createNotificationsStore({
     const unreadCount = computed(() => items.value.filter(item => item.unread).length);
     const ready = computed(() => Boolean(app.database?.ready) && !app.databaseSwitching);
     const generation = computed(() => app.database?.generation);
-    const scope = createRequestScope();
-    const flight = createSingleFlight();
+    const requests = createRequestChannel();
     const shown = new Set();
     let queue = Promise.resolve();
     let disposed = false;
@@ -61,8 +60,7 @@ export function createNotificationsStore({
       const operation = queue.then(async () => {
         if (disposed || !ready.value || generation.value !== source) return false;
         const key = keyFor();
-        scope.invalidate();
-        flight.clear();
+        requests.invalidate();
         loading.value = false;
         requestError.value = '';
         try {
@@ -100,12 +98,12 @@ export function createNotificationsStore({
       await queue;
       if (disposed || !ready.value) return false;
       const key = keyFor();
-      const ticket = scope.issue(key);
+      const ticket = requests.issue(key);
       const source = generation.value;
       loading.value = true;
       requestError.value = '';
       try {
-        const value = await flight.run(key, () => service.list({ generation: source }));
+        const value = await requests.run(key, () => service.list({ generation: source }));
         if (current(ticket, key)) {
           applySnapshot(value);
           offerPopup();
@@ -118,8 +116,7 @@ export function createNotificationsStore({
     }
 
     function invalidate(databaseChanged = false) {
-      scope.invalidate();
-      flight.clear();
+      requests.invalidate();
       loading.value = false;
       requestError.value = '';
       if (databaseChanged) { items.value = []; today.value = ''; popup.value = null; shown.clear(); delivery.value = { mode: 'in-app', error: '' }; }
@@ -134,7 +131,7 @@ export function createNotificationsStore({
       }
     }, { flush: 'sync' });
     watch(() => app.revision, () => invalidate(), { flush: 'sync' });
-    onScopeDispose(() => { disposed = true; scope.dispose(); flight.clear(); shown.clear(); });
+    onScopeDispose(() => { disposed = true; requests.dispose(); shown.clear(); });
 
     function acquire() {
       consumers++;

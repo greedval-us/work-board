@@ -378,3 +378,56 @@ test('page focus updates its local clock and its listener is removed on disposal
   scope.stop();
   assert.equal(listeners.has('focus'), false);
 });
+
+test('forced calendar refreshes share pending reads and preserve only the month while loading', async t => {
+  const month = deferred();
+  const day = deferred();
+  let monthCalls = 0;
+  let dayCalls = 0;
+  const { store } = setup(t, {
+    month: () => ++monthCalls === 1 ? { days: [{ date: '2026-10-23', tasks: 1 }] } : month.promise,
+    day: () => ++dayCalls === 1 ? { instructions: [], tasks: [{ id: 1 }], checkpoints: [] } : day.promise,
+  });
+  await store.refresh();
+  const reads = [store.fetchMonth({ force: true }), store.fetchDay({ force: true }),
+    store.fetchMonth({ force: true }), store.fetchDay({ force: true })];
+  await nextTick();
+  assert.equal(monthCalls, 2);
+  assert.equal(dayCalls, 2);
+  assert.equal(store.monthDays[0].tasks, 1);
+  assert.deepEqual(store.tasks, []);
+  assert.equal(store.monthLoading, true);
+  assert.equal(store.dayLoading, true);
+  month.resolve({ days: [{ date: '2026-10-23', tasks: 2 }] });
+  day.resolve({ instructions: [], tasks: [{ id: 2 }], checkpoints: [] });
+  await Promise.all(reads);
+  await store.refresh();
+  assert.equal(monthCalls, 2);
+  assert.equal(dayCalls, 2);
+  assert.equal(store.monthDays[0].tasks, 2);
+  assert.equal(store.tasks[0].id, 2);
+  assert.equal(store.monthLoading, false);
+  assert.equal(store.dayLoading, false);
+});
+
+test('a failed forced calendar refresh keeps its successful cache available for returning navigation', async t => {
+  let fail = false;
+  let calls = 0;
+  const { store } = setup(t, {
+    month: () => { calls++; if (fail) throw new Error('private SQLite detail'); return { days: [{ date: '2026-10-23', tasks: 1 }] }; },
+    day: () => { calls++; if (fail) throw new Error('private SQLite detail'); return { instructions: [], tasks: [{ id: 1 }], checkpoints: [] }; },
+  });
+  await store.refresh();
+  fail = true;
+  await Promise.all([store.fetchMonth({ force: true }), store.fetchDay({ force: true })]);
+  assert.equal(store.monthDays[0].tasks, 1);
+  assert.deepEqual(store.tasks, []);
+  assert.match(store.monthError, /календарь/);
+  assert.match(store.dayError, /день/);
+  assert.doesNotMatch(store.monthError + store.dayError, /SQLite/);
+  await store.refresh();
+  assert.equal(calls, 4);
+  assert.equal(store.tasks[0].id, 1);
+  assert.equal(store.monthError, '');
+  assert.equal(store.dayError, '');
+});

@@ -84,6 +84,30 @@ test('blank marks are removed and historical marks survive a schedule change', (
   assert.notEqual(emptyControlSchedule().marks, emptyControlSchedule().marks);
 });
 
+test('normalization keeps the last mark for each date and does not change the input history', () => {
+  const value = {
+    frequency: 'custom',
+    customDates: ['2026-11-15', '2026-11-10', '2026-11-15'],
+    marks: [
+      { date: '2026-11-15', text: 'Первая запись' },
+      { date: '2026-11-10', text: 'Удалённая запись' },
+      { date: '2026-11-15', text: '  Уточнение  ', actualDate: '2026-11-14' },
+      { date: '2026-11-10', text: ' \n' },
+      { date: '2026-11-09', text: 'История' },
+    ],
+  };
+  const original = structuredClone(value);
+  const normalized = validateControlSchedule(value);
+  assert.deepEqual(normalized, {
+    frequency: 'custom', firstDate: '', customDates: ['2026-11-10', '2026-11-15'],
+    marks: [
+      { date: '2026-11-09', text: 'История' },
+      { date: '2026-11-15', text: '  Уточнение  ', actualDate: '2026-11-14' },
+    ],
+  });
+  assert.deepEqual(value, original);
+});
+
 test('the earliest unmarked daily date is found across the full supported date range', () => {
   const schedule = {
     frequency: 'daily', firstDate: '0001-01-01',

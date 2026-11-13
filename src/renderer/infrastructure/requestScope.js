@@ -28,3 +28,20 @@ export function createSingleFlight() {
     clear() { pending.clear(); },
   };
 }
+
+// Keep request validity and pending work in the same lifecycle. Stores choose
+// when to issue a ticket and continue to own query keys, caches and UI state.
+export function createRequestChannel() {
+  const scope = createRequestScope();
+  const flight = createSingleFlight();
+  let latest;
+  return {
+    issue(key) { latest = scope.issue(key); return latest; },
+    // A shared operation may publish for a later caller of the same key, while
+    // each caller's own ticket still controls its error/loading cleanup.
+    accepts(key) { return latest?.key === key && latest.isCurrent(); },
+    run: flight.run,
+    invalidate() { scope.invalidate(); flight.clear(); },
+    dispose() { scope.dispose(); flight.clear(); },
+  };
+}

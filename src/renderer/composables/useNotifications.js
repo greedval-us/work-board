@@ -1,4 +1,5 @@
 import { onScopeDispose } from 'vue';
+import { NOTIFICATION_CHECK_INTERVAL_MS } from '../../shared/constants/notifications.js';
 import { millisecondsUntilTomorrow } from '../domain/calendarDates.js';
 import { useNotificationsStore } from '../stores/notificationsStore.js';
 import { subscribeNotificationOpen } from '../services/NotificationService.js';
@@ -14,9 +15,12 @@ export function useNotifications({
     cancel(timer);
     if (documentTarget?.visibilityState !== 'hidden') void store.refresh();
     // Check external database edits as well as the midnight transition.
-    timer = schedule(tick, Math.min(60_000, millisecondsUntilTomorrow(now())));
+    scheduleNextCheck();
   }
-  timer = schedule(tick, Math.min(60_000, millisecondsUntilTomorrow(now())));
+  function scheduleNextCheck() {
+    timer = schedule(tick, Math.min(NOTIFICATION_CHECK_INTERVAL_MS, millisecondsUntilTomorrow(now())));
+  }
+  scheduleNextCheck();
   windowTarget?.addEventListener('focus', tick);
   documentTarget?.addEventListener('visibilitychange', tick);
   onScopeDispose(() => {

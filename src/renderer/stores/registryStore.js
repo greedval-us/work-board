@@ -3,7 +3,7 @@ import { computed, onScopeDispose, reactive, shallowRef, watch } from 'vue';
 import { emptyFilters, INSTRUCTION_COLUMNS, localDate, REGISTRY_DEFAULT_SORT, REGISTRY_PAGINATION } from '../../shared/registry.js';
 import { DesktopError } from '../../shared/errors.js';
 import { errorMessage } from '../infrastructure/errorMessage.js';
-import { createRequestScope, createSingleFlight } from '../infrastructure/requestScope.js';
+import { createRequestChannel } from '../infrastructure/requestScope.js';
 import { registryService } from '../services/RegistryService.js';
 import { useAppStore } from './appStore.js';
 import { snapshotInstruction } from '../domain/instructions.js';
@@ -35,10 +35,8 @@ export function createRegistryStore({ app: suppliedApp, service = registryServic
     const canMutate = computed(() => ready.value && !app.databaseSwitching && !busy.value);
     const hasAppliedFilters = computed(() => Object.values(appliedFilters.value).some(Boolean));
     const filtersChanged = computed(() => Object.keys(draftFilters).some((key) => draftFilters[key] !== appliedFilters.value[key]));
-    const listScope = createRequestScope();
-    const recordScope = createRequestScope();
-    const listFlights = createSingleFlight();
-    const recordFlights = createSingleFlight();
+    const listRequests = createRequestChannel();
+    const recordRequests = createRequestChannel();
     let listKey = null;
     let recordKey = null;
     let loadedKey = null;
@@ -60,8 +58,7 @@ export function createRegistryStore({ app: suppliedApp, service = registryServic
     }
 
     function invalidateList() {
-      listScope.invalidate();
-      listFlights.clear();
+      listRequests.invalidate();
       loadedKey = null;
       listKey = null;
     }
@@ -77,12 +74,12 @@ export function createRegistryStore({ app: suppliedApp, service = registryServic
     }
 
     function load() {
-      if (!ready.value) { listScope.invalidate(); listFlights.clear(); items.value = []; total.value = 0; loading.value = false; return Promise.resolve(false); }
+      if (!ready.value) { listRequests.invalidate(); items.value = []; total.value = 0; loading.value = false; return Promise.resolve(false); }
       const { request, revision, key } = snapshot();
-      if (listKey !== key) { listFlights.clear(); listKey = key; }
-      return listFlights.run(key, async () => {
+      if (listKey !== key) { listRequests.invalidate(); listKey = key; }
+      return listRequests.run(key, async () => {
         if (listKey !== key || !isCurrent(request.generation) || app.revision !== revision) return false;
-        const token = listScope.issue(key);
+        const token = listRequests.issue(key);
         const current = () => listKey === key && token.isCurrent() && isCurrent(request.generation) && app.revision === revision;
         loading.value = true;
         error.value = '';
@@ -154,16 +151,16 @@ export function createRegistryStore({ app: suppliedApp, service = registryServic
       return refresh();
     }
 
-    function cancelRecordRead() { recordScope.invalidate(); recordFlights.clear(); recordKey = null; opening.value = false; }
+    function cancelRecordRead() { recordRequests.invalidate(); recordKey = null; opening.value = false; }
     function clearMutationError() { mutationError.value = ''; }
     function getRecord(id, generation = currentGeneration()) {
       if (!isCurrent(generation) || !Number.isSafeInteger(Number(id)) || Number(id) < 1) return Promise.resolve(null);
       const revision = app.revision;
       const key = JSON.stringify([Number(id), generation, revision]);
-      if (recordKey !== key) { recordFlights.clear(); recordKey = key; }
-      return recordFlights.run(key, async () => {
+      if (recordKey !== key) { recordRequests.invalidate(); recordKey = key; }
+      return recordRequests.run(key, async () => {
         if (recordKey !== key || !isCurrent(generation) || app.revision !== revision) return null;
-        const token = recordScope.issue(key);
+        const token = recordRequests.issue(key);
         const current = () => recordKey === key && token.isCurrent() && isCurrent(generation) && app.revision === revision;
         opening.value = true;
         error.value = '';
@@ -231,7 +228,7 @@ export function createRegistryStore({ app: suppliedApp, service = registryServic
       }
       if (initial) refresh(); else queueRefresh();
     }, { immediate: true, flush: 'sync' });
-    onScopeDispose(() => { active = false; listScope.dispose(); recordScope.dispose(); listFlights.clear(); recordFlights.clear(); });
+    onScopeDispose(() => { active = false; listRequests.dispose(); recordRequests.dispose(); });
 
     return { draftFilters, appliedFilters, today, sort, page, pageSize, pageCount, items, total, loading, opening, saving, deleting, exporting,
       error, filterError, mutationError, notice, ready, busy, canMutate, hasAppliedFilters, filtersChanged, refresh, ensureLoaded, updateToday,

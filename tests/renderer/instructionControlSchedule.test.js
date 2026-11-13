@@ -307,3 +307,68 @@ test('a custom source before a changed control date remains scheduled at its val
   await cancelMoveButton('2026-03-01').props.onClick();
   assert.deepEqual(schedule.value.moves, [{ from: '2026-02-01', to: '2026-03-01' }]);
 });
+
+test('custom dates reject both moved destinations and original dates before adding a sorted date', async t => {
+  const { schedule, root, input, ownerDocument } = await mountEditor(t, {
+    frequency: 'custom', firstDate: '', customDates: ['2026-02-15', '2026-03-15'], marks: [],
+    moves: [{ from: '2026-02-15', to: '2026-02-17' }],
+  });
+  const customDate = find(root, node => node.props?.name === 'control-custom-date');
+  const add = find(root, node => node.type === 'button' && node.text === 'Добавить дату');
+  for (const duplicate of ['2026-02-15', '2026-02-17']) {
+    await input(customDate, duplicate);
+    assert.equal(add.props.disabled, true);
+    assert.equal(find(root, node => node.props?.role === 'status')?.text, 'Эта дата уже в графике.');
+    add.props.onClick();
+    assert.deepEqual(schedule.value.customDates, ['2026-02-15', '2026-03-15']);
+  }
+  await input(customDate, '2026-02-18');
+  assert.equal(add.props.disabled, false);
+  add.props.onClick();
+  await nextTick();
+  assert.deepEqual(schedule.value.customDates, ['2026-02-15', '2026-02-18', '2026-03-15']);
+  assert.equal(customDate.props.value, '');
+  assert.equal(ownerDocument.activeElement, customDate);
+});
+
+test('out-of-period custom dates remain removable and update browser validity', async t => {
+  const { schedule, root, row, controlDate } = await mountEditor(t, {
+    frequency: 'custom', firstDate: '', customDates: ['2026-02-01', '2026-02-15'], marks: [],
+  });
+  const customDate = find(root, node => node.props?.name === 'control-custom-date');
+  controlDate.value = '2026-02-10';
+  await nextTick();
+  assert.equal(customDate.validationMessage, 'Удалите даты вне периода контроля.');
+  assert.ok(row('2026-02-01'), 'the invalid date stays visible so it can be removed');
+  find(row('2026-02-01'), node => node.props?.class?.includes('control-schedule-remove')).props.onClick();
+  await nextTick();
+  assert.deepEqual(schedule.value.customDates, ['2026-02-15']);
+  assert.equal(customDate.validationMessage, '');
+  find(row('2026-02-15'), node => node.props?.class?.includes('control-schedule-remove')).props.onClick();
+  await nextTick();
+  assert.equal(customDate.validationMessage, 'Добавьте хотя бы одну дату промежуточного контроля.');
+});
+
+test('navigation and rejected move drafts do not dirty the persisted schedule', async t => {
+  const value = { frequency: 'monthly', firstDate: '2026-01-15', customDates: [], marks: [] };
+  const { editor, schedule, root, row, field, moveButton, input } = await mountEditor(t, value);
+  await editor.focusSelectedDate();
+  await input(field('2026-02-15', 'control-actual-date'), '2026-02-01');
+  await input(field('2026-02-15', 'control-planned-date'), '2027-01-15');
+  await moveButton('2026-02-15').props.onClick();
+  await nextTick();
+  assert.equal(schedule.value, value, 'draft dates and rejected moves do not emit model changes');
+  assert.ok(find(root, node => node.props?.role === 'alert')?.text);
+  await input(field('2026-02-15', 'control-planned-date'), '2026-02-16');
+  assert.equal(find(root, node => node.props?.role === 'alert'), undefined, 'editing a move clears its previous error');
+  const month = find(root, node => node.props?.type === 'month');
+  const invalidTarget = { value: '' };
+  month.props.onChange({ target: invalidTarget });
+  await nextTick();
+  assert.equal(invalidTarget.value, '2026-02');
+  assert.ok(row('2026-02-15'));
+  month.props.onChange({ target: { value: '2026-03' } });
+  await nextTick();
+  assert.ok(row('2026-03-15'));
+  assert.equal(schedule.value, value, 'month navigation does not emit model changes');
+});

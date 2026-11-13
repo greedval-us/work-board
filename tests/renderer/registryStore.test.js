@@ -207,3 +207,23 @@ test('an unfiltered date change updates display state and reuses the cached list
   assert.equal(requests.length, 2);
   assert.ok(requests.every((request) => !Object.hasOwn(request, 'today')));
 });
+
+test('a failed registry refresh retains its displayed rows and ensureLoaded retries the failed snapshot', async t => {
+  let calls = 0;
+  const { store } = setup(t, { list: () => {
+    calls++;
+    if (calls === 2) throw new Error('private SQLite detail');
+    return { items: [record(calls)], total: 1 };
+  } });
+  await store.ensureLoaded();
+  assert.equal(await store.refresh(), false);
+  assert.equal(store.items[0].id, 1);
+  assert.equal(store.total, 1);
+  assert.equal(store.loading, false);
+  assert.match(store.error, /реестр/);
+  assert.doesNotMatch(store.error, /SQLite/);
+  assert.equal(await store.ensureLoaded(), true);
+  assert.equal(calls, 3);
+  assert.equal(store.items[0].id, 3);
+  assert.equal(store.error, '');
+});

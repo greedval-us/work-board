@@ -4,7 +4,7 @@ import { DesktopError } from '../../shared/errors.js';
 import { localDate } from '../../shared/registry.js';
 import { moveMonth } from '../domain/calendarDates.js';
 import { errorMessage } from '../infrastructure/errorMessage.js';
-import { createRequestScope, createSingleFlight } from '../infrastructure/requestScope.js';
+import { createRequestChannel } from '../infrastructure/requestScope.js';
 import { calendarService } from '../services/CalendarService.js';
 import { useAppStore } from './appStore.js';
 
@@ -18,90 +18,77 @@ export function createCalendarStore({ id = 'calendar', getApp = useAppStore, ser
     const instructions = shallowRef([]);
     const tasks = shallowRef([]);
     const checkpoints = shallowRef([]);
-    const monthLoading = shallowRef(false);
-    const dayLoading = shallowRef(false);
-    const monthError = shallowRef('');
-    const dayError = shallowRef('');
     const taskError = shallowRef('');
     const busyTaskId = shallowRef(null);
     const ready = computed(() => Boolean(app.database?.ready));
     const generation = computed(() => app.database?.generation);
-    const monthScope = createRequestScope();
-    const dayScope = createRequestScope();
-    const monthFlight = createSingleFlight();
-    const dayFlight = createSingleFlight();
-    let lastMonth;
-    let lastDay;
-    let currentMonthTicket;
-    let currentDayTicket;
     let consumers = 0;
 
     const keyFor = (value) => JSON.stringify([generation.value, app.revision, value]);
-    const isCurrentRead = (ticket, key, value) => ticket?.key === key && ticket.isCurrent() && ready.value && key === keyFor(value);
-
-    async function fetchMonth({ force = false } = {}) {
-      const requestedMonth = month.value;
-      const key = keyFor(requestedMonth);
-      const ticket = monthScope.issue(key);
-      currentMonthTicket = ticket;
-      const source = generation.value;
-      monthError.value = '';
-      if (!ready.value) { monthDays.value = []; monthLoading.value = false; return; }
-      if (!force && lastMonth?.key === key) {
-        monthDays.value = lastMonth.value.days;
-        monthLoading.value = false;
-        return lastMonth.value;
-      }
-      monthLoading.value = true;
-      const current = () => isCurrentRead(ticket, key, month.value);
-      const accepts = () => isCurrentRead(currentMonthTicket, key, month.value);
-      try {
-        // Publish the snapshot before singleFlight releases its pending entry.
-        const result = await monthFlight.run(key, async () => {
-          const value = await service.month({ month: requestedMonth, generation: source });
-          if (accepts()) { lastMonth = { key, value }; monthDays.value = value.days; }
-          return value;
-        });
-        return result;
-      } catch (cause) {
-        if (current()) monthError.value = errorMessage(cause, 'Не удалось загрузить календарь.');
-      } finally { if (current()) monthLoading.value = false; }
-    }
-
     function setDay(value = {}) {
       instructions.value = value.instructions ?? [];
       tasks.value = value.tasks ?? [];
       checkpoints.value = value.checkpoints ?? [];
     }
 
-    async function fetchDay({ force = false } = {}) {
-      const requestedDate = selectedDate.value;
-      const key = keyFor(requestedDate);
-      const ticket = dayScope.issue(key);
-      currentDayTicket = ticket;
-      const source = generation.value;
-      dayError.value = '';
-      if (!ready.value) { setDay(); dayLoading.value = false; return; }
-      if (!force && lastDay?.key === key) {
-        setDay(lastDay.value);
-        dayLoading.value = false;
-        return lastDay.value;
+    // Month and day share cache/request rules, but only day clears on loading.
+    function createCalendarRead(selection, { read, apply, clear, clearOnLoad = false, fallback }) {
+      const requests = createRequestChannel();
+      const loading = shallowRef(false);
+      const error = shallowRef('');
+      let last;
+      async function fetch({ force = false } = {}) {
+        const selected = selection.value;
+        const key = keyFor(selected);
+        const ticket = requests.issue(key);
+        const source = generation.value;
+        error.value = '';
+        if (!ready.value) { clear(); loading.value = false; return; }
+        if (!force && last?.key === key) {
+          apply(last.value);
+          loading.value = false;
+          return last.value;
+        }
+        if (clearOnLoad) clear();
+        loading.value = true;
+        const matchesSelection = () => ready.value && key === keyFor(selection.value);
+        const current = () => ticket.isCurrent() && matchesSelection();
+        try {
+          return await requests.run(key, async () => {
+            const value = await read(selected, source);
+            // Publish before the pending entry is released, including when a
+            // newer caller returned to this same still-pending selection.
+            if (requests.accepts(key) && matchesSelection()) { last = { key, value }; apply(value); }
+            return value;
+          });
+        } catch (cause) {
+          if (current()) error.value = errorMessage(cause, fallback);
+        } finally { if (current()) loading.value = false; }
       }
-      setDay();
-      dayLoading.value = true;
-      const current = () => isCurrentRead(ticket, key, selectedDate.value);
-      const accepts = () => isCurrentRead(currentDayTicket, key, selectedDate.value);
-      try {
-        const result = await dayFlight.run(key, async () => {
-          const value = await service.day({ date: requestedDate, generation: source });
-          if (accepts()) { lastDay = { key, value }; setDay(value); }
-          return value;
-        });
-        return result;
-      } catch (cause) {
-        if (current()) dayError.value = errorMessage(cause, 'Не удалось загрузить выбранный день.');
-      } finally { if (current()) dayLoading.value = false; }
+      function invalidate() {
+        requests.invalidate();
+        last = undefined;
+        clear();
+        loading.value = false;
+        error.value = '';
+      }
+      onScopeDispose(() => requests.dispose());
+      return { fetch, invalidate, loading, error };
     }
+
+    const monthRead = createCalendarRead(month, {
+      read: (value, source) => service.month({ month: value, generation: source }),
+      apply: value => { monthDays.value = value.days; },
+      clear: () => { monthDays.value = []; },
+      fallback: 'Не удалось загрузить календарь.',
+    });
+    const dayRead = createCalendarRead(selectedDate, {
+      read: (value, source) => service.day({ date: value, generation: source }),
+      apply: setDay, clear: () => setDay(), clearOnLoad: true,
+      fallback: 'Не удалось загрузить выбранный день.',
+    });
+    const { fetch: fetchMonth, loading: monthLoading, error: monthError } = monthRead;
+    const { fetch: fetchDay, loading: dayLoading, error: dayError } = dayRead;
 
     function refresh() { return Promise.all([fetchMonth(), fetchDay()]); }
 
@@ -113,18 +100,8 @@ export function createCalendarStore({ id = 'calendar', getApp = useAppStore, ser
     }
 
     function invalidate(databaseChanged) {
-      monthScope.invalidate();
-      dayScope.invalidate();
-      monthFlight.clear();
-      dayFlight.clear();
-      lastMonth = undefined;
-      lastDay = undefined;
-      monthDays.value = [];
-      setDay();
-      monthLoading.value = false;
-      dayLoading.value = false;
-      monthError.value = '';
-      dayError.value = '';
+      monthRead.invalidate();
+      dayRead.invalidate();
       if (databaseChanged) { taskError.value = ''; busyTaskId.value = null; }
       if (consumers > 0) void refresh();
     }
@@ -179,12 +156,6 @@ export function createCalendarStore({ id = 'calendar', getApp = useAppStore, ser
     }, { flush: 'sync' });
     watch(month, () => { if (consumers > 0) void fetchMonth(); });
     watch(selectedDate, () => { if (consumers > 0) void fetchDay(); });
-    onScopeDispose(() => {
-      monthScope.dispose();
-      dayScope.dispose();
-      monthFlight.clear();
-      dayFlight.clear();
-    });
 
     return {
       month, selectedDate, monthDays, instructions, tasks, checkpoints, ready, generation,

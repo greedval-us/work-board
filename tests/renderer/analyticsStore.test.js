@@ -177,3 +177,28 @@ test('revisions keep the selected executor and page, while database readiness cl
   assert.equal(requests.at(-1).page, 1);
   store.$dispose();
 });
+
+test('concurrent forced analytics reads share work while only the latest caller publishes the result', async t => {
+  setActivePinia(createPinia());
+  const app = reactive({ database: { ready: true, generation: 1 }, revision: 0 });
+  let resolve;
+  let calls = 0;
+  const pending = new Promise(done => { resolve = done; });
+  const store = createAnalyticsStore({ getApp: () => app, service: {
+    summary: () => ++calls === 1 ? { totals: { total: 1 } } : pending,
+  } })();
+  t.after(() => store.$dispose());
+  await store.refresh();
+  const first = store.refresh({ force: true, keepData: true });
+  const second = store.refresh({ force: true, keepData: true });
+  await Promise.resolve();
+  assert.equal(calls, 2);
+  assert.equal(store.data.totals.total, 1);
+  assert.equal(store.loading, true);
+  resolve({ totals: { total: 2 } });
+  assert.deepEqual(await Promise.all([first, second]), [false, true]);
+  assert.equal(store.data.totals.total, 2);
+  assert.equal(store.loading, false);
+  await store.refresh();
+  assert.equal(calls, 2);
+});

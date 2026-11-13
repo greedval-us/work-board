@@ -108,6 +108,26 @@ test('custom moves preserve the configured source and use the effective date for
   assert.equal(control.getNextControlCheckpoint({ ...moved, marks: [{ date: '2026-01-31', text: 'Готово', actualDate: '2026-02-03' }] }, bounds.deadline), '2026-02-02');
 });
 
+test('saved moves may swap two scheduled dates while completion stays attached to the effective date', () => {
+  const schedule = control.validateControlSchedule({
+    frequency: 'custom', customDates: ['2026-02-01', '2026-02-02'],
+    moves: [
+      { from: '2026-02-02', to: '2026-02-01' },
+      { from: '2026-02-01', to: '2026-02-02' },
+    ],
+    marks: [{ date: '2026-02-01', text: 'Получено', actualDate: '2026-01-31' }],
+  }, bounds);
+  assert.deepEqual(schedule.moves, [
+    { from: '2026-02-01', to: '2026-02-02' },
+    { from: '2026-02-02', to: '2026-02-01' },
+  ]);
+  assert.deepEqual(control.listControlCheckpoints(schedule, { from: '2026-02-01', to: '2026-02-02', deadline: bounds.deadline }), [
+    { date: '2026-02-01', originalDate: '2026-02-02', mark: 'Получено', actualDate: '2026-01-31', scheduled: true },
+    { date: '2026-02-02', originalDate: '2026-02-01', mark: '', scheduled: true },
+  ]);
+  assert.equal(control.getNextControlCheckpoint(schedule, bounds.deadline), '2026-02-02');
+});
+
 test('a moved checkpoint outside a shortened deadline can be corrected without losing other draft moves', () => {
   const schedule = { ...monthly, moves: [
     { from: '2026-01-31', to: '2026-03-03' },

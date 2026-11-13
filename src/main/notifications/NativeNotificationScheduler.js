@@ -1,9 +1,11 @@
 import { formatDate } from '../../shared/dates.js';
+import { NOTIFICATION_CHECK_INTERVAL_MS as CHECK_INTERVAL_MS } from '../../shared/constants/notifications.js';
 
-const CHECK_INTERVAL_MS = 60_000;
 const SHOW_TIMEOUT_MS = 15_000;
 const MAX_ATTEMPTS = 3;
 const MAX_RETAINED_NOTIFICATIONS = 32;
+const PREVIEW_ITEM_LIMIT = 3;
+const PREVIEW_TITLE_LIMIT = 120;
 const DELIVERY_ERROR = 'Windows не удалось показать напоминание. Проверьте разрешения уведомлений для Work Board.';
 const STATUS_ERRORS = {
   delivery: DELIVERY_ERROR,
@@ -14,8 +16,8 @@ const reference = ({ id, occurrence }) => ({ id, occurrence });
 const keyOf = item => JSON.stringify([item.id, item.occurrence]);
 
 function notificationOptions(items) {
-  const lines = items.slice(0, 3).map(item => `${formatDate(item.date)}: ${item.title.replace(/\s+/g, ' ').slice(0, 120)}`);
-  if (items.length > 3) lines.push(`Ещё напоминаний: ${items.length - 3}.`);
+  const lines = items.slice(0, PREVIEW_ITEM_LIMIT).map(item => `${formatDate(item.date)}: ${item.title.replace(/\s+/g, ' ').slice(0, PREVIEW_TITLE_LIMIT)}`);
+  if (items.length > PREVIEW_ITEM_LIMIT) lines.push(`Ещё напоминаний: ${items.length - PREVIEW_ITEM_LIMIT}.`);
   return { title: `Work Board — напоминания о сроках (${items.length})`, body: lines.join('\n') };
 }
 
