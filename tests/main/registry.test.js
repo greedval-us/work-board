@@ -36,7 +36,7 @@ test('migration upgrades legacy settings once and preserves existing values', ()
     database.exec("CREATE TABLE app_settings (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL) STRICT; INSERT INTO app_settings VALUES ('theme', 'dark'); PRAGMA user_version = 1");
     migrate(database);
     migrate(database);
-    assert.equal(database.prepare('PRAGMA user_version').get().user_version, 6);
+    assert.equal(database.prepare('PRAGMA user_version').get().user_version, 10);
     assert.equal(database.prepare("SELECT value FROM app_settings WHERE key = 'theme'").get().value, 'dark');
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM instructions').get().count, 0);
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM calendar_tasks').get().count, 0);
@@ -67,6 +67,30 @@ test('instruction CRUD persists full data and accepts duplicate text identifiers
   assert.deepEqual(instructions.remove(created.id), { removed: true });
   assert.equal(instructions.get(created.id), null);
   assert.equal(instructions.list().total, 1);
+});
+
+test('closing an instruction moves it between lists and keeps its record and attachments after reopening', (t) => {
+  const { instructions, database, filePath } = fixture(t);
+  const schedule = { frequency: 'daily', firstDate: '2026-10-23', marks: [{ date: '2026-10-23', text: 'Доклад' }] };
+  const item = instructions.create(instruction({ status: 'in_progress', executionMark: 'Подготовлено', controlSchedule: schedule }));
+  const active = instructions.create(instruction({ status: 'completed' }));
+  database.connection.prepare('INSERT INTO attachments (instruction_id, name, relative_path, size, created_at) VALUES (?, ?, ?, ?, ?)')
+    .run(item.id, 'Доклад.txt', 'instruction/report.txt', 6, '2026-10-23T00:00:00Z');
+
+  const closed = instructions.closeControl(item.id);
+  assert.match(closed.closedAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(instructions.closeControl(item.id).closedAt, closed.closedAt);
+  assert.throws(() => instructions.closeControl(999), { code: 'NOT_FOUND' });
+  assert.throws(() => instructions.closeControl('1'), ValidationError);
+
+  database.connection.close();
+  database.connection = new DatabaseSync(filePath);
+  assert.deepEqual(instructions.list().items.map(row => row.id), [active.id]);
+  const archived = instructions.list({ closed: true, filters: { executor: 'иванов' }, limit: 1 });
+  assert.equal(archived.total, 1);
+  assert.deepEqual(archived.items.map(row => row.id), [item.id]);
+  assert.deepEqual(instructions.get(item.id), { ...item, closedAt: closed.closedAt, updatedAt: closed.updatedAt });
+  assert.equal(database.connection.prepare('SELECT name FROM attachments WHERE instruction_id = ?').get(item.id).name, 'Доклад.txt');
 });
 
 test('saving checkpoint schedules leaves the legacy control type intact and exposes only the current frequency', (t) => {
@@ -126,9 +150,9 @@ test('date ranges follow extensions while preserving the original deadline', (t)
   const extended = instructions.create(instruction({ extendedUntil: '2026-11-01' }));
   const originalRange = { deadlineFrom: '2026-10-01', deadlineTo: '2026-10-31' };
   const extensionRange = { deadlineFrom: '2026-11-01', deadlineTo: '2026-11-01' };
-  assert.deepEqual(instructions.list({ filters: originalRange }), { items: [], total: 0 });
+  assert.deepEqual(instructions.list({ filters: originalRange }), { items: [], total: 0, documentTypes: [] });
   const { controlSchedule, ...row } = extended;
-  assert.deepEqual(instructions.list({ filters: extensionRange }), { items: [{ ...row, nextCheckpoint: '', controlFrequency: '' }], total: 1 });
+  assert.deepEqual(instructions.list({ filters: extensionRange }), { items: [{ ...row, nextCheckpoint: '', controlFrequency: '' }], total: 1, documentTypes: [] });
   assert.equal(instructions.get(extended.id).deadline, '2026-10-26');
   assert.equal(instructions.get(extended.id).extendedUntil, '2026-11-01');
   assert.throws(() => instructions.update(extended.id, { deadline: '2026-11-02' }), ValidationError);
@@ -160,6 +184,30 @@ test('registry queries sort and return source', (t) => {
   assert.deepEqual(instructions.list({ sort: { field: 'source', direction: 'asc' } }).items.map(({ id, source }) => [id, source]), [
     [b.id, 'Архив'], [a.id, 'Янтарь'],
   ]);
+});
+
+test('the registry filters and sorts document types and returns choices for the whole section', (t) => {
+  const { instructions } = fixture(t);
+  const letter = instructions.create(instruction({ documentType: 'письмо' }));
+  const act = instructions.create(instruction({ documentType: 'Акт' }));
+  const specialAct = instructions.create(instruction({ documentType: 'Акт проверки' }));
+  const archive = instructions.create(instruction({ documentType: 'Распоряжение' }));
+  instructions.closeControl(archive.id);
+
+  assert.equal(instructions.get(letter.id).documentType, 'письмо');
+  assert.deepEqual(instructions.all({ sort: { field: 'documentType', direction: 'asc' } }).map(row => row.id),
+    [act.id, specialAct.id, letter.id]);
+  assert.deepEqual(instructions.all({ sort: { field: 'documentType', direction: 'desc' } }).map(row => row.id),
+    [letter.id, specialAct.id, act.id]);
+  const matching = instructions.list({ filters: { documentType: '  акт ' }, limit: 1 });
+  assert.deepEqual(matching.items.map(row => row.id), [act.id]);
+  assert.equal(matching.total, 1);
+  assert.deepEqual(matching.documentTypes, ['Акт', 'Акт проверки', 'письмо']);
+  assert.deepEqual(instructions.list({ closed: true, filters: { documentType: 'Распоряжение' } }).documentTypes,
+    ['Распоряжение']);
+
+  assert.equal(instructions.update(letter.id, { documentType: '' }).documentType, '');
+  assert.deepEqual(instructions.list().documentTypes, ['Акт', 'Акт проверки']);
 });
 
 test('registry sorts by checkpoint frequency with unscheduled instructions last in both directions', (t) => {
@@ -285,7 +333,7 @@ test('today checkpoint filtering follows extensions and applies before paginatio
   assert.deepEqual(instructions.all(request).map(row => [row.id, row.nextCheckpoint]), [[first.id, today], [second.id, today]]);
 
   instructions.update(second.id, { extendedUntil: '' });
-  assert.deepEqual(instructions.list(request), { items: [], total: 1 });
+  assert.deepEqual(instructions.list(request), { items: [], total: 1, documentTypes: [] });
 });
 
 test('checkpoint filters use the local date when the request omits today', (t) => {
@@ -331,7 +379,7 @@ test('repositories resolve the active connection for every operation', (t) => {
   database.connection.close();
   database.connection = new DatabaseSync(':memory:');
   migrate(database.connection);
-  assert.deepEqual(instructions.list(), { items: [], total: 0 });
+  assert.deepEqual(instructions.list(), { items: [], total: 0, documentTypes: [] });
   assert.deepEqual(tasks.list(), []);
   instructions.create(instruction({ title: 'Новая база', controlSchedule: { frequency: 'daily', firstDate: '2026-10-25' } }));
   assert.deepEqual(instructions.list().items.map(row => [row.title, row.nextCheckpoint]), [['Новая база', '2026-10-25']]);

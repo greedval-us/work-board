@@ -26,34 +26,55 @@ function fixture(t, seed) {
   return new AnalyticsService({ repository: new AnalyticsRepository(database), today: () => '2026-10-26' });
 }
 const filters = { from: '2026-10-01', to: '2026-10-26' };
-test('analytics counts only instructions in totals and monthly execution', t => {
+test('analytics counts only instructions in totals and monthly control', t => {
   const result = fixture(t).summary({ filters: { ...filters, entityType: 'tasks', priority: 'urgent' } });
-  assert.deepEqual(result.totals, { total: 4, completed: 2, active: 2, pending: 1, inProgress: 1, overdue: 1, completionRate: 50 });
-  assert.deepEqual(result.timeline, [{ month: '2026-10', total: 4, completed: 2, active: 2 }]);
-  assert.deepEqual(result.filters, { ...filters, status: '', executor: '' });
+  assert.deepEqual(result.totals, { total: 4, closed: 0, active: 4, overdue: 3, closedRate: 0 });
+  assert.deepEqual(result.timeline, [{ month: '2026-10', total: 4, closed: 0, active: 4 }]);
+  assert.deepEqual(result.filters, { ...filters, executor: '' });
   assert.equal(result.instructions, null);
 });
 
 test('analytics groups executor spelling variants and sorts by total then name', t => {
   const result = fixture(t).summary({ filters });
   assert.deepEqual(result.executors, [
-    { key: 'иванов', label: 'Иванов', total: 2, completed: 1, active: 1, overdue: 1 },
-    { key: 'белов', label: 'Белов', total: 1, completed: 1, active: 0, overdue: 0 },
-    { key: 'петров', label: 'Петров', total: 1, completed: 0, active: 1, overdue: 0 },
+    { key: 'иванов', label: 'Иванов', total: 2, closed: 0, active: 2, overdue: 2 },
+    { key: 'белов', label: 'Белов', total: 1, closed: 0, active: 1, overdue: 1 },
+    { key: 'петров', label: 'Петров', total: 1, closed: 0, active: 1, overdue: 0 },
   ]);
+});
+
+test('analytics keeps closed instructions in history without counting them as active or overdue', t => {
+  const closedAt = '2026-10-26T12:00:00.000Z';
+  const service = fixture(t, (_instructions, connection) => {
+    connection.prepare('UPDATE instructions SET closed_at = ? WHERE id IN (1, 3)').run(closedAt);
+  });
+  const result = service.summary({ filters });
+  assert.deepEqual(result.totals, { total: 4, closed: 2, active: 2, overdue: 1, closedRate: 50 });
+  assert.deepEqual(result.timeline, [{ month: '2026-10', total: 4, closed: 2, active: 2 }]);
+  assert.deepEqual(result.executors.find(row => row.key === 'иванов'), {
+    key: 'иванов', label: 'Иванов', total: 2, closed: 2, active: 0, overdue: 0,
+  });
+  const history = service.summary({ filters: { ...filters, executor: 'иванов' } });
+  assert.deepEqual(history.instructions.items.map(({ id, closedAt: timestamp }) => [id, timestamp]), [
+    [3, closedAt], [1, closedAt],
+  ]);
+  assert.deepEqual(service.summary({ filters: { ...filters, executor: 'иванов', status: 'active' } }), history);
 });
 
 test('analytics matches the exact executor key in totals and instructions', t => {
   const service = fixture(t, instructions => {
     instructions.create({ controlDate: '2026-09-01', instructionNumber: '2', title: 'Другое указание', deadline: '2026-10-25', executor: 'Иванова' });
   });
-  const result = service.summary({ filters: { ...filters, executor: 'иванов', status: 'active' } });
-  assert.equal(result.totals.total, 1);
+  const result = service.summary({ filters: { ...filters, executor: 'иванов' } });
+  assert.equal(result.totals.total, 2);
   assert.equal(result.filters.executor, 'иванов');
-  assert.deepEqual(result.executors, [{ key: 'иванов', label: 'Иванов', total: 1, completed: 0, active: 1, overdue: 1 }]);
-  assert.deepEqual(result.timeline, [{ month: '2026-10', total: 1, completed: 0, active: 1 }]);
+  assert.deepEqual(result.executors, [{ key: 'иванов', label: 'Иванов', total: 2, closed: 0, active: 2, overdue: 2 }]);
+  assert.deepEqual(result.timeline, [{ month: '2026-10', total: 2, closed: 0, active: 2 }]);
   assert.deepEqual(result.instructions, {
-    items: [{ id: 1, instructionNumber: '1', title: 'Указание', deadline: '2026-10-25', extendedUntil: '', status: 'in_progress' }],
+    items: [
+      { id: 3, instructionNumber: '1', title: 'Указание', deadline: '2026-10-02', extendedUntil: '', closedAt: null },
+      { id: 1, instructionNumber: '1', title: 'Указание', deadline: '2026-10-25', extendedUntil: '', closedAt: null },
+    ],
     page: 1,
     pageCount: 1,
   });
@@ -61,7 +82,7 @@ test('analytics matches the exact executor key in totals and instructions', t =>
 
 test('analytics offers every historical executor once regardless of filters', t => {
   const service = fixture(t);
-  const result = service.summary({ filters: { ...filters, executor: 'иванов', status: 'completed' } });
+  const result = service.summary({ filters: { ...filters, executor: 'иванов' } });
   assert.deepEqual(result.executorOptions, [
     { key: 'белов', label: 'Белов' },
     { key: 'иванов', label: 'Иванов' },
@@ -93,18 +114,16 @@ test('analytics uses the historical option key verbatim for names with combining
 });
 
 test('analytics uses the extended deadline for the period and overdue calculation', t => {
-  const service = fixture(t, instructions => {
-    instructions.create({ controlDate: '2026-09-01', instructionNumber: '2', title: 'Исполнено', deadline: '2026-11-03', executor: 'Сидоров', status: 'completed' });
-  });
-  const result = service.summary({ filters: { from: '2026-11-02', to: '2026-11-30', executor: 'сидоров', status: 'pending' } });
+  const service = fixture(t);
+  const result = service.summary({ filters: { from: '2026-11-02', to: '2026-11-30', executor: 'сидоров' } });
   assert.equal(result.totals.total, 1);
   assert.equal(result.totals.overdue, 0);
-  assert.deepEqual(result.executors, [{ key: 'сидоров', label: 'Сидоров', total: 1, completed: 0, active: 1, overdue: 0 }]);
-  assert.deepEqual(result.timeline, [{ month: '2026-11', total: 1, completed: 0, active: 1 }]);
+  assert.deepEqual(result.executors, [{ key: 'сидоров', label: 'Сидоров', total: 1, closed: 0, active: 1, overdue: 0 }]);
+  assert.deepEqual(result.timeline, [{ month: '2026-11', total: 1, closed: 0, active: 1 }]);
   assert.deepEqual(result.instructions?.items, [
-    { id: 4, instructionNumber: '1', title: 'Указание', deadline: '2026-10-03', extendedUntil: '2026-11-02', status: 'pending' },
+    { id: 4, instructionNumber: '1', title: 'Указание', deadline: '2026-10-03', extendedUntil: '2026-11-02', closedAt: null },
   ]);
-  const october = service.summary({ filters: { ...filters, executor: 'сидоров', status: 'pending' }, page: 10 });
+  const october = service.summary({ filters: { ...filters, executor: 'сидоров' }, page: 10 });
   assert.deepEqual(october.instructions, { items: [], page: 1, pageCount: 1 });
 });
 
@@ -114,16 +133,16 @@ test('analytics paginates matching instructions by effective deadline and ID', t
     instructions.create({ ...draft, deadline: '2026-10-20', extendedUntil: '2026-10-25' });
     for (let index = 0; index < 24; index++) instructions.create({ ...draft, deadline: '2026-10-24' });
   });
-  const request = { filters: { ...filters, executor: 'иванов', status: 'active' } };
+  const request = { filters: { ...filters, executor: 'иванов' } };
   const first = service.summary(request);
-  assert.equal(first.totals.total, 26);
+  assert.equal(first.totals.total, 27);
   assert.equal(first.instructions?.page, 1);
   assert.equal(first.instructions.pageCount, 2);
-  assert.deepEqual(first.instructions.items.map(item => item.id), [...Array.from({ length: 24 }, (_, index) => index + 7), 1]);
+  assert.deepEqual(first.instructions.items.map(item => item.id), [3, ...Array.from({ length: 24 }, (_, index) => index + 7)]);
   const last = service.summary({ ...request, page: 99 });
   assert.equal(last.instructions.page, 2);
   assert.equal(last.instructions.pageCount, 2);
-  assert.deepEqual(last.instructions.items.map(item => item.id), [6]);
+  assert.deepEqual(last.instructions.items.map(item => item.id), [1, 6]);
 });
 
 test('analytics rejects a page outside the positive safe integer range', t => {
@@ -136,10 +155,10 @@ test('analytics rejects a page outside the positive safe integer range', t => {
 test('analytics validates filters, treats executor keys literally and supports empty data', t => {
   const service = fixture(t);
   assert.throws(() => service.summary({ filters: { from: '2026-10-30', to: '2026-10-01' } }), /период/i);
-  assert.throws(() => service.summary({ filters: { status: "'; DROP TABLE instructions; --" } }), /статус/i);
+  assert.throws(() => service.summary({ filters: { executor: false } }), /фильтры/i);
   assert.equal(service.summary({ filters: { executor: '%' } }).totals.total, 0);
   const empty = service.summary({ filters: { from: '2000-01-01', to: '2000-01-31' } });
-  assert.equal(empty.totals.completionRate, 0);
+  assert.equal(empty.totals.closedRate, 0);
   assert.deepEqual(empty.timeline, []);
   assert.deepEqual(empty.executors, []);
 });

@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
+import { addCalendarDays, formatDate } from '../../src/shared/dates.js';
 
 export async function verifyAnalytics(driver, fixture, { generation }) {
   const { js, api, wait, click, navigate, fill, resize, resizeDefault, screenshot } = driver;
-  const { registrySelections } = fixture;
+  const { registrySelections, today } = fixture;
 
   const { items: allInstructions } = await api('instructions', 'list', { generation, limit: 50 });
   const primaryExecutor = registrySelections.executor;
@@ -19,11 +20,13 @@ export async function verifyAnalytics(driver, fixture, { generation }) {
 
   await navigate('/analytics', 'Аналитика');
   await wait("document.querySelector('[data-metric=total]')?.textContent === '27'");
-  assert.equal(await js("document.querySelector('[data-metric=completed]').textContent"), '1');
-  assert.equal(await js("document.querySelector('[data-metric=active]').textContent"), '26');
+  assert.equal(await js("document.querySelector('[data-metric=closed]').textContent"), '0');
+  assert.equal(await js("document.querySelector('[data-metric=active]').textContent"), '27');
+  assert.equal(await js("[...document.querySelectorAll('.analytics-page h2')].some(heading => heading.textContent.trim() === 'Статусы исполнения')"), false);
   const executorMetric = (label, metric) => js(`document.querySelector(${JSON.stringify(`[data-executor=${JSON.stringify(label)}] [data-executor-metric=${metric}]`)})?.textContent.trim()`);
   assert.equal(await executorMetric(primaryExecutor, 'total'), '26');
-  assert.equal(await executorMetric(primaryExecutor, 'completed'), '1');
+  assert.equal(await executorMetric(primaryExecutor, 'active'), '26');
+  assert.equal(await executorMetric(primaryExecutor, 'closed'), '0');
   assert.equal(await executorMetric(similarExecutor, 'active'), '1');
   assert.equal(await js("document.querySelector('.analytics-filter-toggle').getAttribute('aria-expanded')"), 'false');
   assert.ok(await js(`document.querySelector('${executorSelect}').getClientRects().length`));
@@ -35,7 +38,7 @@ export async function verifyAnalytics(driver, fixture, { generation }) {
 
   await fill(executorSelect, { 0: primaryExecutorKey });
   await wait("document.querySelector('[data-metric=total]')?.textContent === '26'");
-  assert.equal(await js("document.querySelector('[data-metric=completed]').textContent"), '1');
+  assert.equal(await js("[...document.querySelectorAll('.analytics-instructions thead th')].some(heading => heading.textContent.trim() === 'Статус')"), false);
   assert.equal(await js("document.querySelectorAll('[data-executor]').length"), 1);
   assert.equal(await executorMetric(primaryExecutor, 'overdue'), '0');
   assert.deepEqual(await executorOptions(), options);
@@ -66,6 +69,35 @@ export async function verifyAnalytics(driver, fixture, { generation }) {
   await wait(`document.querySelector('[data-metric=total]')?.textContent === '1' && Boolean(document.querySelector('${instructionRows}[data-instruction-id="${similarInstruction.id}"]'))`);
   assert.deepEqual(await analyticsInstructionIds(), [similarInstruction.id]);
   assert.deepEqual(await executorOptions(), options);
+
+  const weekStart = addCalendarDays(today, -7);
+  const period = `${formatDate(weekStart)} — ${formatDate(today)}`;
+  const weekFixtures = [];
+  try {
+    for (const [label, deadline] of [
+      ['Начало недели', weekStart],
+      ['До начала недели', addCalendarDays(weekStart, -1)],
+      ['После конца недели', addCalendarDays(today, 1)],
+    ]) {
+      weekFixtures.push(await api('instructions', 'create', { generation, data: {
+        controlDate: deadline, deadline, instructionNumber: label, title: label, executor: similarExecutor,
+      } }));
+    }
+    const [{ id: closedId }] = weekFixtures;
+    await api('instructions', 'closeControl', { generation, id: closedId });
+    await click('Эта неделя', '.analytics-presets button');
+    await wait(`document.querySelector('.analytics-period span')?.textContent === ${JSON.stringify(period)} &&
+      document.querySelector('[data-metric=total]')?.textContent === '2' &&
+      document.querySelector('[data-metric=closed]')?.textContent === '1'`);
+    assert.deepEqual(await analyticsInstructionIds(), [closedId, similarInstruction.id]);
+    assert.equal(await executorMetric(similarExecutor, 'active'), '1');
+    assert.equal(await executorMetric(similarExecutor, 'closed'), '1');
+    assert.equal(await executorMetric(similarExecutor, 'overdue'), '0');
+    assert.equal(await js(`document.querySelector('${instructionRows}[data-instruction-id="${closedId}"] .analytics-control-closed')?.textContent.trim()`), 'Контроль закрыт');
+  } finally {
+    for (const { id } of weekFixtures) await api('instructions', 'remove', { generation, id });
+  }
+  await click('Этот месяц', '.analytics-presets button');
   await fill(executorSelect, { 0: '' });
   await wait("document.querySelector('[data-metric=total]')?.textContent === '27'");
   assert.deepEqual(await analyticsInstructionIds(), []);
@@ -74,7 +106,7 @@ export async function verifyAnalytics(driver, fixture, { generation }) {
   await wait("document.querySelector('[data-metric=total]')?.textContent === '26'");
   await js("document.querySelector('.analytics-filter-toggle').click()");
   await wait("document.querySelector('.analytics-filter-toggle').getAttribute('aria-expanded') === 'true'");
-  assert.equal(await js("document.querySelector('[name=analytics-type], [name=analytics-priority]') === null"), true);
+  assert.equal(await js("document.querySelector('[name=analytics-type], [name=analytics-priority], [name=analytics-status]') === null"), true);
   await fill('[name=analytics-from]', { 0: '2000-01-01' }); await fill('[name=analytics-to]', { 0: '2000-01-31' });
   await click('Применить', '.analytics-filters button');
   await wait("document.querySelector('.analytics-empty h2')?.textContent === 'По этим фильтрам нет указаний'");

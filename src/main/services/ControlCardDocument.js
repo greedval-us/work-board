@@ -10,7 +10,6 @@ const TABLE_ROW = /<w:tr(?=[\s>])[^>]*>[\s\S]*?<\/w:tr>/g;
 const SLOT = /\{\{([A-Za-z]+)\}\}/g;
 // A figure space reserves the same width as the form's underscore.
 const BLANK_FIELD_SPACE = '\u2007';
-const BLANK_EXECUTOR_LINE = BLANK_FIELD_SPACE.repeat(77);
 const TEXT_ENTITIES = { '&': '&amp;', '<': '&lt;', '>': '&gt;' };
 
 function wordText(value) {
@@ -25,23 +24,24 @@ function fillSlots(fragment, values) {
   return fragment.replaceAll(SLOT, (_, field) => wordText(values[field] ?? ''));
 }
 
+function numberAndDate(number, date, blankWidth) {
+  return [number, formatDate(date)].filter(Boolean).join(' ') || BLANK_FIELD_SPACE.repeat(blankWidth);
+}
+
 function templateValues(fields, recordId) {
   const phone = fields.executorPhone ? `тел. ${fields.executorPhone}` : '';
   const executorDetails = [fields.department, fields.executor, phone].filter(Boolean).join(', ');
-  const removalDate = formatDate(fields.removalDate);
   return {
     ...fields,
-    cardNumber: recordId == null ? '' : ` №${recordId}`,
+    cardNumber: recordId == null ? BLANK_FIELD_SPACE.repeat(8) : String(recordId),
     deadline: formatDate(fields.deadline) || BLANK_FIELD_SPACE.repeat(16),
-    extendedUntil: formatDate(fields.extendedUntil) || BLANK_FIELD_SPACE.repeat(26),
-    instructionNumber: fields.instructionNumber || BLANK_FIELD_SPACE.repeat(11),
-    documentDate: formatDate(fields.documentDate) || BLANK_FIELD_SPACE.repeat(16),
-    incomingNumber: fields.incomingNumber || BLANK_FIELD_SPACE.repeat(14),
-    incomingDate: formatDate(fields.incomingDate) || BLANK_FIELD_SPACE.repeat(11),
-    source: fields.source || BLANK_FIELD_SPACE.repeat(66),
-    executorDetails: executorDetails || BLANK_FIELD_SPACE.repeat(263),
-    executorBlankTail: executorDetails ? `\n${BLANK_EXECUTOR_LINE}`.repeat(3) : BLANK_FIELD_SPACE.repeat(45),
-    removalDate: removalDate ? `\n${removalDate}` : '',
+    extendedUntil: formatDate(fields.extendedUntil) || BLANK_FIELD_SPACE.repeat(16),
+    office: fields.office || BLANK_FIELD_SPACE.repeat(40),
+    instructionNumber: numberAndDate(fields.instructionNumber, fields.documentDate, 32),
+    incomingNumber: numberAndDate(fields.incomingNumber, fields.incomingDate, 32),
+    source: fields.source || BLANK_FIELD_SPACE.repeat(40),
+    executorDetails: executorDetails || BLANK_FIELD_SPACE.repeat(48),
+    removalDate: formatDate(fields.removalDate),
   };
 }
 

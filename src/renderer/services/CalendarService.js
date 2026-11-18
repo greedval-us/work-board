@@ -6,5 +6,7 @@ export const calendarService = createDesktopService({
   getTask: ['tasks', 'get'],
   createTask: ['tasks', 'create'],
   updateTask: ['tasks', 'update'],
+  setOccurrenceCompleted: ['tasks', 'setOccurrenceCompleted'],
+  moveOccurrence: ['tasks', 'moveOccurrence'],
   removeTask: ['tasks', 'remove'],
 });

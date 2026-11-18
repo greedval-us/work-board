@@ -12,14 +12,17 @@ export const useAppStore = defineStore('app', () => {
   const info = ref(null);
   const database = ref(null);
   const theme = ref(DEFAULT_SETTINGS.theme);
+  const typography = shallowRef(DEFAULT_SETTINGS.typography);
   const registryOptions = shallowRef(DEFAULT_SETTINGS.registryOptions);
   const executorContacts = shallowRef(DEFAULT_SETTINGS.executorContacts);
+  const office = ref(DEFAULT_SETTINGS.office);
   const loading = ref(false);
   const initialized = ref(false);
   const saving = ref(false);
   const error = ref('');
   const registryOptionsError = ref('');
-  const executorContactsError = ref('');
+  const officeError = ref('');
+  const typographyError = ref('');
   const revision = ref(0);
   const pendingOperations = ref(0);
   const databaseSwitching = ref(false);
@@ -32,10 +35,13 @@ export const useAppStore = defineStore('app', () => {
 
   function applySettings(settings) {
     theme.value = settings.theme;
+    typography.value = settings.typography ?? DEFAULT_SETTINGS.typography;
     registryOptions.value = settings.registryOptions ?? DEFAULT_SETTINGS.registryOptions;
     executorContacts.value = settings.executorContacts ?? DEFAULT_SETTINGS.executorContacts;
+    office.value = settings.office ?? DEFAULT_SETTINGS.office;
     registryOptionsError.value = '';
-    executorContactsError.value = '';
+    officeError.value = '';
+    typographyError.value = '';
   }
 
   async function loadApplication() {
@@ -58,7 +64,8 @@ export const useAppStore = defineStore('app', () => {
     saving.value = true;
     error.value = '';
     registryOptionsError.value = '';
-    executorContactsError.value = '';
+    officeError.value = '';
+    typographyError.value = '';
     try {
       const settings = await withOperation(() => operation(database.value.generation));
       applySettings(settings);
@@ -71,6 +78,14 @@ export const useAppStore = defineStore('app', () => {
 
   function setTheme(value) {
     return saveSettings(generation => settingsService.setTheme(value, generation));
+  }
+
+  function setTypography(value) {
+    return saveSettings(generation => settingsService.setTypography(value, generation), typographyError);
+  }
+
+  function setOffice(value) {
+    return saveSettings(generation => settingsService.setOffice(value, generation), officeError);
   }
 
   function addRegistryOption(field, value, contact) {
@@ -87,10 +102,6 @@ export const useAppStore = defineStore('app', () => {
 
   function removeRegistryOption(field, value) {
     return saveSettings(generation => settingsService.removeRegistryOption(field, value, generation), registryOptionsError);
-  }
-
-  function setExecutorContact(executor, contact) {
-    return saveSettings(generation => settingsService.setExecutorContact(executor, contact, generation), executorContactsError);
   }
 
   function touchData() { revision.value++; }
@@ -150,9 +161,9 @@ export const useAppStore = defineStore('app', () => {
   }
 
   return {
-    info, database, theme, registryOptions, executorContacts, loading, initialized, saving, error, registryOptionsError,
-    executorContactsError, revision, pendingOperations,
-    databaseSwitching, initialize, setTheme, addRegistryOption, updateRegistryOption, removeRegistryOption, setExecutorContact,
+    info, database, theme, typography, registryOptions, executorContacts, office, loading, initialized, saving, error,
+    registryOptionsError, officeError, typographyError, revision, pendingOperations,
+    databaseSwitching, initialize, setTheme, setTypography, setOffice, addRegistryOption, updateRegistryOption, removeRegistryOption,
     touchData, withOperation, selectDatabase,
     registerUnsavedGuard, resolveUnsavedChanges, prepareToClose,
     hasUnsavedGuards: () => unsavedGuards.size > 0,

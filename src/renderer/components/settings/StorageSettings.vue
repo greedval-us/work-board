@@ -36,8 +36,8 @@ const busy = computed(() => app.loading || app.databaseSwitching || app.pendingO
 
 <style scoped>
 .storage-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
-.storage-button { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); font-size: 12px; font-weight: 550; }
+.storage-button { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); font-size: calc(12px + var(--app-font-offset)); font-weight: 550; }
 .storage-button:hover { background: var(--raised); }
-.storage-note { display: flex; align-items: flex-start; gap: 7px; margin-top: 14px; color: var(--muted); font-size: 12px; max-width: 70ch; }
+.storage-note { display: flex; align-items: flex-start; gap: 7px; margin-top: 14px; color: var(--muted); font-size: calc(12px + var(--app-font-offset)); max-width: 70ch; }
 .storage-note svg { margin-top: 2px; }
 </style>

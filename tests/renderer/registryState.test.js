@@ -73,6 +73,20 @@ test('only the newest open can select a checkpoint when reads share an instructi
   assert.equal(state.selectedCheckpoint.value, '2026-10-26');
 });
 
+test('opening a row while its control closure is pending cannot show its old card', async (t) => {
+  const pending = deferred();
+  const { app, service } = fixture(t, { closeControl: () => pending.promise });
+  const scope = effectScope();
+  t.after(() => scope.stop());
+  const state = scope.run(() => useRegistry(app, service));
+
+  const closing = state.closeControl({ id: 1, generation: 1 });
+  assert.equal(await state.openRecord(1), false);
+  assert.equal(state.selected.value, null);
+  pending.resolve({ ...record(1), closedAt: '2026-11-16T10:00:00.000Z' });
+  assert.equal(await closing, true);
+});
+
 test('a checkpoint opened from a route is ignored if that route changes during the read', async (t) => {
   const pending = deferred();
   const { app, service } = fixture(t, { get: () => pending.promise });

@@ -30,7 +30,7 @@ function fixture(t, query = {}, getTask = async ({ id }) => task(id)) {
 test('task notification selects the current task date and opens its card in the captured database', async (t) => {
   const state = fixture(t, { task: '7', date: '2026-11-11', notification: 'first' }, async ({ id }) => task(id, '2026-11-13'));
   await settle();
-  assert.deepEqual(state.calls, [{ id: 7, generation: 1 }]);
+  assert.deepEqual(state.calls, [{ id: 7, date: '2026-11-11', generation: 1 }]);
   assert.equal(state.editing.value.task.id, 7);
   assert.equal(state.editing.value.generation, 1);
   assert.equal(state.selectedDate.value, '2026-11-13');
@@ -50,6 +50,27 @@ test('another notification token reopens a closed task but preserves its current
   await settle();
   assert.equal(state.editing.value.task.id, 7);
   assert.equal(state.calls.length, 2);
+});
+
+test('opening another occurrence of the same recurring task checks the current draft and resolves its date', async (t) => {
+  const from = { query: { task: '7', date: '2026-11-12' } };
+  const to = { query: { task: '7', date: '2026-11-19' } };
+  const state = fixture(t, from.query, async ({ id, date }) => ({
+    ...task(id, date), seriesDate: '2026-11-05', recurrence: { frequency: 'weekly' },
+  }));
+  await settle();
+  const draft = state.editing.value;
+  assert.equal(draft.date, '2026-11-12');
+  assert.equal(await state.navigation.guardRouteUpdate(to, from), false);
+  assert.equal(state.closeCalls(), 1);
+  state.allowClose();
+  assert.equal(await state.navigation.guardRouteUpdate(to, from), true);
+  state.route.query = to.query;
+  await settle();
+  assert.notEqual(state.editing.value, draft);
+  assert.equal(state.editing.value.date, '2026-11-19');
+  assert.equal(state.selectedDate.value, '2026-11-19');
+  assert.deepEqual(state.calls.map(({ date }) => date), ['2026-11-12', '2026-11-19']);
 });
 
 test('task route guard protects a different draft even when the URL already contains that task ID', async (t) => {

@@ -25,7 +25,7 @@ export class CalendarService {
       const key = instruction.status === INSTRUCTION_STATUS.COMPLETED ? 'completedControls' : 'controls';
       byDate.get(instructionDeadline(instruction))[key] += 1;
     }
-    for (const task of this.tasks.list({ from, to })) {
+    for (const task of this.tasks.occurrences({ from, to })) {
       const key = task.completed ? 'completedTasks' : 'tasks';
       byDate.get(task.date)[key] += 1;
     }
@@ -41,7 +41,7 @@ export class CalendarService {
     validateDate(date);
     return {
       instructions: this.instructions.all({ filters: { deadlineFrom: date, deadlineTo: date } }),
-      tasks: this.tasks.list({ from: date, to: date }),
+      tasks: this.tasks.occurrences({ from: date, to: date }),
       checkpoints: [...this.#checkpoints(date, date)],
     };
   }

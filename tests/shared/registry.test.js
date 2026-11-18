@@ -19,7 +19,7 @@ test('instruction validation preserves identifiers and optional multiline text',
   assert.equal(data.summary, '  Первая строка\nВторая строка  ');
   const { incomingNumber, summary, executionMark, status, ...required } = instruction();
   assert.deepEqual(validateInstruction(required), instruction({
-    incomingNumber: '', source: '', summary: '', extendedUntil: '', executionMark: '', status: 'pending',
+    incomingNumber: '', documentType: '', source: '', summary: '', extendedUntil: '', executionMark: '', status: 'pending',
     controlSchedule: { frequency: '', firstDate: '', customDates: [], marks: [] },
   }));
 });
@@ -97,7 +97,7 @@ test('checkpoint filters default to empty and accept only supported values', () 
 
 test('list requests constrain sort fields and pagination', () => {
   assert.deepEqual(normalizeListRequest(), {
-    filters: emptyFilters(), sort: { field: 'controlDate', direction: 'desc' }, offset: 0, limit: 25,
+    filters: emptyFilters(), sort: { field: 'controlDate', direction: 'desc' }, offset: 0, limit: 25, closed: false,
   });
   assert.equal(normalizeListRequest({ offset: 50, limit: 50, sort: { field: 'executor', direction: 'asc' } }).offset, 50);
   assert.deepEqual(normalizeListRequest({ sort: { field: 'controlFrequency', direction: 'asc' } }).sort, { field: 'controlFrequency', direction: 'asc' });
@@ -105,6 +105,11 @@ test('list requests constrain sort fields and pagination', () => {
   for (const request of [{ offset: -1 }, { offset: null }, { offset: 0.5 }, { limit: 0 }, { limit: null }, { limit: 101 }, { limit: '25' }, { sort: { field: null } }, { sort: { direction: null } }, { sort: { field: 'id; DROP TABLE instructions', direction: 'asc' } }, { sort: { field: 'deadline', direction: 'DROP' } }]) {
     assert.throws(() => normalizeListRequest(request), ValidationError);
   }
+});
+
+test('list requests accept only a boolean closed flag', () => {
+  assert.equal(normalizeListRequest({ closed: true }).closed, true);
+  for (const closed of [null, 1, 'true']) assert.throws(() => normalizeListRequest({ closed }), ValidationError);
 });
 
 test('list requests accept an optional Gregorian reference date', () => {

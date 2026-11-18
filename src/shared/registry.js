@@ -2,9 +2,10 @@ import { ValidationError } from './errors.js';
 import { validateDate, localDate, addCalendarDays } from './dates.js';
 import { validateRecord as record, validateText as text, validateEnum as enumValue, validateDateRange } from './validation.js';
 import { validateControlSchedule } from './controlSchedule.js';
+import { validateTaskRecurrence } from './taskRecurrence.js';
 import {
   CHECKPOINT_FILTER_LABELS, INSTRUCTION_COLUMNS, INSTRUCTION_STATUSES, INSTRUCTION_STATUS, TASK_PRIORITIES,
-  TASK_PRIORITY, TASK_PRIORITY_TONES, REGISTRY_PAGINATION, REGISTRY_DEFAULT_SORT, SORT_DIRECTIONS, URGENCY_WINDOW_DAYS,
+  TASK_PRIORITY, TASK_PRIORITY_TONES, REGISTRY_PAGINATION, REGISTRY_DEFAULT_SORT, REGISTRY_REPORT_TYPE, SORT_DIRECTIONS, URGENCY_WINDOW_DAYS,
 } from './constants/registry.js';
 
 // Stable domain entry point for existing consumers; concerns live in focused modules.
@@ -20,6 +21,7 @@ export function validateInstruction(value) {
     controlDate: validateDate(data.controlDate, 'Дата постановки на контроль'),
     incomingNumber: text(data.incomingNumber, 'Входящий номер'),
     instructionNumber: text(data.instructionNumber, 'Подписной номер', true),
+    documentType: text(data.documentType, 'Вид документа').trim(),
     source: text(data.source, 'Откуда'),
     title: text(data.title, 'Название указания', true),
     summary: text(data.summary, 'Резолюция'),
@@ -43,17 +45,20 @@ export function validateTask(value) {
   const data = record(value, 'Задача');
   const completed = data.completed === undefined ? false : data.completed;
   if (typeof completed !== 'boolean') throw new ValidationError('Выполнение задачи: укажите да или нет.');
+  const date = validateDate(data.date, 'Дата задачи');
+  const recurrence = validateTaskRecurrence(data.recurrence, date);
   return {
     title: text(data.title, 'Название задачи', true),
-    date: validateDate(data.date, 'Дата задачи'),
+    date,
     description: text(data.description, 'Описание задачи'),
     priority: enumValue(data.priority === undefined ? TASK_PRIORITY.NORMAL : data.priority, TASK_PRIORITIES, 'Срочность'),
     completed,
+    ...(recurrence ? { recurrence } : {}),
   };
 }
 
 export function emptyFilters() {
-  return { instructionNumber: '', deadlineFrom: '', deadlineTo: '', executor: '', status: '', executionMark: '', checkpoint: '' };
+  return { instructionNumber: '', deadlineFrom: '', deadlineTo: '', executor: '', documentType: '', status: '', executionMark: '', checkpoint: '' };
 }
 
 export function normalizeFilters(value = {}) {
@@ -79,11 +84,22 @@ export function normalizeListRequest(value = {}) {
   if (!SORT_DIRECTIONS.includes(direction)) throw new ValidationError('Недопустимое направление сортировки.');
   const offset = data.offset === undefined ? REGISTRY_PAGINATION.DEFAULT_OFFSET : data.offset;
   const limit = data.limit === undefined ? REGISTRY_PAGINATION.DEFAULT_SIZE : data.limit;
+  const { closed = false } = data;
   if (!Number.isSafeInteger(offset) || offset < 0) throw new ValidationError('Некорректное смещение страницы.');
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > REGISTRY_PAGINATION.MAX_SIZE) throw new ValidationError(`Размер страницы должен быть от 1 до ${REGISTRY_PAGINATION.MAX_SIZE}.`);
-  const request = { filters: normalizeFilters(data.filters), sort: { field, direction }, offset, limit };
+  if (typeof closed !== 'boolean') throw new ValidationError('Некорректный раздел реестра.');
+  const request = { filters: normalizeFilters(data.filters), sort: { field, direction }, offset, limit, closed };
   if (data.today !== undefined) request.today = validateDate(data.today);
   return request;
+}
+
+export function normalizeExportRequest(value = {}) {
+  const request = normalizeListRequest(value);
+  const { reportType = REGISTRY_REPORT_TYPE.FULL } = value;
+  if (!Object.values(REGISTRY_REPORT_TYPE).includes(reportType)) {
+    throw new ValidationError('Недопустимый вид отчёта Excel.');
+  }
+  return { ...request, reportType };
 }
 
 export function normalizeSearch(value) {

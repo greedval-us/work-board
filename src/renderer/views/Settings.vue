@@ -2,7 +2,6 @@
 import { computed } from 'vue';
 import PageHeading from '../components/ui/PageHeading.vue';
 import AppearanceSettings from '../components/settings/AppearanceSettings.vue';
-import ExecutorContactsSettings from '../components/settings/ExecutorContactsSettings.vue';
 import RegistryOptionsSettings from '../components/settings/RegistryOptionsSettings.vue';
 import StorageSettings from '../components/settings/StorageSettings.vue';
 import { useAppStore } from '../stores/appStore.js';
@@ -16,12 +15,11 @@ const disabled = computed(() => !store.database?.ready || store.loading || store
     <PageHeading title="Настройки" description="Оформление и данные приложения." />
     <StorageSettings />
     <RegistryOptionsSettings :key="store.database?.generation" :options="store.registryOptions" :executor-contacts="store.executorContacts"
-      :ready="Boolean(store.database?.ready)" :disabled="disabled" :error="store.registryOptionsError" :add-option="store.addRegistryOption"
-      :update-option="store.updateRegistryOption" :remove-option="store.removeRegistryOption" />
-    <ExecutorContactsSettings v-if="store.database?.ready" :key="`contacts-${store.database.generation}`"
-      :options="store.registryOptions" :contacts="store.executorContacts" :disabled="disabled"
-      :error="store.executorContactsError" :save-contact="store.setExecutorContact" />
-    <AppearanceSettings :theme="store.theme" :disabled="disabled" @change="store.setTheme" />
+      :office="store.office" :office-error="store.officeError" :save-office="store.setOffice"
+      :ready="Boolean(store.database?.ready)" :disabled="disabled" :error="store.registryOptionsError"
+      :add-option="store.addRegistryOption" :update-option="store.updateRegistryOption" :remove-option="store.removeRegistryOption" />
+    <AppearanceSettings :theme="store.theme" :typography="store.typography" :typography-error="store.typographyError"
+      :disabled="disabled" @change="store.setTheme" @change-typography="store.setTypography" />
     <p v-if="store.saving" class="save-status" role="status">Сохранение…</p>
   </section>
 </template>

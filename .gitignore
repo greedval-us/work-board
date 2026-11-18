@@ -22,8 +22,9 @@ coverage/
 *.pid
 *.pid.lock
 *.tgz
+*.tmp
 
-# Local databases and recovery files
+# Local databases, exported documents and recovery files
 *.sqlite
 *.sqlite3
 *.db
@@ -36,6 +37,10 @@ coverage/
 *.files/
 database-location.json
 *.xlsx
+*.docx
+!/src/main/templates/control-card-f21.docx
+~$*
+.~lock.*#
 *.bak
 *.backup
 *.old

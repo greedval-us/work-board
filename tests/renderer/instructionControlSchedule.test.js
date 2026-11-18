@@ -175,6 +175,111 @@ test('changing the recurring anchor resets individual moves while preserving his
   assert.deepEqual(schedule.value.marks, [history]);
 });
 
+test('a changed calendar day redraws the preview while invalid or equivalent values preserve moves', async t => {
+  const history = { date: '2026-02-17', text: 'Проверено', actualDate: '2026-02-16' };
+  const moves = [{ from: '2026-02-15', to: '2026-02-17' }];
+  const { schedule, root, row } = await mountEditor(t, {
+    frequency: 'monthly', firstDate: '2026-01-15', customDates: [], moves, marks: [history],
+  });
+  const field = find(root, node => node.props?.name === 'control-day-of-month');
+  assert.ok(field, 'month-based schedules offer a day input');
+  assert.equal(field.props.min, '1');
+  assert.equal(field.props.max, '31');
+  const commit = async (value, badInput = false) => {
+    field.props.onChange({ currentTarget: { value, validity: { badInput } } });
+    await nextTick();
+  };
+
+  await commit('15');
+  assert.equal(schedule.value.dayOfMonth, 15);
+  assert.deepEqual(schedule.value.moves, moves);
+  await commit('', true);
+  await commit('32');
+  assert.equal(schedule.value.dayOfMonth, 15);
+  assert.deepEqual(schedule.value.moves, moves);
+  await commit('');
+  assert.equal(schedule.value.dayOfMonth, undefined);
+  assert.deepEqual(schedule.value.moves, moves);
+
+  await commit('3');
+  assert.equal(schedule.value.dayOfMonth, 3);
+  assert.equal(schedule.value.moves, undefined);
+  assert.deepEqual(schedule.value.marks, [history]);
+  assert.ok(row('2026-02-03'), 'the initial preview skips a date before the schedule starts');
+});
+
+test('a weekly selection keeps equivalent moves and preserves history when the weekday changes', async t => {
+  const history = { date: '2026-02-17', text: 'Проверено', actualDate: '2026-02-16' };
+  const moves = [{ from: '2026-02-12', to: '2026-02-17' }];
+  const { schedule, root, row } = await mountEditor(t, {
+    frequency: 'weekly', firstDate: '2026-01-15', customDates: [], moves, marks: [history],
+  });
+  const field = find(root, node => node.props?.name === 'control-day-of-week');
+  assert.equal(field?.type, 'select');
+  const commit = async (value) => {
+    field.props.onChange({ target: { value } });
+    await nextTick();
+  };
+
+  await commit('4');
+  assert.equal(schedule.value.dayOfWeek, 4);
+  assert.deepEqual(schedule.value.moves, moves);
+  await commit('8');
+  assert.equal(schedule.value.dayOfWeek, 4);
+  await commit('');
+  assert.equal(schedule.value.dayOfWeek, undefined);
+  assert.deepEqual(schedule.value.moves, moves);
+
+  await commit('5');
+  assert.equal(schedule.value.dayOfWeek, 5);
+  assert.equal(schedule.value.moves, undefined);
+  assert.deepEqual(schedule.value.marks, [history]);
+  assert.ok(row('2026-01-16'), 'the first Friday falls after the Thursday start date');
+
+  find(root, node => node.props?.name === 'control-frequency').props.onChange({ target: { value: 'monthly' } });
+  await nextTick();
+  assert.equal(schedule.value.dayOfWeek, undefined);
+  assert.equal(find(root, node => node.props?.name === 'control-day-of-week'), undefined);
+  assert.ok(find(root, node => node.props?.name === 'control-day-of-month'));
+});
+
+test('the annual month selector updates the preview independently of the day and preserves history', async t => {
+  const history = { date: '2027-08-21', text: 'Проверено', actualDate: '2027-08-20' };
+  const moves = [{ from: '2027-08-20', to: '2027-08-21' }];
+  const { schedule, root, row } = await mountEditor(t, {
+    frequency: 'yearly', firstDate: '2027-08-20', customDates: [], moves, marks: [history],
+  }, { selectedDate: '2027-08-21', deadline: '2028-12-31' });
+  const field = name => find(root, node => node.props?.name === name);
+  const month = field('control-month-of-year');
+  const setMonth = async (value) => {
+    month.props.onChange({ target: { value } });
+    await nextTick();
+  };
+
+  assert.equal(month?.props.value, '');
+  await setMonth('8');
+  assert.deepEqual(schedule.value.moves, moves);
+  await setMonth('2');
+  assert.equal(schedule.value.monthOfYear, 2);
+  assert.equal(schedule.value.moves, undefined);
+  assert.deepEqual(schedule.value.marks, [history]);
+  assert.ok(row('2028-02-20'), 'the chosen month falls before the start month, and the day comes from the start date');
+
+  field('control-day-of-month').props.onChange({ currentTarget: { value: '29' } });
+  await nextTick();
+  assert.ok(row('2028-02-29'));
+  await setMonth('');
+  assert.equal(Object.hasOwn(schedule.value, 'monthOfYear'), false);
+  assert.ok(row('2027-08-29'), 'clearing the month returns to the start month, keeping the chosen day');
+
+  await setMonth('11');
+  field('control-frequency').props.onChange({ target: { value: 'quarterly' } });
+  await nextTick();
+  assert.equal(field('control-month-of-year'), undefined);
+  assert.equal(Object.hasOwn(schedule.value, 'monthOfYear'), false);
+  assert.equal(schedule.value.dayOfMonth, 29);
+});
+
 test('moving a legacy mark after editing it preserves the original factual date on later edits', async t => {
   const { editor, schedule, field, textarea, moveButton, input } = await mountEditor(t, {
     frequency: 'monthly', firstDate: '2026-01-15', customDates: [], marks: [{ date: '2026-02-15', text: 'Получено' }],
@@ -216,10 +321,18 @@ test('moving and removing a custom date keeps a single effective row and preserv
 test('changing frequency resets moves and keeps completed dates in history', async t => {
   const history = { date: '2026-02-17', text: 'Проверено', actualDate: '2026-02-16' };
   const { schedule, root } = await mountEditor(t, {
-    frequency: 'monthly', firstDate: '2026-01-15', customDates: [], moves: [{ from: '2026-02-15', to: '2026-02-17' }], marks: [history],
+    frequency: 'monthly', firstDate: '2026-01-15', customDates: [], dayOfMonth: 15,
+    moves: [{ from: '2026-02-15', to: '2026-02-17' }], marks: [history],
   });
-  find(root, node => node.props?.name === 'control-frequency').props.onChange({ target: { value: 'weekly' } });
+  const select = find(root, node => node.props?.name === 'control-frequency');
+  select.props.onChange({ target: { value: 'semiannual' } });
   await nextTick();
+  assert.equal(schedule.value.dayOfMonth, 15);
+  assert.equal(schedule.value.firstDate, '2026-01-15');
+  select.props.onChange({ target: { value: 'weekly' } });
+  await nextTick();
+  assert.equal(schedule.value.dayOfMonth, undefined);
+  assert.equal(find(root, node => node.props?.name === 'control-day-of-month'), undefined);
   assert.equal(schedule.value.moves, undefined);
   assert.deepEqual(schedule.value.marks, [history]);
 });

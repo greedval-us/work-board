@@ -1,15 +1,21 @@
 import { addCalendarDays, validateDate } from './dates.js';
+import { DATE_LIMITS } from './constants/dates.js';
 import { instructionDeadline } from './registry.js';
 import { INSTRUCTION_STATUS, URGENCY_WINDOW_DAYS } from './constants/registry.js';
 import { listControlCheckpoints } from './controlSchedule.js';
 
-function notification(kind, record, date, today, checkpointDate = '') {
+function notification(kind, record, date, today, scheduledDate = '') {
   return {
-    id: `${kind}:${record.id}:${record.createdAt}${checkpointDate ? `:${checkpointDate}` : ''}`,
+    id: `${kind}:${record.id}:${record.createdAt}${scheduledDate ? `:${scheduledDate}` : ''}`,
     occurrence: `${date}:${today}`,
     kind, recordId: record.id, date, title: record.title,
     ...(kind === 'task' ? {} : { instructionNumber: record.instructionNumber }),
   };
+}
+
+export function deadlineNotificationHorizon(today) {
+  const horizon = addCalendarDays(today, URGENCY_WINDOW_DAYS);
+  return horizon.length === DATE_LIMITS.MAX.length ? horizon : DATE_LIMITS.MAX;
 }
 
 function firstCheckpointDate(schedule, fallback) {
@@ -20,7 +26,7 @@ function firstCheckpointDate(schedule, fallback) {
 // Derive reminders from current records; receipt state never keeps finished work alive.
 export function buildDeadlineNotifications({ instructions, scheduledInstructions, tasks, today }) {
   validateDate(today);
-  const horizon = addCalendarDays(today, URGENCY_WINDOW_DAYS);
+  const horizon = deadlineNotificationHorizon(today);
   const items = [];
   for (const record of instructions) {
     const date = instructionDeadline(record);
@@ -29,7 +35,9 @@ export function buildDeadlineNotifications({ instructions, scheduledInstructions
     }
   }
   for (const record of tasks) {
-    if (!record.completed && record.date <= horizon) items.push(notification('task', record, record.date, today));
+    if (!record.completed && record.date <= horizon) {
+      items.push(notification('task', record, record.date, today, record.recurrence ? record.originalDate ?? record.date : ''));
+    }
   }
   for (const record of scheduledInstructions) {
     if (record.status === INSTRUCTION_STATUS.COMPLETED) continue;

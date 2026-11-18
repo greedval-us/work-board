@@ -12,6 +12,14 @@ export class SettingsHandler {
         this.database.assertGeneration?.(payload?.generation);
         return this.settingsService.setTheme(payload?.theme);
       },
+      [channels.settings.setTypography]: (payload) => {
+        this.database.assertGeneration(payload?.generation);
+        return this.settingsService.setTypography(payload?.typography);
+      },
+      [channels.settings.setOffice]: (payload) => {
+        this.database.assertGeneration(payload?.generation);
+        return this.settingsService.setOffice(payload?.office);
+      },
       [channels.settings.addRegistryOption]: (payload) => {
         this.database.assertGeneration(payload?.generation);
         return this.settingsService.addRegistryOption(payload?.field, payload?.value, payload?.contact);

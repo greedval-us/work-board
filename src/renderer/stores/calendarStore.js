@@ -123,14 +123,18 @@ export function createCalendarStore({ id = 'calendar', getApp = useAppStore, ser
       });
     }
 
-    function saveTask(id, data, source = generation.value) {
+    function saveTask(id, data, source = generation.value, occurrence) {
       return mutate(source, () => id == null
         ? service.createTask({ data, generation: source })
-        : service.updateTask({ id, data, generation: source }));
+        : service.updateTask({ id, data, generation: source, ...(occurrence ? { occurrence } : {}) }));
     }
 
     function removeTask(id, source = generation.value) {
       return mutate(source, () => service.removeTask({ id, generation: source }));
+    }
+
+    function moveTaskOccurrence(id, from, to, source = generation.value) {
+      return mutate(source, () => service.moveOccurrence({ id, from, to, generation: source }));
     }
 
     async function toggleTask(task) {
@@ -139,10 +143,12 @@ export function createCalendarStore({ id = 'calendar', getApp = useAppStore, ser
       busyTaskId.value = task.id;
       taskError.value = '';
       try {
-        await saveTask(task.id, {
-          title: task.title, date: task.date, description: task.description,
-          priority: task.priority, completed: !task.completed,
-        }, source);
+        const completed = !task.completed;
+        if (task.recurrence?.frequency) {
+          await mutate(source, () => service.setOccurrenceCompleted({ id: task.id, date: task.date, completed, generation: source }));
+        } else {
+          await saveTask(task.id, { completed }, source);
+        }
       } catch (cause) {
         if (source === generation.value) taskError.value = errorMessage(cause, 'Не удалось изменить задачу.');
       } finally { if (source === generation.value) busyTaskId.value = null; }
@@ -160,7 +166,7 @@ export function createCalendarStore({ id = 'calendar', getApp = useAppStore, ser
     return {
       month, selectedDate, monthDays, instructions, tasks, checkpoints, ready, generation,
       monthLoading, dayLoading, monthError, dayError, taskError, busyTaskId,
-      acquire, fetchMonth, fetchDay, refresh, selectDate, changeMonth, saveTask, removeTask, toggleTask,
+      acquire, fetchMonth, fetchDay, refresh, selectDate, changeMonth, saveTask, removeTask, moveTaskOccurrence, toggleTask,
     };
   });
 }

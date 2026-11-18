@@ -24,6 +24,34 @@ test('next checkpoint compares moved dates with untouched recurrence dates', () 
   assert.equal(control.getNextControlCheckpoint({ ...monthly, moves: [{ from: '2026-04-30', to: '2026-01-02' }] }, bounds.deadline), '2026-01-02');
 });
 
+test('moves follow the configured month day for origin and collision checks', () => {
+  const limits = { controlDate: '2026-01-01', deadline: '2026-08-31' };
+  const schedule = { frequency: 'quarterly', firstDate: '2026-01-20', dayOfMonth: 15 };
+  assert.throws(() => control.moveControlCheckpoint(schedule, '2026-01-15', '2026-01-25', limits), ValidationError);
+  assert.throws(() => control.moveControlCheckpoint(schedule, '2026-04-15', '2026-07-15', limits), ValidationError);
+  assert.throws(() => control.moveControlCheckpoint(schedule, '2026-04-15', '2025-12-31', limits), ValidationError);
+  const moved = control.moveControlCheckpoint(schedule, '2026-04-15', '2026-04-16', limits);
+  assert.equal(moved.dayOfMonth, 15);
+  assert.equal(control.getNextControlCheckpoint(moved, limits.deadline), '2026-04-16');
+  assert.deepEqual(control.listControlCheckpoints(moved, { from: limits.controlDate, to: limits.deadline }), [
+    { date: '2026-04-16', originalDate: '2026-04-15', mark: '', scheduled: true },
+    { date: '2026-07-15', mark: '', scheduled: true },
+  ]);
+});
+
+test('weekly override moves follow actual weekday occurrences without shifting later ones', () => {
+  const schedule = { frequency: 'weekly', firstDate: '2026-01-01', dayOfWeek: 2 };
+  assert.throws(() => control.moveControlCheckpoint(schedule, '2026-01-01', '2026-01-02', bounds), ValidationError);
+  assert.throws(() => control.moveControlCheckpoint(schedule, '2026-01-06', '2026-01-13', bounds), ValidationError);
+  const moved = control.moveControlCheckpoint(schedule, '2026-01-06', '2026-01-07', bounds);
+  assert.equal(moved.dayOfWeek, 2);
+  assert.equal(control.getNextControlCheckpoint(moved, bounds.deadline), '2026-01-07');
+  assert.deepEqual(control.listControlCheckpoints(moved, { from: '2026-01-01', to: '2026-01-13' }), [
+    { date: '2026-01-07', originalDate: '2026-01-06', mark: '', scheduled: true },
+    { date: '2026-01-13', mark: '', scheduled: true },
+  ]);
+});
+
 test('moving an effective date twice retains one original anchor and can restore that anchor', () => {
   assert.equal(typeof control.moveControlCheckpoint, 'function');
   const moved = control.moveControlCheckpoint(monthly, '2026-02-28', '2026-03-02', bounds);

@@ -1,14 +1,52 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { APP_FONT_SIZE_LIMITS, DEFAULT_SETTINGS } from '../../src/shared/constants/settings.js';
 import { createSmokeForms } from './forms.mjs';
 
-export async function verifyDatabaseSettings(driver, fixture, { generation, created, instructionFiles, taskFiles }) {
-  const { js, api, wait, click, navigate, fill, openFilters, screenshot } = driver;
-  const { userData, firstFile, today, controlFrequencyCell, customControl, registrySelections, reportSelections, settingsSelections, renamedSelections, dialogs } = fixture;
+export async function verifyDatabaseSettings(driver, fixture, { generation, created }) {
+  const { js, api, wait, click, navigate, fill, openFilters, geometry, resize, resizeDefault, screenshot } = driver;
+  const { userData, firstFile, today, controlFrequencyCell, customControl, registrySelections, reportSelections, settingsSelections, renamedSelections, controlCardOffice, alternateOffice, dialogs } = fixture;
   const { instructionField, optionRow, addRegistryOption, controlCardDialog, reportField } = createSmokeForms(driver);
+  const defaultTypography = DEFAULT_SETTINGS.typography;
+  const largeTypography = { fontFamily: 'system', fontSize: APP_FONT_SIZE_LIMITS.max };
+  const applyTypography = async ({ fontFamily, fontSize }) => {
+    for (const [selector, value] of [
+      ['select[name=appearance-font-family]', fontFamily],
+      ['select[name=appearance-font-size]', String(fontSize)],
+    ]) {
+      await wait(`document.querySelector('${selector}')?.matches(':enabled')`);
+      await fill(selector, { 0: value });
+      await wait(`document.querySelector('${selector}')?.matches(':enabled') &&
+        document.querySelector('${selector}').value === ${JSON.stringify(value)}`);
+    }
+  };
+  const waitForTypography = ({ fontFamily, fontSize }) => wait(
+    `document.documentElement.dataset.fontFamily === '${fontFamily}' && getComputedStyle(document.body).fontSize === '${fontSize}px'`,
+  );
+  const captionSize = () => js("parseFloat(getComputedStyle(document.querySelector('.theme-option-caption')).fontSize)");
 
   await navigate('/settings', 'Настройки');
+  await waitForTypography(defaultTypography);
+  assert.equal(await js(`(async () => {
+    const faces = await document.fonts.load('14px Inter', 'Указание Work Board');
+    return faces.length > 0 && faces.every(face => face.status === 'loaded');
+  })()`), true);
+  const defaultCaptionSize = await captionSize();
+  await applyTypography(largeTypography);
+  await waitForTypography(largeTypography);
+  assert.match(await js('getComputedStyle(document.body).fontFamily'), /^system-ui/);
+  assert.equal(await captionSize(), defaultCaptionSize + largeTypography.fontSize - defaultTypography.fontSize);
+  assert.deepEqual((await api('settings', 'get', generation)).typography, largeTypography);
+  await resize(720, 540);
+  await js("document.querySelector('#appearance-title').scrollIntoView({ block: 'start' })");
+  assert.equal(await js(`['.main-content', '.settings-page'].some(selector => {
+    const element = document.querySelector(selector);
+    return element.scrollWidth > element.clientWidth;
+  })`), false);
+  await screenshot('settings-typography-compact.png');
+  await resizeDefault();
+
   await js("document.querySelector('button[value=dark]').click()");
   await wait("document.documentElement.dataset.appearance === 'dark'");
   await navigate('/analytics', 'Аналитика');
@@ -19,8 +57,23 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
   await screenshot('calendar-dark.png');
   assert.equal(await js('getComputedStyle(document.querySelector(".brand-title")).color === getComputedStyle(document.body).color'), true,
     'Brand text must follow the dark palette');
+  await resize(720, 540);
+  await geometry('calendar', 'calendar maximum typography');
+  const badges = await js(`(() => {
+    const cell = document.querySelector('.calendar-date[aria-current=date]');
+    const bounds = cell.getBoundingClientRect();
+    return [...cell.querySelectorAll('.calendar-date-count')].map(badge => {
+      const rect = badge.getBoundingClientRect();
+      return { bottom: rect.bottom - bounds.bottom, right: rect.right - bounds.right };
+    });
+  })()`);
+  assert.equal(badges.length, 4);
+  assert.ok(badges.every(badge => badge.bottom <= 0 && badge.right <= 0),
+    `Calendar badges at the maximum font size exceed available space: ${JSON.stringify(badges)}`);
   await navigate('/', 'Реестр указаний');
-  await wait("document.querySelectorAll('.registry-table tbody tr').length > 0");
+  await wait("document.querySelector('.registry-table tbody tr') && !document.querySelector('.workspace-enter-active')");
+  await geometry('registry', 'registry maximum typography');
+  await resizeDefault();
   await screenshot('registry-dark.png');
 
   await navigate('/settings', 'Настройки');
@@ -64,6 +117,7 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
     }
   }
   const updatedOptions = Object.fromEntries(Object.entries(renamedSelections).map(([field, value]) => [field, [value]]));
+  updatedOptions.office = [controlCardOffice, alternateOffice];
   const updatedContact = { executor: renamedSelections.executor, department: renamedSelections.department, executorPhone: renamedSelections.executorPhone };
   assert.deepEqual((await api('settings', 'get', generation)).executorContacts, [updatedContact]);
 
@@ -72,8 +126,11 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
   const next = await api('database', 'getStatus');
   assert.notEqual(next.generation, generation);
   const nextSettings = await api('settings', 'get', next.generation);
-  assert.deepEqual(nextSettings.registryOptions, { source: [], executor: [], department: [], executorPhone: [] });
+  assert.deepEqual(nextSettings.typography, defaultTypography);
+  await waitForTypography(defaultTypography);
+  assert.deepEqual(nextSettings.registryOptions, { documentType: [], source: [], executor: [], department: [], executorPhone: [], office: [] });
   assert.deepEqual(nextSettings.executorContacts, []);
+  assert.equal(nextSettings.office, '');
   assert.equal((await api('instructions', 'list', { generation: next.generation })).total, 0);
   assert.equal((await api('analytics', 'summary', { generation: next.generation })).totals.total, 0);
   await assert.rejects(api('instructions', 'update', { id: created.id, data: { title: 'Wrong DB' }, generation }));
@@ -84,13 +141,17 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
   await wait("document.querySelector('.file-path')?.textContent.includes('selected-controls.sqlite')");
   const reopened = await api('database', 'getStatus');
   const reopenedSettings = await api('settings', 'get', reopened.generation);
+  assert.deepEqual(reopenedSettings.typography, largeTypography);
+  await waitForTypography(largeTypography);
+  await applyTypography(defaultTypography);
+  await waitForTypography(defaultTypography);
   assert.deepEqual(reopenedSettings.registryOptions, updatedOptions);
   assert.deepEqual(reopenedSettings.executorContacts, [updatedContact]);
+  assert.equal(reopenedSettings.office, controlCardOffice);
   assert.equal((await api('calendar', 'day', { date: today, generation: reopened.generation })).checkpoints[0].mark,
     'Промежуточный отчёт проверен');
   assert.equal((await api('instructions', 'list', { generation: reopened.generation })).total, 27);
   assert.equal((await api('calendar', 'day', { date: today, generation: reopened.generation })).tasks.length, 1);
-  assert.equal((await api('attachments', 'list', { entityType: 'instructions', entityId: created.id, generation: reopened.generation })).length, 1);
   assert.equal(JSON.parse(readFileSync(path.join(userData, 'database-location.json'), 'utf8')).filePath, firstFile);
 
   await navigate('/', 'Реестр указаний');
@@ -128,7 +189,6 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
   await click('Удалить', '.registry-confirm-dialog button');
   await wait("!document.querySelector('.registry-instruction-dialog[open]') && document.querySelector('.registry-count')?.textContent === '0'");
   assert.equal(await api('instructions', 'get', { id: created.id, generation: reopened.generation }), null);
-  assert.equal(existsSync(path.join(firstFile + '.files', instructionFiles[0].relativePath)), false);
   await navigate('/calendar', 'Календарь и задачи');
   await wait("Boolean(document.querySelector('.calendar-task-open'))");
   await js("document.querySelector('.calendar-task-open').click()");
@@ -138,6 +198,5 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
   await click('Удалить', '.calendar-confirm-dialog button');
   await wait("!document.querySelector('.calendar-task-dialog[open]') && !document.querySelector('.calendar-task-open')");
   assert.equal((await api('calendar', 'day', { date: today, generation: reopened.generation })).tasks.length, 0);
-  assert.equal(existsSync(path.join(firstFile + '.files', taskFiles[0].relativePath)), false);
   return { reopened };
 }

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { INSTRUCTION_COLUMNS } from '../../src/shared/constants/registry.js';
 
 const TIMING = {
   conditionAttempts: 200, conditionPollMs: 50, entranceFrames: 30,
@@ -10,7 +11,7 @@ const TIMING = {
 const MOTION_OPACITY = { minimum: 0.01, maximum: 0.99 };
 const PIXEL_TOLERANCE = 1;
 const MIN_VISIBLE_REGISTRY_ROWS = 3;
-const REGISTRY_COLUMNS = 13;
+const REGISTRY_COLUMNS = INSTRUCTION_COLUMNS.length + 1; // Includes the actions column.
 const CALENDAR_CELL_COUNTS = [35, 42];
 const DEFAULT_VIEWPORT = { width: 1200, height: 780 };
 const ADAPTIVE_VIEWPORTS = [

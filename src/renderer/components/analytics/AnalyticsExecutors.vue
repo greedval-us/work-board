@@ -6,7 +6,7 @@ const headingId = useId();
 const metrics = [
   { key: 'total', label: 'Всего' },
   { key: 'active', label: 'Активные' },
-  { key: 'completed', label: 'Выполнено' },
+  { key: 'closed', label: 'Закрыто' },
   { key: 'overdue', label: 'Просрочено' },
 ];
 </script>

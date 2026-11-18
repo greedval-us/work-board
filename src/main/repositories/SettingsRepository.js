@@ -1,9 +1,24 @@
-import { CONTROL_CARD_OPTION_LABELS, DEFAULT_SETTINGS, REGISTRY_OPTION_LABELS, validateRegistryOption, validateTheme } from '../../shared/constants/settings.js';
+import {
+  CONTROL_CARD_OPTION_LABELS, DEFAULT_SETTINGS, REGISTRY_OPTION_LABELS,
+  validateOffice, validateRegistryOption, validateTheme, validateTypography,
+} from '../../shared/constants/settings.js';
 import { ValidationError } from '../../shared/errors.js';
 import { validateEnum, validateRecord, validateText } from '../../shared/validation.js';
 
 const registryOptionKey = field => `registryOptions.${field}`;
 const EXECUTOR_CONTACTS_KEY = 'executorContacts';
+const TYPOGRAPHY_KEY = 'typography';
+const OFFICE_KEY = 'office';
+
+function readTypography(value) {
+  if (value !== undefined) {
+    try { return validateTypography(JSON.parse(value)); }
+    catch (error) {
+      if (!(error instanceof SyntaxError || error instanceof ValidationError)) throw error;
+    }
+  }
+  return { ...DEFAULT_SETTINGS.typography };
+}
 
 function readExecutorContacts(value) {
   if (value === undefined) return [];
@@ -24,9 +39,13 @@ function readRegistryOptions(value, defaults) {
   return options;
 }
 
-function assertUniqueRegistryOption(field, options, value, currentIndex = -1) {
+function findMatchingRegistryOptionIndex(options, value, excludedIndex = -1) {
   const normalized = value.toLowerCase();
-  if (options.some((existing, index) => index !== currentIndex && existing.toLowerCase() === normalized)) {
+  return options.findIndex((option, index) => index !== excludedIndex && option.toLowerCase() === normalized);
+}
+
+function assertUniqueRegistryOption(field, options, value, currentIndex = -1) {
+  if (findMatchingRegistryOptionIndex(options, value, currentIndex) !== -1) {
     throw new ValidationError(`В списке «${REGISTRY_OPTION_LABELS[field]}» уже есть такой вариант.`);
   }
 }
@@ -48,9 +67,17 @@ export class SettingsRepository {
     const registryOptions = Object.fromEntries(Object.entries(DEFAULT_SETTINGS.registryOptions).map(([field, defaults]) => [
       field, readRegistryOptions(settings.get(registryOptionKey(field)), defaults),
     ]));
+    let office = settings.get(OFFICE_KEY) ?? DEFAULT_SETTINGS.office;
+    if (office) {
+      const matchingIndex = findMatchingRegistryOptionIndex(registryOptions.office, office);
+      if (matchingIndex === -1) registryOptions.office.unshift(office);
+      else office = registryOptions.office[matchingIndex];
+    }
     return {
       theme: validateTheme(settings.get('theme') ?? DEFAULT_SETTINGS.theme), registryOptions,
+      typography: readTypography(settings.get(TYPOGRAPHY_KEY)),
       executorContacts: readExecutorContacts(settings.get(EXECUTOR_CONTACTS_KEY)),
+      office,
     };
   }
 
@@ -59,6 +86,22 @@ export class SettingsRepository {
     return this.database.transaction(() => {
       this.#set('theme', theme);
       return this.get();
+    });
+  }
+
+  setTypography(value) {
+    const typography = validateTypography(value);
+    return this.database.transaction(() => {
+      this.#set(TYPOGRAPHY_KEY, JSON.stringify(typography));
+      return this.get();
+    });
+  }
+
+  setOffice(value) {
+    const office = validateOffice(value);
+    return this.#changeRegistryOptions('office', (options, settings) => {
+      if (office) findRegistryOptionIndex('office', options, office);
+      this.#saveOffice(settings, office);
     });
   }
 
@@ -78,6 +121,7 @@ export class SettingsRepository {
       assertUniqueRegistryOption(field, options, option, index);
       options[index] = option;
       this.#applyOptionContact(settings, field, option, contact, previousValue);
+      this.#replaceOfficeOption(settings, field, previousValue, option);
     });
   }
 
@@ -86,6 +130,7 @@ export class SettingsRepository {
     return this.#changeRegistryOptions(field, (options, settings) => {
       options.splice(findRegistryOptionIndex(field, options, value), 1);
       this.#replaceContactOption(settings, field, value, '');
+      this.#replaceOfficeOption(settings, field, value, '');
     });
   }
 
@@ -133,6 +178,17 @@ export class SettingsRepository {
   #saveExecutorContacts(settings, contacts) {
     this.#set(EXECUTOR_CONTACTS_KEY, JSON.stringify(contacts));
     settings.executorContacts = contacts;
+  }
+
+  #replaceOfficeOption(settings, field, previousValue, nextValue) {
+    if (field === 'office' && settings.office === previousValue && previousValue !== nextValue) {
+      this.#saveOffice(settings, nextValue);
+    }
+  }
+
+  #saveOffice(settings, office) {
+    this.#set(OFFICE_KEY, office);
+    settings.office = office;
   }
 
   #changeRegistryOptions(field, change) {

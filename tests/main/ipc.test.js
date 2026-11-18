@@ -12,8 +12,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-const emptyRegistryOptions = { source: [], executor: [], department: [], executorPhone: [] };
-const defaultSettings = { theme: 'light', registryOptions: emptyRegistryOptions, executorContacts: [] };
+const emptyRegistryOptions = { documentType: [], source: [], executor: [], department: [], executorPhone: [], office: [] };
+const defaultSettings = { theme: 'light', typography: { fontFamily: 'inter', fontSize: 14 }, registryOptions: emptyRegistryOptions, executorContacts: [], office: '' };
 
 test('post-request background checks run only after trusted successful writes and cannot falsify a saved result', async () => {
   const handlers = new Map(); const calls = [];
@@ -65,6 +65,18 @@ test('IPC rejects other windows and child frames before changing local data', as
   assert.deepEqual(await setTheme(event, { theme: 'dark', generation }), { ok: true, value: { ...defaultSettings, theme: 'dark' } });
 });
 
+test('typography requires a trusted sender, the active database and a valid setting', async (t) => {
+  const { handlers, event, generation } = fixture(t);
+  const save = handlers.get('settings:set-typography');
+  const typography = { fontFamily: 'system', fontSize: 15 };
+  const payload = { generation, typography };
+  assert.equal((await save({ ...event, senderFrame: {} }, payload)).error.code, 'PERMISSION_DENIED');
+  assert.equal((await save(event, { ...payload, generation: generation - 1 })).error.code, 'DATABASE_CHANGED');
+  assert.equal((await save(event, { ...payload, typography: { ...typography, fontSize: 100 } })).error.code, 'VALIDATION');
+  assert.deepEqual(await handlers.get('settings:get')(event, { generation }), { ok: true, value: defaultSettings });
+  assert.deepEqual(await save(event, payload), { ok: true, value: { ...defaultSettings, typography } });
+});
+
 test('adding a registry option over IPC requires a trusted sender and the active database generation', async (t) => {
   const { handlers, event, generation } = fixture(t);
   const addOption = handlers.get('settings:add-registry-option');
@@ -112,10 +124,28 @@ test('setting executor contacts over IPC is scoped to the trusted sender and act
   assert.deepEqual(result.value.executorContacts, [{ executor, department, executorPhone: '' }]);
 });
 
+test('setting the Ф‑21 office over IPC requires a trusted sender and the active database', async (t) => {
+  const { handlers, event, generation } = fixture(t);
+  const setOffice = handlers.get('settings:set-office');
+  assert.equal(typeof setOffice, 'function');
+  const input = { office: '  Приёмная  ', generation };
+  assert.equal((await setOffice({ ...event, senderFrame: {} }, input)).error.code, 'PERMISSION_DENIED');
+  assert.equal((await setOffice(event, { ...input, generation: generation - 1 })).error.code, 'DATABASE_CHANGED');
+  assert.equal((await setOffice(event, { generation })).error.code, 'VALIDATION');
+  assert.equal((await setOffice(event, input)).error.code, 'VALIDATION');
+  assert.equal((await handlers.get('settings:get')(event, { generation })).value.office, '');
+  const option = { field: 'office', value: 'Приёмная', generation };
+  const settingsWithOfficeOption = { ...defaultSettings, registryOptions: { ...emptyRegistryOptions, office: ['Приёмная'] } };
+  assert.deepEqual(await handlers.get('settings:add-registry-option')(event, option), { ok: true, value: settingsWithOfficeOption });
+  assert.deepEqual(await setOffice(event, input), { ok: true, value: { ...settingsWithOfficeOption, office: 'Приёмная' } });
+  assert.equal((await handlers.get('settings:get')(event, { generation })).value.office, 'Приёмная');
+  assert.deepEqual(await handlers.get('settings:remove-registry-option')(event, option), { ok: true, value: defaultSettings });
+});
+
 test('IPC setup and shutdown are idempotent and release all channels', (t) => {
   const { manager, handlers } = fixture(t);
   manager.init();
-  assert.equal(handlers.size, 8);
+  assert.equal(handlers.size, 10);
   manager.shutdown();
   manager.shutdown();
   assert.equal(handlers.size, 0);

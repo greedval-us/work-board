@@ -22,9 +22,11 @@ test('task save failures retain the edited fields for another attempt', async ()
   assert.equal(editor.busy.value, false);
   fail = false;
   assert.equal(await editor.save(), true);
-  assert.equal(saved.generation, 4);
-  assert.equal(saved.data.title, 'Подготовить доклад');
-  assert.equal(saved.data.completed, false);
+  assert.deepEqual(saved, {
+    id: null,
+    generation: 4,
+    data: { title: 'Подготовить доклад', date: '2026-10-23', description: 'Сохранённый в форме текст', priority: 'normal', completed: false },
+  });
 });
 
 test('invalid task form cannot reach persistence and stays editable', async () => {
@@ -64,4 +66,69 @@ test('failed task deletion reports the failed action and preserves the editable 
   assert.equal(editor.draft.description, 'Несохранённый текст');
   assert.equal(editor.dirty.value, true);
   assert.equal(editor.busy.value, false);
+});
+
+test('editing a moved recurring task keeps the series start and sends completion for its effective date', async () => {
+  let saved;
+  const editor = useTaskEditor({
+    task: { id: 10, title: 'Еженедельный отчёт', date: '2026-11-18', originalDate: '2026-11-17', seriesDate: '2026-11-10',
+      recurrence: { frequency: 'weekly', dayOfWeek: 2 }, completed: false },
+    date: '2026-11-18', generation: 6,
+    saveTask: async (id, data, generation, occurrence) => { saved = { id, data, generation, occurrence }; },
+  });
+  assert.equal(editor.draft.date, '2026-11-10');
+  assert.equal(editor.dirty.value, false);
+  editor.occurrenceCompleted.value = true;
+  assert.equal(editor.dirty.value, true);
+  assert.equal(await editor.save(), true);
+  assert.deepEqual(saved, {
+    id: 10, generation: 6,
+    data: { title: 'Еженедельный отчёт', date: '2026-11-10', description: '', priority: 'normal', completed: false,
+      recurrence: { frequency: 'weekly', dayOfWeek: 2 } },
+    occurrence: { date: '2026-11-18', completed: true },
+  });
+});
+
+test('changing repeat rules discards unrelated selectors and clearing repeat is explicit', async () => {
+  const writes = [];
+  const editor = useTaskEditor({
+    task: { id: 10, title: 'Задача', date: '2026-11-17', seriesDate: '2026-11-10',
+      recurrence: { frequency: 'weekly', dayOfWeek: 2 } },
+    date: '2026-11-17', generation: 6,
+    saveTask: async (_id, data, _generation, occurrence) => { writes.push({ data, occurrence }); },
+  });
+  editor.draft.recurrence.frequency = 'yearly';
+  editor.draft.recurrence.monthOfYear = 12;
+  editor.draft.recurrence.dayOfMonth = 25;
+  assert.equal(await editor.save(), true);
+  assert.deepEqual(writes[0].data.recurrence, { frequency: 'yearly', monthOfYear: 12, dayOfMonth: 25 });
+  assert.equal(writes[0].occurrence, undefined);
+  editor.draft.recurrence.frequency = '';
+  assert.equal(await editor.save(), true);
+  assert.deepEqual(writes[1].data.recurrence, { frequency: '' });
+});
+
+test('moving a previously moved occurrence binds its effective date and blocks unsaved edits', async () => {
+  const calls = [];
+  let fail = true;
+  const editor = useTaskEditor({
+    task: { id: 10, title: 'Задача', date: '2026-11-18', originalDate: '2026-11-17',
+      seriesDate: '2026-11-10', recurrence: { frequency: 'weekly' } },
+    generation: 6,
+    moveTaskOccurrence: async (...args) => {
+      calls.push(args);
+      if (fail) throw new DesktopError('VALIDATION', 'Выбранная дата занята.');
+    },
+  });
+  assert.equal(editor.movableOccurrence, true);
+  editor.draft.title = 'Изменение';
+  assert.equal(await editor.moveOccurrence('2026-11-17'), false);
+  assert.deepEqual(calls, []);
+  editor.draft.title = 'Задача';
+  assert.equal(await editor.moveOccurrence('2026-11-17'), false);
+  assert.match(editor.error.value, /дата занята/);
+  assert.equal(editor.busy.value, false);
+  fail = false;
+  assert.equal(await editor.moveOccurrence('2026-11-17'), true);
+  assert.deepEqual(calls, [[10, '2026-11-18', '2026-11-17', 6], [10, '2026-11-18', '2026-11-17', 6]]);
 });

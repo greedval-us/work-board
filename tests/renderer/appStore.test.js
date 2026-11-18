@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createPinia, setActivePinia } from 'pinia';
+import { DEFAULT_SETTINGS } from '../../src/shared/constants/settings.js';
 import { useAppStore } from '../../src/renderer/stores/appStore.js';
 import { transportFixture } from '../helpers/desktopTransport.js';
 
@@ -39,6 +40,34 @@ test('theme changes only after persistence succeeds', async (t) => {
   assert.equal(store.saving, false);
   assert.match(store.error, /Связь с приложением недоступна/);
   assert.doesNotMatch(store.error, /Хранилище недоступно/);
+});
+
+test('typography follows the active database and applies only after a successful save', async (t) => {
+  const initial = { fontFamily: 'system', fontSize: 12 };
+  const saved = { fontFamily: 'inter', fontSize: 16 };
+  const store = bridge(t, {
+    database: {
+      getStatus: async () => ({ ready: true, generation: 1 }),
+      open: async () => ({ cancelled: false, status: { ready: true, generation: 2 } }),
+    },
+    settings: {
+      get: async (generation) => generation === 1 ? { theme: 'light', typography: initial } : { theme: 'light' },
+      setTypography: async (typography, generation) => {
+        assert.equal(generation, 2);
+        if (typography.fontSize === 24) throw new Error('Недопустимый размер');
+        return { theme: 'light', typography };
+      },
+    },
+  });
+  await store.initialize();
+  assert.deepEqual(store.typography, initial);
+  await store.selectDatabase('open');
+  assert.deepEqual(store.typography, DEFAULT_SETTINGS.typography);
+  assert.equal(await store.setTypography(saved), true);
+  assert.deepEqual(store.typography, saved);
+  assert.equal(await store.setTypography({ ...saved, fontSize: 24 }), false);
+  assert.deepEqual(store.typography, saved);
+  assert.match(store.typographyError, /Связь с приложением недоступна/);
 });
 
 test('registry and Ф‑21 options load for the active database and refresh after each saved change', async (t) => {
@@ -113,39 +142,36 @@ test('adding and editing an executor send contacts in the same settings request'
   assert.deepEqual(store.executorContacts, [{ executor: 'Иванов', ...updated }]);
 });
 
-test('executor contacts load per database and update only after a successful save', async (t) => {
-  const first = [{ executor: 'Иванов', department: 'Архив', executorPhone: '123' }];
+test('the Ф‑21 office loads per database and updates only after a successful save', async (t) => {
+  const first = 'Канцелярия, 101';
+  const saved = 'Приёмная, 456';
   const store = bridge(t, {
     database: {
       getStatus: async () => ({ ready: true, generation: 1 }),
       open: async () => ({ cancelled: false, status: { ready: true, generation: 2 } }),
     },
     settings: {
-      get: async (generation) => ({ theme: 'light', executorContacts: generation === 1 ? first : [] }),
-      setExecutorContact: async (executor, contact, generation) => {
-        assert.deepEqual([executor, generation], ['Иванов', 2]);
-        if (contact.executorPhone === '999') throw new Error('Вариант не найден');
-        return {
-          theme: 'light',
-          executorContacts: contact.department || contact.executorPhone ? [{ executor, ...contact }] : [],
-        };
+      get: async (generation) => (generation === 1 ? { theme: 'light', office: first } : { theme: 'light' }),
+      setOffice: async (office, generation) => {
+        assert.equal(generation, 2);
+        if (office === 'Ошибка') throw new Error('Хранилище недоступно');
+        return { theme: 'light', office };
       },
     },
   });
 
   await store.initialize();
-  assert.deepEqual(store.executorContacts, first);
+  assert.equal(store.office, first);
   await store.selectDatabase('open');
-  assert.deepEqual(store.executorContacts, []);
-  const saved = { department: '', executorPhone: '456' };
-  assert.equal(await store.setExecutorContact('Иванов', saved), true);
-  assert.deepEqual(store.executorContacts, [{ executor: 'Иванов', ...saved }]);
-  assert.equal(await store.setExecutorContact('Иванов', { ...saved, executorPhone: '999' }), false);
-  assert.match(store.executorContactsError, /Связь с приложением недоступна/);
-  assert.deepEqual(store.executorContacts, [{ executor: 'Иванов', ...saved }]);
-  assert.equal(await store.setExecutorContact('Иванов', { department: '', executorPhone: '' }), true);
-  assert.deepEqual(store.executorContacts, []);
-  assert.equal(store.executorContactsError, '');
+  assert.equal(store.office, '');
+  assert.equal(await store.setOffice(saved), true);
+  assert.equal(store.office, saved);
+  assert.equal(await store.setOffice('Ошибка'), false);
+  assert.match(store.officeError, /Связь с приложением недоступна/);
+  assert.equal(store.office, saved);
+  assert.equal(await store.setOffice(''), true);
+  assert.equal(store.office, '');
+  assert.equal(store.officeError, '');
 });
 
 test('concurrent bootstrap callers share pending work and await initialized state', async (t) => {

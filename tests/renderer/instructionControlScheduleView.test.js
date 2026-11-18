@@ -12,6 +12,8 @@ test('initial months follow effective custom dates, recurring deadlines and reta
     ['no control date', empty, {}, '2026-06'],
     ['history only', { ...empty, marks: [{ date: '2026-03-10', text: 'Принято' }] }, period, '2026-03'],
     ['future recurrence', { ...empty, frequency: 'monthly', firstDate: '2026-08-01' }, period, '2026-08'],
+    ['first scheduled month of a future annual recurrence', { ...empty, frequency: 'yearly', firstDate: '2026-08-01', monthOfYear: 2 },
+      { ...period, deadline: '2027-12-31' }, '2027-02'],
     ['active recurrence', { ...empty, frequency: 'monthly', firstDate: '2026-01-01' }, period, '2026-06'],
     ['finished recurrence', { ...empty, frequency: 'monthly', firstDate: '2026-01-01' }, { ...period, deadline: '2026-04-30' }, '2026-04'],
     ['history after deadline', { ...empty, frequency: 'monthly', firstDate: '2026-01-01', marks: [{ date: '2026-05-10', text: 'Принято' }] }, { ...period, deadline: '2026-04-30' }, '2026-05'],
@@ -30,6 +32,19 @@ test('the control period includes its boundaries and rejects impossible or incom
     assert.equal(inControlPeriod(date, period), false, date);
   }
   assert.equal(inControlPeriod('2024-02-29', {}), true);
+});
+
+test('closed control shows checkpoint history without overdue reminders', () => {
+  const schedule = { ...empty, frequency: 'custom', customDates: ['2026-02-01', '2026-02-02'],
+    marks: [{ date: '2026-02-02', text: 'Принято' }] };
+  const bounds = { ...period, month: '2026-02' };
+  const [active] = controlScheduleRows(schedule, bounds, '2026-02-15');
+  assert.equal(active.status.tone, 'danger');
+
+  const [unmarked, marked] = controlScheduleRows(schedule, { ...bounds, closed: true }, '2026-02-15');
+  assert.deepEqual(unmarked.status, { label: 'Нет отметки' });
+  assert.equal(marked.status.tone, 'success');
+  assert.equal(marked.mark, 'Принято');
 });
 
 test('month rows keep invalid custom dates, moved dates and an empty history draft available for repair', () => {

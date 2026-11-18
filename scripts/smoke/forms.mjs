@@ -5,6 +5,14 @@ const optionRow = (field, value) =>
 const controlCardDialog = '.registry-control-card-dialog[open]';
 const reportField = name => `${controlCardDialog} [name="${name}"]`;
 
+export async function chooseExcelReport({ click, wait }, label) {
+  const dialog = '.registry-confirm-dialog[open]';
+  await click('Выгрузить Excel', '.registry-toolbar button');
+  await wait(`document.querySelector('${dialog} h2')?.textContent === 'Формат отчёта Excel'`);
+  await click(label, `${dialog} button`);
+  await wait(`!document.querySelector('${dialog}')`);
+}
+
 export function createSmokeForms({ fill, wait, js }) {
   async function fillInstruction(values) {
     for (const [field, value] of Object.entries(values)) await fill(instructionField(field), { 0: value });

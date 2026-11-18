@@ -1,7 +1,9 @@
 import { validateDate } from '../dates.js';
 import { ValidationError } from '../errors.js';
 import { validateEnum, validateRecord } from '../validation.js';
-import { isScheduledDate } from './recurrence.js';
+import {
+  isScheduledDate, isValidControlDayOfMonth, isValidControlDayOfWeek, isValidControlMonthOfYear, supportsControlDayOfMonth,
+} from './recurrence.js';
 
 export const CONTROL_FREQUENCIES = Object.freeze({
   '': 'Без промежуточного контроля',
@@ -9,8 +11,19 @@ export const CONTROL_FREQUENCIES = Object.freeze({
   weekly: 'Еженедельно',
   monthly: 'Ежемесячно',
   quarterly: 'Ежеквартально',
+  semiannual: 'Полугодие',
   yearly: 'Ежегодно',
   custom: 'Другое (даты вручную)',
+});
+
+export const CONTROL_WEEKDAY_LABELS = Object.freeze({
+  1: 'Понедельник',
+  2: 'Вторник',
+  3: 'Среда',
+  4: 'Четверг',
+  5: 'Пятница',
+  6: 'Суббота',
+  7: 'Воскресенье',
 });
 
 export const CONTROL_MARK_LIMIT = 10_000;
@@ -71,9 +84,25 @@ function validateMoves(values, schedule, { controlDate, deadline }) {
 
 export function validateControlSchedule(value = {}, { controlDate, deadline } = {}) {
   const {
-    frequency = '', firstDate = '', customDates = [], marks = [], moves = [],
+    frequency = '', firstDate = '', customDates = [], marks = [], moves = [], dayOfMonth, dayOfWeek, monthOfYear,
   } = validateRecord(value, 'График промежуточного контроля');
   validateEnum(frequency, CONTROL_FREQUENCIES, 'Периодичность промежуточного контроля');
+  if (dayOfMonth !== undefined) {
+    if (!supportsControlDayOfMonth(frequency)) {
+      throw new ValidationError('Число месяца нельзя указать для выбранной периодичности.');
+    }
+    if (!isValidControlDayOfMonth(dayOfMonth)) {
+      throw new ValidationError('Число месяца: укажите целое число от 1 до 31.');
+    }
+  }
+  if (dayOfWeek !== undefined) {
+    if (frequency !== 'weekly') throw new ValidationError('День недели можно указать только для еженедельного контроля.');
+    if (!isValidControlDayOfWeek(dayOfWeek)) throw new ValidationError('День недели: выберите день от понедельника до воскресенья.');
+  }
+  if (monthOfYear !== undefined) {
+    if (frequency !== 'yearly') throw new ValidationError('Месяц можно указать только для ежегодного контроля.');
+    if (!isValidControlMonthOfYear(monthOfYear)) throw new ValidationError('Месяц: выберите месяц от января до декабря.');
+  }
   const recurring = frequency && frequency !== 'custom';
   if (firstDate !== '' || recurring) validateDate(firstDate, 'Первая дата промежуточного контроля');
   if (recurring) checkScheduleBounds(firstDate, controlDate, deadline);
@@ -89,6 +118,9 @@ export function validateControlSchedule(value = {}, { controlDate, deadline } = 
     firstDate: recurring ? firstDate : '',
     customDates: frequency === 'custom' ? [...new Set(customDates)].sort() : [],
     marks: validateMarks(marks),
+    ...(dayOfMonth === undefined ? {} : { dayOfMonth }),
+    ...(dayOfWeek === undefined ? {} : { dayOfWeek }),
+    ...(monthOfYear === undefined ? {} : { monthOfYear }),
   };
   const normalizedMoves = validateMoves(moves, schedule, { controlDate, deadline });
   if (normalizedMoves.length) schedule.moves = normalizedMoves;

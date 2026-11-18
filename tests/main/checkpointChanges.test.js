@@ -8,6 +8,7 @@ import { migrate } from '../../src/main/database/migrations.js';
 import { InstructionRepository } from '../../src/main/repositories/InstructionRepository.js';
 import { TaskRepository } from '../../src/main/repositories/TaskRepository.js';
 import { CalendarService } from '../../src/main/services/CalendarService.js';
+import { buildDeadlineNotifications } from '../../src/shared/deadlineNotifications.js';
 
 function fixture(t) {
   const directory = mkdtempSync(path.join(tmpdir(), 'work-board-checkpoint-changes-'));
@@ -83,4 +84,70 @@ test('a backdated mark on a moved checkpoint persists separately from calendar p
   const plannedDay = calendar.month({ month: '2026-11' }).days[1];
   assert.equal(plannedDay.checkpoints, 0);
   assert.equal(plannedDay.completedCheckpoints, 1);
+});
+
+test('a custom day and half-year recurrence survive reopening and feed the registry, calendar and reminders', t => {
+  const { instructions, item, calendar, reopen } = fixture(t);
+  const marks = [{ date: '2027-01-31', text: 'Первый доклад' }];
+  const schedule = { frequency: 'monthly', firstDate: '2027-01-05', dayOfMonth: 31, marks };
+  instructions.update(item.id, { controlDate: '2027-01-05', deadline: '2027-09-30', controlSchedule: schedule });
+  reopen();
+
+  const datesFromReminders = (today) => buildDeadlineNotifications({
+    instructions: [], tasks: [], scheduledInstructions: instructions.scheduledForCalendar(), today,
+  }).map(({ date }) => date);
+  assert.deepEqual(instructions.get(item.id).controlSchedule, { ...schedule, customDates: [] });
+  assert.equal(instructions.list().items[0].nextCheckpoint, '2027-02-28');
+  assert.equal(instructions.list({ filters: { checkpoint: 'today' }, today: '2027-02-28' }).total, 1);
+  assert.deepEqual(calendar.day({ date: '2027-02-28' }).checkpoints.map(({ date }) => date), ['2027-02-28']);
+  assert.deepEqual(datesFromReminders('2027-02-25'), ['2027-02-28']);
+
+  instructions.update(item.id, { controlSchedule: { ...schedule, frequency: 'semiannual' } });
+  reopen();
+  assert.equal(instructions.list().items[0].controlFrequency, 'semiannual');
+  assert.equal(instructions.list().items[0].nextCheckpoint, '2027-07-31');
+  assert.deepEqual(instructions.get(item.id).controlSchedule.marks, marks);
+  assert.deepEqual(calendar.day({ date: '2027-02-28' }).checkpoints, []);
+  assert.deepEqual(calendar.day({ date: '2027-07-31' }).checkpoints.map(({ date }) => date), ['2027-07-31']);
+  assert.deepEqual(datesFromReminders('2027-07-28'), ['2027-07-31']);
+});
+
+test('weekly checkpoints use the saved weekday or the start date after clearing it', t => {
+  const { instructions, item, calendar, reopen } = fixture(t);
+  const schedule = { frequency: 'weekly', firstDate: '2028-01-07' };
+  instructions.update(item.id, { controlDate: '2028-01-07', deadline: '2028-01-31', controlSchedule: { ...schedule, dayOfWeek: 1 } });
+  reopen();
+
+  assert.equal(instructions.get(item.id).controlSchedule.dayOfWeek, 1);
+  assert.equal(instructions.list().items[0].nextCheckpoint, '2028-01-10');
+  assert.deepEqual(calendar.day({ date: '2028-01-07' }).checkpoints, []);
+  assert.deepEqual(calendar.month({ month: '2028-01' }).days.filter(day => day.checkpoints).map(day => day.date),
+    ['2028-01-10', '2028-01-17', '2028-01-24', '2028-01-31']);
+
+  instructions.update(item.id, { controlSchedule: schedule });
+  assert.equal(Object.hasOwn(instructions.get(item.id).controlSchedule, 'dayOfWeek'), false);
+  assert.equal(instructions.list().items[0].nextCheckpoint, '2028-01-07');
+});
+
+test('annual checkpoints use the saved month in the registry, calendar and reminders', t => {
+  const { instructions, item, calendar, reopen } = fixture(t);
+  const schedule = { frequency: 'yearly', firstDate: '2027-12-17' };
+  instructions.update(item.id, {
+    controlDate: '2027-12-17',
+    deadline: '2029-03-10',
+    controlSchedule: { ...schedule, monthOfYear: 2, dayOfMonth: 29 },
+  });
+  reopen();
+
+  assert.equal(instructions.get(item.id).controlSchedule.monthOfYear, 2);
+  assert.equal(instructions.list().items[0].nextCheckpoint, '2028-02-29');
+  assert.deepEqual(calendar.day({ date: '2027-12-17' }).checkpoints, []);
+  assert.deepEqual(calendar.day({ date: '2029-02-28' }).checkpoints.map(({ date }) => date), ['2029-02-28']);
+  assert.deepEqual(buildDeadlineNotifications({
+    instructions: [], tasks: [], scheduledInstructions: instructions.scheduledForCalendar(), today: '2028-02-26',
+  }).map(({ date }) => date), ['2028-02-29']);
+
+  instructions.update(item.id, { controlSchedule: schedule });
+  assert.equal(Object.hasOwn(instructions.get(item.id).controlSchedule, 'monthOfYear'), false);
+  assert.equal(instructions.list().items[0].nextCheckpoint, '2027-12-17');
 });

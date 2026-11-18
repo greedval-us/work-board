@@ -12,6 +12,7 @@ export function createControlCardStore({ app: suppliedApp, service = registrySer
     const exporting = shallowRef(false);
     const error = shallowRef('');
     const notice = shallowRef('');
+    const unopenedExportPath = shallowRef(null);
     let active = true;
     let feedbackVersion = 0;
 
@@ -19,6 +20,7 @@ export function createControlCardStore({ app: suppliedApp, service = registrySer
       feedbackVersion++;
       error.value = '';
       notice.value = '';
+      unopenedExportPath.value = null;
     }
 
     async function exportCard({ id, generation, fields, defaults }) {
@@ -28,6 +30,7 @@ export function createControlCardStore({ app: suppliedApp, service = registrySer
       exporting.value = true;
       error.value = '';
       notice.value = '';
+      unopenedExportPath.value = null;
       try {
         if (!app.database?.ready) throw new DesktopError(ERROR_CODES.DATABASE_REQUIRED);
         if (generation !== app.database.generation) throw new DesktopError(ERROR_CODES.DATABASE_CHANGED);
@@ -35,6 +38,7 @@ export function createControlCardStore({ app: suppliedApp, service = registrySer
         const result = await app.withOperation(() => service.exportControlCard(request));
         if (!current() || result.cancelled) return false;
         notice.value = 'Контрольная карточка сохранена.';
+        if (result.opened === false) unopenedExportPath.value = result.filePath ?? '';
         return true;
       } catch (cause) {
         if (current()) error.value = errorMessage(cause, 'Не удалось сохранить контрольную карточку.');
@@ -45,7 +49,7 @@ export function createControlCardStore({ app: suppliedApp, service = registrySer
     watch(() => [app.database?.ready, app.database?.generation], reset, { flush: 'sync' });
     onScopeDispose(() => { active = false; reset(); });
 
-    return { exporting, error, notice, exportCard, reset };
+    return { exporting, error, notice, unopenedExportPath, exportCard, reset };
   });
 }
 

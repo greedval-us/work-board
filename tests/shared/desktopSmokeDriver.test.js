@@ -3,6 +3,7 @@ import test from 'node:test';
 import { EventEmitter } from 'node:events';
 import { createContext, runInContext } from 'node:vm';
 import { DesktopSmokeDriver, assertWorkspaceFits } from '../../scripts/lib/DesktopSmokeDriver.mjs';
+import { INSTRUCTION_COLUMNS } from '../../src/shared/constants/registry.js';
 
 function rendererDriver(state) {
   const context = createContext(state);
@@ -47,7 +48,7 @@ test('desktop smoke polling retries renderer conditions and reports exhausted co
 
 function registryMeasurements() {
   return {
-    width: 1000, height: 600, document: { width: 1001, height: 601 }, columns: 13, dates: [],
+    width: 1000, height: 600, document: { width: 1001, height: 601 }, columns: INSTRUCTION_COLUMNS.length + 1, dates: [],
     elements: {
       '.main-content': { y: 0, right: 1000, bottom: 600, clientHeight: 600, scrollHeight: 601 },
       '.page': { right: 1000, bottom: 600 },
@@ -72,9 +73,9 @@ test('workspace geometry tolerates subpixel rounding but rejects document and ta
 
 test('registry geometry requires complete columns and space for three visible rows', () => {
   const measurements = registryMeasurements();
-  measurements.columns = 12;
+  measurements.columns--;
   assert.throws(() => assertWorkspaceFits(measurements, 'registry', 'fixture'));
-  measurements.columns = 13;
+  measurements.columns++;
   measurements.elements['.registry-table-scroll'].height = 118;
   assert.throws(() => assertWorkspaceFits(measurements, 'registry', 'fixture'), /fewer than three visible rows/);
 });

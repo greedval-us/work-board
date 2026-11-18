@@ -15,7 +15,7 @@ test('analytics clears the executor and ignores replies from the previous databa
   store.draftFilters.executor = 'иванов'; const filtered = store.applyFilters();
   await Promise.resolve();
   assert.deepEqual(pending[1].request.filters, {
-    from: '2026-10-01', to: '2026-10-26', status: '', executor: 'иванов',
+    from: '2026-10-01', to: '2026-10-26', executor: 'иванов',
   });
   app.database = { ready: true, generation: 2 };
   const next = store.refresh();
@@ -47,10 +47,10 @@ test('analytics rejects an inverted period before IPC and handles empty results'
 test('returning to an already pending selection accepts its shared response', async () => {
   setActivePinia(createPinia());
   const app = reactive({ database: { ready: true, generation: 1 }, revision: 0 }); const pending = [];
-  const store = createAnalyticsStore({ getApp: () => app, service: { summary: request => new Promise(resolve => pending.push({ request, resolve })) } })();
+  const store = createAnalyticsStore({ getApp: () => app, initialDate: () => '2026-10-26', service: { summary: request => new Promise(resolve => pending.push({ request, resolve })) } })();
   const first = store.refresh(); await Promise.resolve();
-  store.draftFilters.status = 'completed'; const second = store.applyFilters(); await Promise.resolve();
-  store.draftFilters.status = ''; const returned = store.applyFilters(); await Promise.resolve();
+  store.draftFilters.from = '2026-10-02'; const second = store.applyFilters(); await Promise.resolve();
+  store.draftFilters.from = '2026-10-01'; const returned = store.applyFilters(); await Promise.resolve();
   assert.equal(pending.length, 2);
   pending[0].resolve({ totals: { total: 5 } }); await Promise.all([first, returned]);
   assert.equal(store.data?.totals.total, 5); assert.equal(store.loading, false);
@@ -73,16 +73,16 @@ test('selecting an executor applies its exact key while retaining other unapplie
   pending[0].resolve({ totals: { total: 3 }, executorOptions, instructions: null });
   await initial;
 
-  Object.assign(store.draftFilters, { from: '2026-10-27', to: '2026-10-10', status: 'invalid' });
+  Object.assign(store.draftFilters, { from: '2026-10-27', to: '2026-10-10' });
   assert.equal(await store.applyFilters(), false);
   const selected = store.selectExecutor('иванов ');
   await Promise.resolve();
   assert.deepEqual(pending[1].request, {
-    filters: { from: '2026-10-01', to: '2026-10-26', status: '', executor: 'иванов ' },
+    filters: { from: '2026-10-01', to: '2026-10-26', executor: 'иванов ' },
     generation: 1,
     page: 1,
   });
-  assert.deepEqual(store.draftFilters, { from: '2026-10-27', to: '2026-10-10', status: 'invalid', executor: 'иванов ' });
+  assert.deepEqual(store.draftFilters, { from: '2026-10-27', to: '2026-10-10', executor: 'иванов ' });
   assert.deepEqual(store.executorOptions, executorOptions);
   assert.equal(store.filtersChanged, true);
   pending[1].resolve({ totals: { total: 1 }, executorOptions, instructions: { items: [{ id: 1 }], page: 1, pageCount: 1 } });
@@ -110,27 +110,27 @@ test('paging uses applied filters, retains displayed results during loading, and
   pending[0].resolve(result(1));
   await selected;
 
-  store.draftFilters.status = 'completed';
+  store.draftFilters.from = '2026-10-02';
   const second = store.setPage(2);
   await Promise.resolve();
   assert.equal(store.data.instructions.page, 1);
   assert.equal(store.loading, true);
   const third = store.setPage(3);
   await Promise.resolve();
-  assert.deepEqual(pending.slice(1).map(({ request }) => [request.page, request.filters.status, request.filters.executor]), [
-    [2, '', 'иванов'], [3, '', 'иванов'],
+  assert.deepEqual(pending.slice(1).map(({ request }) => [request.page, request.filters.from, request.filters.executor]), [
+    [2, '2026-10-01', 'иванов'], [3, '2026-10-01', 'иванов'],
   ]);
   pending[2].resolve(result(3));
   assert.equal(await third, true);
   pending[1].resolve(result(2));
   assert.equal(await second, false);
   assert.equal(store.data.instructions.page, 3);
-  assert.equal(store.draftFilters.status, 'completed');
+  assert.equal(store.draftFilters.from, '2026-10-02');
 
   const applied = store.applyFilters();
   await Promise.resolve();
   assert.equal(pending[3].request.page, 1);
-  assert.equal(pending[3].request.filters.status, 'completed');
+  assert.equal(pending[3].request.filters.from, '2026-10-02');
   pending[3].resolve(result(1));
   await applied;
   store.$dispose();

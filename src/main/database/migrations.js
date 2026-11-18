@@ -74,6 +74,38 @@ export const migrations = [
     sql: `ALTER TABLE instructions ADD COLUMN control_schedule TEXT NOT NULL DEFAULT '';
     CREATE INDEX instructions_control_schedule_idx ON instructions (id) WHERE control_schedule <> '';`,
   },
+  {
+    version: 7,
+    sql: 'ALTER TABLE instructions ADD COLUMN closed_at TEXT;',
+  },
+  {
+    version: 8,
+    sql: `ALTER TABLE instructions ADD COLUMN document_type TEXT NOT NULL DEFAULT '';
+    ALTER TABLE instructions ADD COLUMN document_type_search TEXT NOT NULL DEFAULT '';
+    CREATE INDEX instructions_document_type_idx ON instructions (document_type_search);`,
+  },
+  {
+    version: 9,
+    sql: `ALTER TABLE calendar_tasks ADD COLUMN recurrence TEXT NOT NULL DEFAULT '';
+    CREATE TABLE calendar_task_completions (
+      task_id INTEGER NOT NULL REFERENCES calendar_tasks(id) ON DELETE CASCADE,
+      date TEXT NOT NULL,
+      PRIMARY KEY (task_id, date)
+    ) STRICT;
+    CREATE INDEX calendar_task_completions_date_idx ON calendar_task_completions (date);`,
+  },
+  {
+    version: 10,
+    sql: `CREATE TABLE calendar_task_moves (
+      task_id INTEGER NOT NULL REFERENCES calendar_tasks(id) ON DELETE CASCADE,
+      original_date TEXT NOT NULL,
+      target_date TEXT NOT NULL CHECK (target_date <> original_date),
+      PRIMARY KEY (task_id, original_date),
+      UNIQUE (task_id, target_date)
+    ) STRICT;
+    CREATE INDEX calendar_task_moves_original_date_idx ON calendar_task_moves (original_date);
+    CREATE INDEX calendar_task_moves_target_date_idx ON calendar_task_moves (target_date);`,
+  },
 ];
 
 export function migrate(database) {

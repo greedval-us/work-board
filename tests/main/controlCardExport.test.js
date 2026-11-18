@@ -7,7 +7,7 @@ import JSZip from 'jszip';
 import { ControlCardExportService } from '../../src/main/services/ControlCardExportService.js';
 import { AppError } from '../../src/main/utils/AppError.js';
 
-async function fixture(t) {
+async function fixture(t, openPath = async () => '') {
   const directory = await realpath(await mkdtemp(path.join(tmpdir(), 'work-board-f21-')));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const database = {
@@ -27,26 +27,48 @@ async function fixture(t) {
     { executor: record.executor, department: 'Подразделение Иванова', executorPhone: '555-11' },
     { executor: 'Петров П. П.', department: 'Подразделение Петрова', executorPhone: '555-22' },
   ];
-  const settings = { get: () => ({ executorContacts }) };
-  const service = new ControlCardExportService({ database, instructions, settings, dialog, getWindow: () => null });
-  return { database, directory, dialog, record, selected, service };
+  const settings = { get: () => ({ executorContacts, office: 'Участок из настроек' }) };
+  const openedPaths = [];
+  const service = new ControlCardExportService({
+    database, instructions, settings, dialog, getWindow: () => null,
+    openPath: filePath => { openedPaths.push(filePath); return openPath(filePath); },
+  });
+  return { database, directory, dialog, record, selected, service, openedPaths };
 }
 
 test('saving a Ф‑21 exports report overrides and saved checks without changing the record', async (t) => {
-  const { directory, record, selected, service } = await fixture(t);
+  let xml;
+  const { directory, record, selected, service, openedPaths } = await fixture(t, async filePath => {
+    const zip = await JSZip.loadAsync(await readFile(filePath));
+    xml = await zip.file('word/document.xml').async('string');
+    return '';
+  });
   const filePath = `${selected}.docx`;
   const result = await service.export({ id: 3, generation: 1,
-    fields: { instructionNumber: '', department: 'Отдел контроля', executorPhone: '112-23', officePhone: 'Устаревший телефон' },
+    fields: { instructionNumber: '', office: 'Приёмная № 4', department: 'Отдел контроля', executorPhone: '112-23', officePhone: 'Устаревший телефон' },
   });
-  assert.deepEqual(result, { cancelled: false, filePath });
-  const zip = await JSZip.loadAsync(await readFile(filePath));
-  const xml = await zip.file('word/document.xml').async('string');
-  assert.match(xml, /учета исполнения поручения №3<\/w:t>/);
-  assert.match(xml, /Отдел контроля, Иванов И\. И\., тел\. 112-23/);
-  assert.match(xml, /Результат проверки/);
-  assert.doesNotMatch(xml, /001\/К|Устаревший телефон|Делопроизводство/);
+  assert.deepEqual(result, { cancelled: false, filePath, opened: true });
+  assert.deepEqual(openedPaths, [filePath]);
+  const text = [...xml.matchAll(/<w:t(?=[\s>])[^>]*>([\s\S]*?)<\/w:t>/g)].map(([, value]) => value).join('');
+  assert.match(text, /учета исполнения поручения №\s*3/);
+  assert.match(text, /Участок делопроизводства\s*Приёмная № 4/);
+  assert.match(text, /Отдел контроля, Иванов И\. И\., тел\. 112-23/);
+  assert.match(text, /Результат проверки/);
+  assert.doesNotMatch(text, /001\/К|Устаревший телефон|Молочная коровка|Участок из настроек/);
   assert.equal(record.instructionNumber, '001/К');
+  assert.equal(record.office, undefined);
   assert.deepEqual((await readdir(directory)).sort(), ['report.docx', 'work.docx']);
+});
+
+test('Ф‑21 uses the saved office unless the report explicitly clears it', async (t) => {
+  const { service, record } = await fixture(t);
+  const result = await service.export({ id: record.id, generation: 1 });
+  const initial = await JSZip.loadAsync(await readFile(result.filePath));
+  assert.match(await initial.file('word/document.xml').async('string'), /Участок из настроек/);
+
+  await service.export({ id: record.id, generation: 1, fields: { office: '' } });
+  const cleared = await JSZip.loadAsync(await readFile(result.filePath));
+  assert.doesNotMatch(await cleared.file('word/document.xml').async('string'), /Участок из настроек/);
 });
 
 test('Ф‑21 exports defaults for the chosen executor and respects an explicitly cleared contact field', async (t) => {
@@ -63,7 +85,7 @@ test('Ф‑21 exports defaults for the chosen executor and respects an explicitl
 });
 
 test('Ф‑21 cancellation and a database switch during destination selection leave no report', async (t) => {
-  const { database, directory, dialog, selected, service } = await fixture(t);
+  const { database, directory, dialog, selected, service, openedPaths } = await fixture(t);
   dialog.showSaveDialog = async () => ({ canceled: true });
   assert.deepEqual(await service.export({ id: 3, generation: 1 }), { cancelled: true });
   dialog.showSaveDialog = async () => {
@@ -72,13 +94,26 @@ test('Ф‑21 cancellation and a database switch during destination selection le
   };
   await assert.rejects(service.export({ id: 3, generation: 1 }), { code: 'DATABASE_CHANGED' });
   assert.deepEqual(await readdir(directory), ['work.docx']);
+  assert.deepEqual(openedPaths, []);
 });
 
 test('Ф‑21 refuses to replace the active database even with a .docx extension', async (t) => {
-  const { database, dialog, service } = await fixture(t);
+  const { database, dialog, service, openedPaths } = await fixture(t);
   dialog.showSaveDialog = async () => ({ filePath: database.filePath });
   await assert.rejects(service.export({ id: 3, generation: 1 }), { code: 'VALIDATION' });
   assert.equal(await readFile(database.filePath, 'utf8'), 'рабочая база');
+  assert.deepEqual(openedPaths, []);
+});
+
+test('Ф‑21 keeps the saved report when the default app fails to launch', async (t) => {
+  for (const openPath of [async () => 'No associated app', async () => { throw new Error('Launch failed'); }]) {
+    const { selected, service, openedPaths } = await fixture(t, openPath);
+    const filePath = `${selected}.docx`;
+    assert.deepEqual(await service.export({ id: 3, generation: 1 }), { cancelled: false, filePath, opened: false });
+    assert.deepEqual(openedPaths, [filePath]);
+    const zip = await JSZip.loadAsync(await readFile(filePath));
+    assert.match(await zip.file('word/document.xml').async('string'), /Результат проверки/);
+  }
 });
 
 test('Ф‑21 cannot overwrite a file in the working attachment directory', async t => {

@@ -242,6 +242,22 @@ test('failed task completion retains its saved value and does not invalidate fre
   assert.equal(monthCalls, 1);
 });
 
+test('calendar completes a repeat on its occurrence date without changing the series', async (t) => {
+  const task = { id: 6, title: 'Доклад', date: '2026-10-23', seriesDate: '2026-10-16',
+    recurrence: { frequency: 'weekly' }, completed: false };
+  const writes = [];
+  const { app, calendar } = setup(t, {
+    month: async () => ({ days: [] }),
+    day: async () => ({ tasks: [task] }),
+    setOccurrenceCompleted: async (request) => writes.push(request),
+    updateTask: () => assert.fail('Occurrence completion must not rewrite the series'),
+  });
+  await calendar.refresh();
+  await calendar.toggleTask(task);
+  assert.deepEqual(writes, [{ id: 6, date: '2026-10-23', completed: true, generation: 1 }]);
+  assert.equal(app.revision, 1);
+});
+
 test('a successful mutation refreshes each active query exactly once', async (t) => {
   let monthCalls = 0;
   let dayCalls = 0;

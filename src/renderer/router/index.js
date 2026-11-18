@@ -4,6 +4,7 @@ export default createRouter({
   history: createWebHashHistory(),
   routes: [
     { path: '/', name: 'Registry', component: () => import('../views/Registry.vue'), meta: { title: 'Реестр указаний' } },
+    { path: '/closed-control', name: 'ClosedControl', component: () => import('../views/Registry.vue'), props: { closed: true }, meta: { title: 'Закрытый контроль' } },
     { path: '/calendar', name: 'Calendar', component: () => import('../views/Calendar.vue'), meta: { title: 'Календарь и задачи' } },
     { path: '/analytics', name: 'Analytics', component: () => import('../views/Analytics.vue'), meta: { title: 'Аналитика' } },
     { path: '/settings', name: 'Settings', component: () => import('../views/Settings.vue'), meta: { title: 'Настройки' } },

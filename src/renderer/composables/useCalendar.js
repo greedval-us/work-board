@@ -39,6 +39,6 @@ export function useCalendar({ store = useCalendarStore(), now = () => new Date()
     ...state, today, grid, goToday, refreshToday,
     fetchMonth: store.fetchMonth, fetchDay: store.fetchDay, refresh: store.refresh,
     selectDate: store.selectDate, changeMonth: store.changeMonth,
-    saveTask: store.saveTask, removeTask: store.removeTask, toggleTask: store.toggleTask,
+    saveTask: store.saveTask, removeTask: store.removeTask, moveTaskOccurrence: store.moveTaskOccurrence, toggleTask: store.toggleTask,
   };
 }

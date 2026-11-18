@@ -6,9 +6,9 @@ import { EFFECTIVE_INSTRUCTION_DEADLINE_SQL } from '../database/instructionDeadl
 import { AppError } from '../utils/AppError.js';
 
 const COLUMNS = `id, control_date AS controlDate, incoming_number AS incomingNumber,
-  instruction_number AS instructionNumber, source, title, summary, deadline, extended_until AS extendedUntil,
+  instruction_number AS instructionNumber, document_type AS documentType, source, title, summary, deadline, extended_until AS extendedUntil,
   executor, status,
-  execution_mark AS executionMark, created_at AS createdAt, updated_at AS updatedAt`;
+  execution_mark AS executionMark, created_at AS createdAt, updated_at AS updatedAt, closed_at AS closedAt`;
 const NEXT_CHECKPOINT_SQL = `next_instruction_checkpoint(control_schedule, ${EFFECTIVE_INSTRUCTION_DEADLINE_SQL})`;
 const CONTROL_FREQUENCY_SQL = `NULLIF(json_extract(NULLIF(control_schedule, ''), '$.frequency'), '')`;
 const frequencyCases = Object.keys(CONTROL_FREQUENCIES).filter(Boolean)
@@ -16,7 +16,7 @@ const frequencyCases = Object.keys(CONTROL_FREQUENCIES).filter(Boolean)
 
 const SORT_COLUMNS = Object.freeze({
   id: 'id', controlDate: 'control_date', incomingNumber: 'incoming_number', instructionNumber: 'instruction_number_search',
-  source: 'source', title: 'title', summary: 'summary', deadline: 'deadline', extendedUntil: 'extended_until',
+  documentType: 'document_type_search', source: 'source', title: 'title', summary: 'summary', deadline: 'deadline', extendedUntil: 'extended_until',
   nextCheckpoint: 'nextCheckpoint', executor: 'executor_search', controlFrequency: `CASE controlFrequency ${frequencyCases} END`,
   status: 'status', executionMark: 'execution_mark_search',
 });
@@ -37,8 +37,9 @@ function registerCheckpointFunctions(connection) {
 }
 
 function queryParts(request) {
-  const { filters, sort, offset, limit, today } = normalizeListRequest(request);
-  const clauses = [];
+  const { filters, sort, offset, limit, today, closed } = normalizeListRequest(request);
+  const scope = closed ? 'closed_at IS NOT NULL' : 'closed_at IS NULL';
+  const clauses = [scope];
   const values = [];
   for (const [key, column] of [
     ['instructionNumber', 'instruction_number_search'], ['executor', 'executor_search'], ['executionMark', 'execution_mark_search'],
@@ -48,6 +49,7 @@ function queryParts(request) {
     values.push(normalizeSearch(filters[key]));
   }
   for (const [value, clause] of [
+    [normalizeSearch(filters.documentType), 'document_type_search = ?'],
     [filters.deadlineFrom, `${EFFECTIVE_INSTRUCTION_DEADLINE_SQL} >= ?`],
     [filters.deadlineTo, `${EFFECTIVE_INSTRUCTION_DEADLINE_SQL} <= ?`],
     [filters.status, 'status = ?'],
@@ -56,8 +58,10 @@ function queryParts(request) {
     clauses.push(clause);
     values.push(value);
   }
-  const checkpointDate = filters.checkpoint === 'today' ? today ?? localDate() : '';
-  if (checkpointDate) {
+  const checkpointDate = !closed && filters.checkpoint === 'today' ? today ?? localDate() : '';
+  if (closed && filters.checkpoint) {
+    clauses.push('0');
+  } else if (checkpointDate) {
     clauses.push(`has_unmarked_instruction_checkpoint(control_schedule, ${EFFECTIVE_INSTRUCTION_DEADLINE_SQL}, ?) = 1`);
     values.push(checkpointDate);
   } else if (filters.checkpoint === 'overdue') {
@@ -67,9 +71,10 @@ function queryParts(request) {
   const direction = sort.direction.toUpperCase();
   const nulls = sort.field === 'nextCheckpoint' || sort.field === 'controlFrequency' ? ' NULLS LAST' : '';
   const order = `ORDER BY ${SORT_COLUMNS[sort.field]} ${direction}${nulls}`;
+  const nextCheckpoint = closed ? 'NULL' : checkpointDate ? '?' : NEXT_CHECKPOINT_SQL;
   return {
-    where: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '', values, offset, limit,
-    columns: `${COLUMNS}, ${checkpointDate ? '?' : NEXT_CHECKPOINT_SQL} AS nextCheckpoint, ${CONTROL_FREQUENCY_SQL} AS controlFrequency`,
+    scope, where: `WHERE ${clauses.join(' AND ')}`, values, offset, limit,
+    columns: `${COLUMNS}, ${nextCheckpoint} AS nextCheckpoint, ${CONTROL_FREQUENCY_SQL} AS controlFrequency`,
     selectValues: checkpointDate ? [checkpointDate, ...values] : values,
     order: sort.field === 'id' ? order : `${order}, id ${direction}`,
   };
@@ -78,9 +83,9 @@ function queryParts(request) {
 function parameters(data) {
   const schedule = data.controlSchedule;
   return [
-    data.controlDate, data.incomingNumber, data.instructionNumber, data.source, data.title, data.summary,
+    data.controlDate, data.incomingNumber, data.instructionNumber, data.documentType, data.source, data.title, data.summary,
     data.deadline, data.extendedUntil, data.executor, data.status, data.executionMark,
-    normalizeSearch(data.instructionNumber), normalizeSearch(data.executor), normalizeSearch(data.executionMark),
+    normalizeSearch(data.instructionNumber), normalizeSearch(data.documentType), normalizeSearch(data.executor), normalizeSearch(data.executionMark),
     schedule.frequency || schedule.marks.length ? JSON.stringify(schedule) : '',
   ];
 }
@@ -103,7 +108,10 @@ export class InstructionRepository {
     const total = connection.prepare(`SELECT COUNT(*) AS total FROM instructions ${query.where}`).get(...query.values).total;
     const items = connection.prepare(`SELECT ${query.columns} FROM instructions ${query.where} ${query.order} LIMIT ? OFFSET ?`)
       .all(...query.selectValues, query.limit, query.offset).map(registryRow);
-    return { items, total };
+    const documentTypes = connection.prepare(`SELECT MIN(document_type) AS label FROM instructions
+      WHERE ${query.scope} AND document_type_search <> ''
+      GROUP BY document_type_search ORDER BY document_type_search`).all().map(({ label }) => label);
+    return { items, total, documentTypes };
   }
 
   all(request) {
@@ -123,7 +131,7 @@ export class InstructionRepository {
   scheduledForCalendar() {
     return this.database.connection.prepare(`SELECT id, title, instruction_number AS instructionNumber,
       executor, status, deadline, extended_until AS extendedUntil, control_schedule AS controlSchedule, created_at AS createdAt
-      FROM instructions WHERE control_schedule <> '' ORDER BY id`)
+      FROM instructions WHERE control_schedule <> '' AND closed_at IS NULL ORDER BY id`)
       .all().map(withControlSchedule);
   }
 
@@ -131,10 +139,10 @@ export class InstructionRepository {
     const data = validateInstruction(value);
     const now = new Date().toISOString();
     const result = this.database.connection.prepare(`INSERT INTO instructions (
-      control_date, incoming_number, instruction_number, source, title, summary, deadline, extended_until,
+      control_date, incoming_number, instruction_number, document_type, source, title, summary, deadline, extended_until,
       executor, status, execution_mark,
-      instruction_number_search, executor_search, execution_mark_search, control_schedule, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      instruction_number_search, document_type_search, executor_search, execution_mark_search, control_schedule, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(...parameters(data), now, now);
     return this.get(Number(result.lastInsertRowid));
   }
@@ -145,11 +153,21 @@ export class InstructionRepository {
     if (!changes || typeof changes !== 'object' || Array.isArray(changes)) throw new ValidationError('Некорректные изменения указания.');
     const data = validateInstruction({ ...existing, ...changes });
     this.database.connection.prepare(`UPDATE instructions SET
-      control_date = ?, incoming_number = ?, instruction_number = ?, source = ?, title = ?, summary = ?, deadline = ?, extended_until = ?,
-      executor = ?, status = ?, execution_mark = ?, instruction_number_search = ?, executor_search = ?,
+      control_date = ?, incoming_number = ?, instruction_number = ?, document_type = ?, source = ?, title = ?, summary = ?, deadline = ?, extended_until = ?,
+      executor = ?, status = ?, execution_mark = ?, instruction_number_search = ?, document_type_search = ?, executor_search = ?,
       execution_mark_search = ?, control_schedule = ?, updated_at = ? WHERE id = ?`)
       .run(...parameters(data), new Date().toISOString(), id);
     return this.get(id);
+  }
+
+  closeControl(id) {
+    validateId(id);
+    const now = new Date().toISOString();
+    this.database.connection.prepare(`UPDATE instructions SET closed_at = ?, updated_at = ?
+      WHERE id = ? AND closed_at IS NULL`).run(now, now, id);
+    const record = this.get(id);
+    if (!record) throw new AppError('Указание не найдено.', 'NOT_FOUND');
+    return record;
   }
 
   remove(id) {

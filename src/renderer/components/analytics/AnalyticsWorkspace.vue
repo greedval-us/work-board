@@ -44,7 +44,7 @@ const refresh = () => store.refresh({ force: true, keepData: Boolean(data.value)
         <div v-else class="analytics-empty">
           <BarChart3 :size="32" aria-hidden="true" />
           <h2>По этим фильтрам нет указаний</h2>
-          <p>Измените период, статус или исполнителя.</p>
+          <p>Измените период или исполнителя.</p>
           <button type="button" class="analytics-button" @click="store.resetFilters">Показать все указания</button>
         </div>
       </template>

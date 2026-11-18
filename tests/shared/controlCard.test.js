@@ -7,12 +7,12 @@ import { ValidationError } from '../../src/shared/errors.js';
 test('Ф‑21 prefills only the fields with the same meaning as the registry data', () => {
   const values = controlCardFields({
     instructionNumber: '001/К', incomingNumber: '002/В', source: 'Архив', title: 'Проверка',
-    summary: 'Подготовить заключение', executor: 'Сидоров И. И.', controlType: 'Еженедельный',
+    summary: 'Подготовить заключение', executor: 'Сидоров И. И.', controlType: 'Еженедельный', office: 'Лишнее поле указания',
     deadline: '2026-11-15', extendedUntil: '2026-11-20', controlDate: '2026-11-11',
   });
   assert.deepEqual(values, {
     instructionNumber: '001/К', documentDate: '', incomingNumber: '002/В', incomingDate: '',
-    source: 'Архив', title: 'Проверка', summary: 'Подготовить заключение',
+    office: '', source: 'Архив', title: 'Проверка', summary: 'Подготовить заключение',
     deadline: '2026-11-15', extendedUntil: '2026-11-20', executor: 'Сидоров И. И.', department: '', executorPhone: '',
     executionMark: '', removalMark: '', removalDate: '',
   });
@@ -31,14 +31,15 @@ test('Ф‑21 overrides may clear prefilled fields, supply optional fields, or k
   assert.throws(() => normalizeControlCardFields({ executorPhone: 123 }), ValidationError);
 });
 
-test('Ф‑21 accepts both contact options and discards obsolete office fields', () => {
+test('Ф‑21 accepts an office line separately from executor contact options', () => {
   const department = validateRegistryOption('department', '  Отдел контроля  ');
   const executorPhone = validateRegistryOption('executorPhone', '  +7 900 555-01-23 доб. 17 ');
-  const values = normalizeControlCardFields({ department, executorPhone, office: 'Канцелярия', officePhone: '01' });
+  const values = normalizeControlCardFields({ department, executorPhone, office: '  Канцелярия, 123-45  ', officePhone: '01' });
   assert.equal(values.department, 'Отдел контроля');
   assert.equal(values.executorPhone, '+7 900 555-01-23 доб. 17');
-  assert.equal(Object.hasOwn(values, 'office'), false);
+  assert.equal(values.office, 'Канцелярия, 123-45');
   assert.equal(Object.hasOwn(values, 'officePhone'), false);
+  assert.throws(() => normalizeControlCardFields({ office: 'а'.repeat(501) }), ValidationError);
   assert.throws(() => validateRegistryOption('executorPhone', '1'.repeat(101)), ValidationError);
 });
 

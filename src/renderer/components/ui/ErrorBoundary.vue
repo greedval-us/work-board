@@ -35,6 +35,6 @@ watch(() => props.resetKey, () => { failed.value = false; });
 
 <style scoped>
 .workspace-recovery { margin: auto; padding: 24px; text-align: center; }
-.workspace-recovery h2 { font-size: 20px; font-weight: 600; }
+.workspace-recovery h2 { font-size: calc(20px + var(--app-font-offset)); font-weight: 600; }
 .workspace-recovery p { margin: 12px 0 20px; color: var(--muted); }
 </style>

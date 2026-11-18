@@ -22,7 +22,11 @@ const editor = shallowRef(null);
 
 function newTask() { taskNavigation.cancelPending(); editing.value = { task: null, date: selectedDate.value, generation: generation.value }; }
 function editTask(task) { taskNavigation.cancelPending(); editing.value = { task, date: task.date, generation: generation.value }; }
-function closeTask() { taskNavigation.cancelPending(); editing.value = null; }
+function closeTask(nextDate) {
+  taskNavigation.cancelPending();
+  editing.value = null;
+  if (nextDate) calendar.selectDate(nextDate);
+}
 function canLeave() { return editor.value?.requestClose() ?? true; }
 const taskNavigation = useCalendarTaskRoute({ app, route, calendar, editing, requestClose: canLeave });
 const { error: navigationError, loading: openingTask } = taskNavigation;
@@ -70,8 +74,8 @@ onBeforeUnmount(unregister);
     </template>
 
     <TaskDialog
-      v-if="editing" :key="`${editing.generation}:${editing.task?.id ?? 'new'}`" ref="editor" :task="editing.task" :date="editing.date" :generation="editing.generation"
-      :save-task="calendar.saveTask" :remove-task="calendar.removeTask" @close="closeTask"
+      v-if="editing" :key="`${editing.generation}:${editing.task?.id ?? 'new'}:${editing.date}`" ref="editor" :task="editing.task" :date="editing.date" :generation="editing.generation"
+      :save-task="calendar.saveTask" :remove-task="calendar.removeTask" :move-task-occurrence="calendar.moveTaskOccurrence" @close="closeTask"
     />
   </section>
 </template>

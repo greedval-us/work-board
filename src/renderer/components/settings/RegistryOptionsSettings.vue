@@ -1,25 +1,71 @@
 <script setup>
-import { nextTick, reactive, shallowRef, watch } from 'vue';
+import { computed, nextTick, reactive, shallowRef, useId, watch } from 'vue';
 import { Pencil, Trash2 } from 'lucide-vue-next';
-import { CONTROL_CARD_OPTION_LABELS, REGISTRY_OPTION_LABELS, REGISTRY_OPTION_LIMITS } from '../../../shared/constants/settings.js';
+import { CONTROL_CARD_OFFICE_LABEL, CONTROL_CARD_OPTION_LABELS,
+  REGISTRY_OPTION_LABELS, REGISTRY_OPTION_LIMITS } from '../../../shared/constants/settings.js';
 import { executorContactFor } from '../../../shared/controlCard.js';
 
 const props = defineProps({
   options: { type: Object, required: true },
   executorContacts: { type: Array, required: true },
+  office: { type: String, default: '' },
+  officeError: { type: String, default: '' },
   ready: Boolean,
   disabled: Boolean,
   error: { type: String, default: '' },
+  saveOffice: { type: Function, required: true },
   addOption: { type: Function, required: true },
   updateOption: { type: Function, required: true },
   removeOption: { type: Function, required: true },
 });
-const fields = Object.keys(REGISTRY_OPTION_LABELS);
+const fields = ['office', 'source', 'documentType', 'department', 'executorPhone', 'executor'];
 const contactFields = Object.keys(CONTROL_CARD_OPTION_LABELS);
 const drafts = reactive(Object.fromEntries(fields.map(field => [field, ''])));
 const addContact = reactive(executorContactFor(''));
 const edits = reactive(Object.fromEntries(fields.map(field => [field, new Map()])));
 const errorTarget = shallowRef(null);
+const officeDraft = shallowRef(props.office);
+const officeNotice = shallowRef('');
+const showOfficeError = shallowRef(false);
+const officeHelpId = useId();
+const officeErrorId = useId();
+const officeChanged = computed(() => officeDraft.value !== props.office);
+const officeErrorVisible = computed(() => showOfficeError.value && Boolean(props.officeError));
+const executorDetails = computed(() => new Map(props.executorContacts.map(({ executor, department, executorPhone }) => [
+  executor, [department, executorPhone].filter(Boolean).join(' · '),
+])));
+
+watch(() => props.office, (value) => {
+  officeDraft.value = value;
+  clearOfficeFeedback();
+});
+
+watch(() => props.options.office, (options) => {
+  if (officeDraft.value && !options.includes(officeDraft.value)) {
+    officeDraft.value = props.office;
+    clearOfficeFeedback();
+  }
+});
+
+function clearOfficeFeedback() {
+  officeNotice.value = '';
+  showOfficeError.value = false;
+}
+
+async function saveOffice(event) {
+  if (props.disabled || !officeChanged.value) return;
+  const select = event.currentTarget.elements.namedItem('office');
+  const value = officeDraft.value;
+  clearOfficeFeedback();
+  if (await props.saveOffice(value)) {
+    officeDraft.value = value;
+    officeNotice.value = 'Значение сохранено.';
+  } else {
+    showOfficeError.value = true;
+  }
+  await nextTick();
+  if (select.isConnected && document.activeElement === document.body) select.focus({ preventScroll: true });
+}
 
 watch([() => props.options, () => props.executorContacts], ([options, contacts], [, previousContacts]) => {
   for (const field of contactFields) {
@@ -119,76 +165,115 @@ function remove(field, option, event) {
 <template>
   <section class="settings-section" aria-labelledby="registry-options-title">
     <div class="section-heading">
-      <h2 id="registry-options-title">Списки для реестра и Ф‑21</h2>
-      <p>{{ props.ready ? 'Управляйте вариантами для карточки указания и отчёта Ф‑21. В сохранённых указаниях видны ранее выбранные значения.' : 'Откройте или создайте базу данных, чтобы заполнить списки.' }}</p>
+      <h2 id="registry-options-title">Реестр и Ф‑21</h2>
+      <p v-if="!props.ready">Откройте или создайте базу данных, чтобы заполнить настройки.</p>
     </div>
-    <div v-if="props.ready" class="registry-option-groups">
-      <div v-for="(label, field) in REGISTRY_OPTION_LABELS" :key="field" class="registry-option-group">
-        <form :data-registry-option="field" @submit.prevent="add(field, $event)">
-          <label>
-            <span>{{ label }}</span>
-            <input v-model="drafts[field]" name="value" type="text" :maxlength="REGISTRY_OPTION_LIMITS[field]" :disabled="props.disabled" placeholder="Новое значение" required />
-          </label>
-          <template v-if="field === 'executor'">
-            <label v-for="(contactLabel, contactField) in CONTROL_CARD_OPTION_LABELS" :key="contactField">
-              <span>{{ contactLabel }}</span>
-              <select v-model="addContact[contactField]" :name="contactField" :disabled="props.disabled">
-                <option value="">Не указано</option>
-                <option v-for="choice in props.options[contactField]" :key="choice" :value="choice">{{ choice }}</option>
-              </select>
-            </label>
-          </template>
-          <button type="submit" :aria-label="`Добавить значение в список «${label}»`" :disabled="props.disabled || !drafts[field].trim()">Добавить</button>
-        </form>
-        <p v-if="props.error && errorTarget?.field === field && !errorTarget.option" class="registry-option-error" role="alert">{{ props.error }}</p>
-        <ul v-if="props.options[field].length" :aria-label="label">
-          <li v-for="option in props.options[field]" :key="option" :data-registry-option-value="option">
-            <form v-if="edits[field].has(option)" class="registry-option-edit" @submit.prevent="save(field, option, $event)">
-              <input v-model="edits[field].get(option).value" name="value" type="text" :aria-label="`Новое значение для «${option}»`"
-                :maxlength="REGISTRY_OPTION_LIMITS[field]" :disabled="props.disabled" required />
-              <template v-if="field === 'executor'">
-                <label v-for="(contactLabel, contactField) in CONTROL_CARD_OPTION_LABELS" :key="contactField">
-                  <span>{{ contactLabel }}</span>
-                  <select v-model="edits[field].get(option).contact[contactField]" :name="contactField" :disabled="props.disabled">
-                    <option value="">Не указано</option>
-                    <option v-for="choice in props.options[contactField]" :key="choice" :value="choice">{{ choice }}</option>
-                  </select>
-                </label>
-              </template>
-              <button type="submit" :disabled="props.disabled || !canSave(field, option)">Сохранить</button>
-              <button type="button" data-option-action="cancel" :disabled="props.disabled" @click="cancel(field, option, $event)">Отмена</button>
+    <template v-if="props.ready">
+      <div class="registry-option-groups">
+        <div v-for="field in fields" :key="field" class="registry-option-group"
+          :class="{ 'registry-office-group': field === 'office', 'registry-executor-group': field === 'executor' }">
+          <template v-if="field === 'office'">
+            <form data-control-card-office @submit.prevent="saveOffice">
+              <label>
+                <span>{{ CONTROL_CARD_OFFICE_LABEL }}</span>
+                <select v-model="officeDraft" name="office" :disabled="props.disabled"
+                  :aria-describedby="officeErrorVisible ? `${officeHelpId} ${officeErrorId}` : officeHelpId"
+                  :aria-invalid="officeErrorVisible || undefined" @change="clearOfficeFeedback">
+                  <option value="">Не указано</option>
+                  <option v-for="choice in props.options.office" :key="choice" :value="choice">{{ choice }}</option>
+                </select>
+              </label>
+              <button type="submit" :disabled="props.disabled || !officeChanged">Сохранить</button>
             </form>
-            <template v-else>
-              <span class="registry-option-value">{{ option }}</span>
-              <button class="registry-option-action" type="button" data-option-action="edit" title="Редактировать" :aria-label="`Редактировать «${option}»`"
-                :disabled="props.disabled" @click="edit(field, option, $event)"><Pencil :size="15" aria-hidden="true" /></button>
-              <button class="registry-option-action registry-option-remove" type="button" data-option-action="remove" title="Удалить" :aria-label="`Удалить «${option}»`"
-                :disabled="props.disabled" @click="remove(field, option, $event)"><Trash2 :size="15" aria-hidden="true" /></button>
+            <p :id="officeHelpId" class="registry-settings-help">Выбирается по умолчанию при выгрузке Ф‑21 из этой базы.</p>
+            <p v-if="officeErrorVisible" :id="officeErrorId" class="registry-option-error" role="alert">{{ props.officeError }}</p>
+            <p v-else class="registry-option-notice" role="status">{{ officeNotice }}</p>
+          </template>
+          <div v-else-if="field === 'executor'" class="registry-executor-heading">
+            <h3>Исполнители</h3>
+            <p class="registry-settings-help">Подразделение и телефон для Ф‑21 можно указать при добавлении или редактировании исполнителя.</p>
+          </div>
+          <form :data-registry-option="field" @submit.prevent="add(field, $event)">
+            <label>
+              <span>{{ field === 'office' ? 'Новый участок' : REGISTRY_OPTION_LABELS[field] }}</span>
+              <input v-model="drafts[field]" name="value" type="text" :maxlength="REGISTRY_OPTION_LIMITS[field]" :disabled="props.disabled" placeholder="Новое значение" required />
+            </label>
+            <template v-if="field === 'executor'">
+              <label v-for="(contactLabel, contactField) in CONTROL_CARD_OPTION_LABELS" :key="contactField">
+                <span>{{ contactLabel }}</span>
+                <select v-model="addContact[contactField]" :name="contactField" :disabled="props.disabled">
+                  <option value="">Не указано</option>
+                  <option v-for="choice in props.options[contactField]" :key="choice" :value="choice">{{ choice }}</option>
+                </select>
+              </label>
             </template>
-            <p v-if="props.error && errorTarget?.field === field && errorTarget.option === option" class="registry-option-error" role="alert">{{ props.error }}</p>
-          </li>
-        </ul>
+            <button type="submit" :aria-label="`Добавить значение в список «${REGISTRY_OPTION_LABELS[field]}»`" :disabled="props.disabled || !drafts[field].trim()">Добавить</button>
+          </form>
+          <p v-if="props.error && errorTarget?.field === field && !errorTarget.option" class="registry-option-error" role="alert">{{ props.error }}</p>
+          <ul v-if="props.options[field].length" :aria-label="REGISTRY_OPTION_LABELS[field]">
+            <li v-for="option in props.options[field]" :key="option" :data-registry-option-value="option">
+              <form v-if="edits[field].has(option)" class="registry-option-edit" @submit.prevent="save(field, option, $event)">
+                <input v-model="edits[field].get(option).value" name="value" type="text" :aria-label="`Новое значение для «${option}»`"
+                  :maxlength="REGISTRY_OPTION_LIMITS[field]" :disabled="props.disabled" required />
+                <template v-if="field === 'executor'">
+                  <label v-for="(contactLabel, contactField) in CONTROL_CARD_OPTION_LABELS" :key="contactField">
+                    <span>{{ contactLabel }}</span>
+                    <select v-model="edits[field].get(option).contact[contactField]" :name="contactField" :disabled="props.disabled">
+                      <option value="">Не указано</option>
+                      <option v-for="choice in props.options[contactField]" :key="choice" :value="choice">{{ choice }}</option>
+                    </select>
+                  </label>
+                </template>
+                <button type="submit" :disabled="props.disabled || !canSave(field, option)">Сохранить</button>
+                <button type="button" data-option-action="cancel" :disabled="props.disabled" @click="cancel(field, option, $event)">Отмена</button>
+              </form>
+              <template v-else>
+                <span class="registry-option-value">
+                  <span>{{ option }}</span>
+                  <span v-if="field === 'executor' && executorDetails.has(option)" class="registry-option-contact">{{ executorDetails.get(option) }}</span>
+                </span>
+                <button class="registry-option-action" type="button" data-option-action="edit" title="Редактировать" :aria-label="`Редактировать «${option}»`"
+                  :disabled="props.disabled" @click="edit(field, option, $event)"><Pencil :size="15" aria-hidden="true" /></button>
+                <button class="registry-option-action registry-option-remove" type="button" data-option-action="remove" title="Удалить" :aria-label="`Удалить «${option}»`"
+                  :disabled="props.disabled" @click="remove(field, option, $event)"><Trash2 :size="15" aria-hidden="true" /></button>
+              </template>
+              <p v-if="props.error && errorTarget?.field === field && errorTarget.option === option" class="registry-option-error" role="alert">{{ props.error }}</p>
+            </li>
+          </ul>
+        </div>
       </div>
-    </div>
+    </template>
   </section>
 </template>
 
 <style scoped>
-.registry-option-groups { display: grid; gap: 14px; }
+.registry-option-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); align-items: start; gap: 14px; }
+.registry-option-group { min-width: 0; }
+.registry-office-group { grid-column: 1 / -1; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+.registry-executor-group { grid-column: 1 / -1; padding-top: 14px; border-top: 1px solid var(--border); }
+.registry-executor-heading { margin-bottom: 10px; }
+.registry-executor-heading h3 { margin: 0; font-size: calc(13px + var(--app-font-offset)); font-weight: 650; }
+.registry-settings-help { margin-top: 5px; color: var(--muted); font-size: calc(12px + var(--app-font-offset)); }
 .registry-option-group form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
-.registry-option-group label { display: grid; flex: 1 1 175px; gap: 6px; min-width: 0; max-width: 420px; font-size: 12px; font-weight: 550; }
-.registry-option-group input, .registry-option-group select, .registry-option-group button { min-height: 40px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 11px; background: var(--panel); color: var(--text); font-size: 12px; }
+.registry-option-group label { display: grid; flex: 1 1 110px; gap: 5px; min-width: 0; font-size: calc(12px + var(--app-font-offset)); font-weight: 550; }
+.registry-office-group label { flex-basis: 190px; max-width: 520px; }
+.registry-office-group ul { max-width: 520px; }
+.registry-executor-group label { flex-basis: 130px; }
+.registry-option-group input, .registry-option-group select, .registry-option-group button { min-height: 36px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); color: var(--text); font-size: calc(12px + var(--app-font-offset)); }
 .registry-option-group input, .registry-option-group select { width: 100%; min-width: 0; font-weight: 400; }
 .registry-option-group input::placeholder { color: var(--muted); }
 .registry-option-group button { font-weight: 550; }
 .registry-option-group button:enabled:hover { background: var(--raised); }
-.registry-option-group ul { display: grid; gap: 4px; max-width: 550px; margin: 8px 0 0; padding: 0; list-style: none; }
-.registry-option-group li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; padding: 4px 6px 4px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); font-size: 12px; }
-.registry-option-value { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.registry-option-group .registry-option-action { display: grid; flex: 0 0 34px; min-height: 34px; place-items: center; padding: 0; border-color: transparent; border-radius: 8px; color: var(--muted); }
+.registry-option-group ul { display: grid; gap: 4px; margin: 8px 0 0; padding: 0; list-style: none; }
+.registry-option-group li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; padding: 4px 6px 4px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); font-size: calc(12px + var(--app-font-offset)); }
+.registry-option-value { display: flex; flex: 1; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; min-width: 0; overflow-wrap: anywhere; }
+.registry-option-contact { color: var(--muted); font-size: calc(11px + var(--app-font-offset)); }
+.registry-option-group .registry-option-action { display: grid; flex: 0 0 28px; min-height: 28px; place-items: center; padding: 0; border-color: transparent; border-radius: 8px; color: var(--muted); }
 .registry-option-group .registry-option-remove:enabled:hover { background: var(--error-surface); color: var(--error); }
 .registry-option-group .registry-option-edit { flex: 1; min-width: 0; }
 .registry-option-edit input { flex: 1 1 150px; }
 .registry-option-edit label { flex-basis: 150px; }
-.registry-option-error { flex-basis: 100%; margin: 4px 0; color: var(--error); font-size: 12px; overflow-wrap: anywhere; }
+.registry-option-error { flex-basis: 100%; margin: 4px 0; color: var(--error); font-size: calc(12px + var(--app-font-offset)); overflow-wrap: anywhere; }
+.registry-option-notice { margin-top: 4px; color: var(--accent); font-size: calc(12px + var(--app-font-offset)); }
+.registry-option-notice:empty { margin-top: 0; }
 </style>

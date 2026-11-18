@@ -10,6 +10,7 @@
 *.woff2 binary
 *.pdf binary
 *.xlsx binary
+*.docx binary
 *.exe binary
 *.sqlite binary
 *.sqlite3 binary

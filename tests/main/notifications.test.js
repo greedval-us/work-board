@@ -12,6 +12,8 @@ import { BusinessHandler } from '../../src/main/ipc/BusinessHandler.js';
 import { IPCManager } from '../../src/main/ipc/IPCManager.js';
 import { SettingsRepository } from '../../src/main/repositories/SettingsRepository.js';
 import { SettingsService } from '../../src/main/services/SettingsService.js';
+import { CalendarService } from '../../src/main/services/CalendarService.js';
+import { RecordService } from '../../src/main/services/RecordService.js';
 
 function fixture(t) {
   const directory = mkdtempSync(path.join(tmpdir(), 'work-board-notifications-'));
@@ -34,6 +36,42 @@ function fixture(t) {
 
 const reference = item => ({ id: item.id, occurrence: item.occurrence });
 
+test('closing a control via IPC removes its deadline and checkpoints from the calendar and reminders', async t => {
+  const { database, instructions, tasks, service, instruction } = fixture(t);
+  const item = instruction({ controlSchedule: { frequency: 'daily', firstDate: '2026-11-11' } });
+  const calendar = new CalendarService(instructions, tasks);
+  const task = tasks.create({ title: 'Независимая задача', date: '2026-11-12' });
+  const handlers = new Map();
+  const window = { isDestroyed: () => false, webContents: { mainFrame: {} } };
+  const reminderSnapshots = [];
+  const manager = new IPCManager({
+    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler), removeHandler: channel => handlers.delete(channel) },
+    database, appService: { getInfo: () => ({}) }, settingsService: new SettingsService(new SettingsRepository(database)),
+    recordServices: { instructions: new RecordService({ database, repository: instructions }) },
+    calendar, notifications: service, getWindow: () => window, logger: { error() {} },
+    onDataChanged: () => reminderSnapshots.push(service.list().items.map(row => row.kind)),
+  });
+  manager.init(); t.after(() => manager.shutdown());
+  const event = { sender: window.webContents, senderFrame: window.webContents.mainFrame };
+  const generation = database.getStatus().generation;
+  const request = { id: item.id, generation };
+  const close = handlers.get('instructions:close-control');
+  assert.equal(typeof close, 'function');
+  assert.equal((await close(event, { ...request, generation: generation - 1 })).error.code, 'DATABASE_CHANGED');
+  assert.deepEqual(reminderSnapshots, []);
+  const day = { date: '2026-11-12' };
+  const month = { month: '2026-11' };
+  assert.equal(calendar.month(month).days[11].controls, 1);
+  assert.equal(calendar.day(day).checkpoints.length, 1);
+  assert.deepEqual(new Set(service.list().items.map(row => row.kind)), new Set(['checkpoint', 'instruction', 'task']));
+
+  assert.equal((await close(event, request)).ok, true);
+  assert.deepEqual(reminderSnapshots, [['task']]);
+  assert.deepEqual(calendar.day(day), { instructions: [], checkpoints: [], tasks: [task] });
+  assert.equal(calendar.month(month).days[11].controls, 0);
+  assert.equal(calendar.month(month).days[11].checkpoints, 0);
+});
+
 test('notifications include overdue and the inclusive three-day horizon using the effective deadline', t => {
   const f = fixture(t);
   const overdue = f.instruction({ title: 'Просрочено', deadline: '2026-11-11', status: 'in_progress' });
@@ -54,6 +92,89 @@ test('notifications include overdue and the inclusive three-day horizon using th
   assert.ok(result.items.every(item => item.unread && item.popupPending));
   assert.equal(result.items[0].occurrence, '2026-11-11:2026-11-12');
   assert.equal(result.items[0].instructionNumber, '12/А');
+});
+
+test('recurring tasks count each date in the calendar and acknowledge or complete it independently', t => {
+  const { instructions, tasks, service } = fixture(t);
+  const weekly = tasks.create({
+    title: 'Еженедельная проверка', date: '2026-10-01', recurrence: { frequency: 'weekly' },
+  });
+  const custom = tasks.create({
+    title: 'Проверка по датам', date: '2022-01-01',
+    recurrence: { frequency: 'custom', customDates: ['2026-11-15', '2026-11-16'] },
+  });
+  const calendar = new CalendarService(instructions, tasks);
+  const list = () => service.list().items;
+  assert.deepEqual(list().map(({ recordId, date }) => [recordId, date]), [
+    [custom.id, '2022-01-01'],
+    [weekly.id, '2026-11-05'],
+    [weekly.id, '2026-11-12'],
+    [custom.id, '2026-11-15'],
+  ]);
+  assert.equal(new Set(list().map(item => item.id)).size, 4);
+
+  const due = list().find(item => item.date === '2026-11-12');
+  service.acknowledge({ items: [reference(due)], read: true, popup: true });
+  assert.equal(list().find(item => item.id === due.id).unread, false);
+  assert.equal(list().find(item => item.date === '2026-11-05').unread, true);
+
+  tasks.updateOccurrence(weekly.id, '2026-11-05', true);
+  assert.deepEqual(list().filter(item => item.recordId === weekly.id).map(item => item.date), ['2026-11-12']);
+  const month = calendar.month({ month: '2026-11' });
+  assert.deepEqual(month.days.filter(day => day.tasks || day.completedTasks).map(day => [day.date, day.tasks, day.completedTasks]), [
+    ['2026-11-05', 0, 1], ['2026-11-12', 1, 0], ['2026-11-15', 1, 0],
+    ['2026-11-16', 1, 0], ['2026-11-19', 1, 0], ['2026-11-26', 1, 0],
+  ]);
+  assert.deepEqual(calendar.day({ date: '2026-11-05' }).tasks.map(task => [task.date, task.seriesDate, task.completed]),
+    [['2026-11-05', '2026-10-01', true]]);
+});
+
+test('moving a task occurrence changes the calendar and reminder date while preserving its reminder ID', t => {
+  const { instructions, tasks, service, setToday } = fixture(t);
+  setToday('2026-11-30');
+  const task = tasks.create({
+    title: 'Еженедельная задача', date: '2026-11-30', recurrence: { frequency: 'weekly' },
+  });
+  const calendar = new CalendarService(instructions, tasks);
+  const original = service.list().items[0];
+  service.acknowledge({ items: [reference(original)], read: true, popup: true });
+
+  tasks.moveOccurrence(task.id, '2026-11-30', '2026-12-02');
+
+  assert.deepEqual(calendar.day({ date: original.date }).tasks, []);
+  assert.equal(calendar.day({ date: '2026-12-02' }).tasks[0].originalDate, original.date);
+  assert.equal(calendar.month({ month: '2026-11' }).days[29].tasks, 0);
+  assert.equal(calendar.month({ month: '2026-12' }).days[1].tasks, 1);
+  const moved = service.list().items[0];
+  assert.equal(moved.id, original.id);
+  assert.equal(moved.date, '2026-12-02');
+  assert.equal(moved.unread, true);
+  assert.equal(moved.popupPending, true);
+
+  service.acknowledge({ items: [reference(original)], read: true, popup: true });
+  assert.equal(service.list().items[0].unread, true);
+  tasks.updateOccurrence(task.id, moved.date, true);
+  assert.deepEqual(service.list().items, []);
+  assert.equal(calendar.day({ date: moved.date }).tasks[0].completed, true);
+});
+
+test('overdue task reminders honor earlier moves and skip displaced dates even beyond a year', t => {
+  const { tasks, service } = fixture(t);
+  const yearly = tasks.create({
+    title: 'Ежегодная задача', date: '2023-11-10', recurrence: { frequency: 'yearly' },
+  });
+  const future = tasks.create({
+    title: 'Задача по датам', date: '2029-01-01',
+    recurrence: { frequency: 'custom', customDates: ['2030-01-01'] },
+  });
+  tasks.moveOccurrence(yearly.id, '2025-11-10', '2027-11-11');
+  tasks.moveOccurrence(yearly.id, '2026-11-10', '2027-11-12');
+  tasks.moveOccurrence(future.id, '2029-01-01', '2020-01-01');
+  tasks.moveOccurrence(future.id, '2030-01-01', '2026-11-14');
+
+  assert.deepEqual(service.list().items.map(({ recordId, date }) => [recordId, date]), [
+    [future.id, '2020-01-01'], [yearly.id, '2024-11-10'], [future.id, '2026-11-14'],
+  ]);
 });
 
 test('checkpoint reminders follow moves, omit marked history and completed parents, and include every due occurrence', t => {

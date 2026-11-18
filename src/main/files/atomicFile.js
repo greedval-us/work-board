@@ -2,9 +2,11 @@ import { randomUUID } from 'node:crypto';
 import { realpathSync, renameSync } from 'node:fs';
 import filesystem from 'node:fs/promises';
 import path from 'node:path';
-import { ATTACHMENT_STORAGE, DATABASE_FILE_SUFFIXES } from '../../shared/constants/attachments.js';
 import { ValidationError } from '../../shared/errors.js';
 import { CleanupError } from '../utils/cleanup.js';
+
+const DATABASE_FILE_SUFFIXES = Object.freeze(['', '-wal', '-shm']);
+const LEGACY_ATTACHMENT_ROOT_SUFFIX = '.files';
 
 function canonicalPath(filePath) {
   const absolute = path.resolve(filePath);
@@ -23,7 +25,7 @@ function outputPath(filePath, databasePaths) {
     .flatMap(databasePath => [databasePath, canonicalPath(databasePath)]));
   for (const databasePath of protectedPaths) {
     const files = DATABASE_FILE_SUFFIXES.map(suffix => canonicalPath(`${databasePath}${suffix}`).toLowerCase());
-    const storage = canonicalPath(`${databasePath}${ATTACHMENT_STORAGE.ROOT_SUFFIX}`).toLowerCase();
+    const storage = canonicalPath(`${databasePath}${LEGACY_ATTACHMENT_ROOT_SUFFIX}`).toLowerCase();
     if (files.includes(compared) || compared === storage || compared.startsWith(storage + path.sep)) {
       throw new ValidationError('Выберите место вне рабочей базы и папки вложений.');
     }
@@ -31,7 +33,7 @@ function outputPath(filePath, databasePaths) {
   return destination;
 }
 
-async function replaceFile(filePath, prepare, { getDatabasePaths = () => [], assertCurrent = () => {} } = {}) {
+export async function writeAtomicFile(filePath, contents, { getDatabasePaths = () => [], assertCurrent = () => {} } = {}) {
   const destination = outputPath(filePath, getDatabasePaths());
   const temporary = path.join(path.dirname(destination), `.${randomUUID()}.tmp`);
   let handle;
@@ -42,7 +44,7 @@ async function replaceFile(filePath, prepare, { getDatabasePaths = () => [], ass
     owned = true;
     await handle.close();
     handle = null;
-    await prepare(temporary);
+    await filesystem.writeFile(temporary, contents);
     outputPath(destination, getDatabasePaths());
     assertCurrent();
     renameSync(temporary, destination);
@@ -58,12 +60,4 @@ async function replaceFile(filePath, prepare, { getDatabasePaths = () => [], ass
     if (cleanupErrors.length) throw new CleanupError(error, cleanupErrors);
     throw error;
   }
-}
-
-export function writeAtomicFile(filePath, contents, options) {
-  return replaceFile(filePath, temporary => filesystem.writeFile(temporary, contents), options);
-}
-
-export function copyAtomicFile(source, filePath, options) {
-  return replaceFile(filePath, temporary => filesystem.copyFile(source, temporary), options);
 }

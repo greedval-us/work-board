@@ -1,14 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { formatFileSize } from '../../src/renderer/presentation/formatters.js';
 import { getTaskPriorityPresentation } from '../../src/renderer/presentation/taskPriorities.js';
 import { presentCalendarCheckpoints, presentCalendarRecords } from '../../src/renderer/presentation/calendarRecords.js';
-
-test('attachment size labels switch at binary unit boundaries and retain the one-decimal display', () => {
-  for (const [bytes, label] of [[0, '0 Б'], [1023, '1023 Б'], [1024, '1 КБ'], [1536, '1,5 КБ'], [1048575, '1 024 КБ'], [1048576, '1 МБ'], [1572864, '1,5 МБ']]) {
-    assert.equal(formatFileSize(bytes), label);
-  }
-});
 
 test('task priority presentation shares labels and preserves the normal-tone chart override', () => {
   assert.deepEqual(getTaskPriorityPresentation('normal'), { label: 'Обычная', tone: 'info' });

@@ -1,13 +1,14 @@
 import { storeToRefs } from 'pinia';
 import { onScopeDispose, shallowRef, watch } from 'vue';
-import { INSTRUCTION_STATUS, localDate } from '../../shared/registry.js';
-import { createRegistryStore, useRegistryStore } from '../stores/registryStore.js';
+import { localDate } from '../../shared/registry.js';
+import { createRegistryStore, useClosedRegistryStore, useRegistryStore } from '../stores/registryStore.js';
 import { useAppStore } from '../stores/appStore.js';
 
 // Route-local card state only. Queries, results and operations belong to Pinia.
-export function useRegistry(suppliedApp, service) {
+export function useRegistry(suppliedApp, service, { closed = false } = {}) {
   const app = suppliedApp ?? useAppStore();
-  const store = suppliedApp || service ? createRegistryStore({ app, ...(service ? { service } : {}) })() : useRegistryStore();
+  const useStore = suppliedApp || service ? createRegistryStore({ app, service, closed }) : closed ? useClosedRegistryStore : useRegistryStore;
+  const store = useStore();
   const refs = storeToRefs(store);
   const selected = shallowRef(null);
   const selectedCheckpoint = shallowRef('');
@@ -26,15 +27,16 @@ export function useRegistry(suppliedApp, service) {
   }
 
   function createRecord() {
-    if (!store.canMutate) return false;
+    if (closed || !store.canMutate) return false;
     closeRecord();
     selectedGeneration = app.database.generation;
-    selected.value = { id: null, controlDate: localDate(), incomingNumber: '', instructionNumber: '', source: '',
-      title: '', summary: '', deadline: '', extendedUntil: '', executor: '', status: INSTRUCTION_STATUS.PENDING, executionMark: '' };
+    selected.value = { id: null, controlDate: localDate(), incomingNumber: '', instructionNumber: '', documentType: '', source: '',
+      title: '', summary: '', deadline: '', extendedUntil: '', executor: '', executionMark: '' };
     return true;
   }
 
   async function openRecord(id, checkpoint = '', isRequested = () => true) {
+    if (store.closingControl) return false;
     const generation = app.database?.generation;
     const version = ++recordVersion;
     const record = await store.getRecord(id, generation);
@@ -62,6 +64,14 @@ export function useRegistry(suppliedApp, service) {
     return removed;
   }
 
+  async function closeSelectedControl() {
+    if (!selected.value?.id || selected.value.closedAt || !isCurrent(selectedGeneration)) return false;
+    const version = recordVersion;
+    const didClose = await store.closeControl({ id: selected.value.id, generation: selectedGeneration, fromCard: true });
+    if (didClose && active && version === recordVersion) closeRecord();
+    return didClose;
+  }
+
   watch([() => app.database?.generation, () => app.database?.ready], closeRecord, { flush: 'sync' });
   store.ensureLoaded();
   onScopeDispose(() => { active = false; closeRecord(); });
@@ -69,5 +79,6 @@ export function useRegistry(suppliedApp, service) {
   return { ...refs, draftFilters: store.draftFilters, formError: refs.mutationError, selected, selectedCheckpoint,
     refresh: store.refresh, updateToday: store.updateToday, applyFilters: store.applyFilters, resetFilters: store.resetFilters,
     changeSort: store.changeSort, setPage: store.setPage, setPageSize: store.setPageSize,
-    exportRecords: store.exportRecords, closeRecord, createRecord, openRecord, saveRecord, removeRecord };
+    exportRecords: store.exportRecords, closeControl: store.closeControl, closeRecord, createRecord, openRecord, saveRecord,
+    removeRecord, closeSelectedControl };
 }

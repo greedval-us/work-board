@@ -70,6 +70,19 @@ test('duplicate submissions share one pending operation and cancellation preserv
   assert.equal(input.fields.department, '');
 });
 
+test('a Word launch failure preserves the saved report path and success status', async t => {
+  const filePath = 'C:/Отчёты/Карточка Ф-21.docx';
+  const { store } = setup(t, async () => ({ cancelled: false, filePath, opened: false }));
+
+  assert.equal(await store.exportCard(draft()), true);
+  assert.equal(store.notice, 'Контрольная карточка сохранена.');
+  assert.equal(store.unopenedExportPath, filePath);
+  assert.equal(store.error, '');
+
+  store.reset();
+  assert.equal(store.unopenedExportPath, null);
+});
+
 test('failed exports show safe feedback and release guards for retry without clearing the draft', async t => {
   let fail = true;
   const { app, store } = setup(t, async () => {

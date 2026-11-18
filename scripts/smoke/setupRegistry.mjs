@@ -1,12 +1,10 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import { addCalendarDays } from '../../src/shared/registry.js';
 import { createSmokeForms } from './forms.mjs';
 
 export async function setupRegistry(driver, fixture) {
-  const { window, js, api, wait, click, navigate, fill, verifyEntrance, screenshot } = driver;
-  const { firstFile, today, originalDeadline, nextCheckpointTime, nextCheckpointHeader, controlFrequencyHeader, dailyControl, registrySelections, reportSelections, settingsSelections } = fixture;
+  const { window, js, api, wait, click, navigate, fill, verifyEntrance, resize, resizeDefault, screenshot } = driver;
+  const { firstFile, today, originalDeadline, nextCheckpointTime, nextCheckpointHeader, controlFrequencyHeader, dailyControl, registrySelections, reportSelections, settingsSelections, controlCardOffice, alternateOffice } = fixture;
   const { fillInstruction, optionForm, optionRow, addRegistryOption } = createSmokeForms(driver);
 
   window.showInactive();
@@ -16,6 +14,7 @@ export async function setupRegistry(driver, fixture) {
   assert.equal((await api('database', 'getStatus')).ready, false);
   assert.equal(await js('typeof window.require'), 'undefined');
   assert.equal(await js('typeof window.desktopAPI.invoke'), 'undefined');
+  assert.equal(await js("Object.hasOwn(window.desktopAPI, 'attachments')"), false);
   await screenshot('registry-first-run.png');
 
   await navigate('/settings', 'Настройки');
@@ -23,7 +22,7 @@ export async function setupRegistry(driver, fixture) {
   await wait("document.querySelector('.file-path')?.textContent.includes('selected-controls.sqlite')");
   const initial = await api('database', 'getStatus');
   const generation = initial.generation;
-  assert.equal(initial.schemaVersion, 6);
+  assert.equal(initial.schemaVersion, 10);
   assert.equal(initial.filePath, firstFile);
   await navigate('/', 'Реестр указаний');
   await click('Добавить указание', '.registry-toolbar button');
@@ -32,25 +31,56 @@ export async function setupRegistry(driver, fixture) {
   await js("document.querySelector('.registry-options-hint a').click()");
   await wait("Boolean(document.querySelector('#registry-options-title'))");
   await wait("!document.querySelector('.registry-instruction-dialog[open]')");
-  assert.deepEqual(await js("[...document.querySelectorAll('[data-registry-option]')].map(form => form.dataset.registryOption)"),
-    ['source', 'executor', 'department', 'executorPhone']);
-  for (const [field, option] of Object.entries({ source: registrySelections.source, ...reportSelections })) {
+  assert.deepEqual(new Set(await js("[...document.querySelectorAll('[data-registry-option]')].map(form => form.dataset.registryOption)")),
+    new Set(['documentType', 'source', 'department', 'executorPhone', 'executor', 'office']));
+  assert.equal(await js("Boolean(document.querySelector('form[data-executor-contacts]'))"), false);
+  const officeForm = 'form[data-control-card-office]';
+  const officeSelect = `${officeForm} select[name=office]`;
+  const selectOffice = async (value) => {
+    await wait(`document.querySelector('${officeSelect}')?.matches(':enabled')`);
+    await fill(officeSelect, { 0: value });
+    await click('Сохранить', `${officeForm} button[type=submit]`);
+    await wait("document.querySelector('.registry-office-group [role=status]')?.textContent.trim() === 'Значение сохранено.'");
+    assert.equal((await api('settings', 'get', generation)).office, value);
+  };
+  await addRegistryOption('office', controlCardOffice);
+  await addRegistryOption('office', alternateOffice);
+  assert.equal(await js(`document.querySelector('${officeSelect}').value`), '');
+  await selectOffice(alternateOffice);
+  const alternateRow = JSON.stringify(optionRow('office', alternateOffice));
+  await js(`document.querySelector(${alternateRow}).querySelector('[data-option-action=remove]').click()`);
+  await wait(`!document.querySelector(${alternateRow}) && document.querySelector('${officeSelect}')?.value === ''`);
+  assert.equal((await api('settings', 'get', generation)).office, '');
+  await addRegistryOption('office', alternateOffice);
+  await selectOffice(controlCardOffice);
+  for (const [field, option] of Object.entries({ documentType: registrySelections.documentType, source: registrySelections.source, ...reportSelections })) {
     await addRegistryOption(field, option);
   }
   const executorContact = { executor: registrySelections.executor, ...reportSelections };
   await addRegistryOption('executor', executorContact.executor, reportSelections);
   const configuredOptions = Object.fromEntries(Object.entries(settingsSelections).map(([field, value]) => [field, [value]]));
+  configuredOptions.office = [controlCardOffice, alternateOffice];
   const configuredSettings = await api('settings', 'get', generation);
   assert.deepEqual(configuredSettings.registryOptions, configuredOptions);
   assert.deepEqual(configuredSettings.executorContacts, [executorContact]);
+  assert.equal(configuredSettings.office, controlCardOffice);
+  const focusSettings = "document.querySelector('#registry-options-title').scrollIntoView({ block: 'start' })";
+  await js(focusSettings);
+  await screenshot('settings-control-card.png');
+  await resize(720, 640);
+  await js(focusSettings);
+  assert.equal(await js('document.querySelector(\'.settings-page\').scrollWidth > document.querySelector(\'.settings-page\').clientWidth'), false);
+  await screenshot('settings-control-card-compact.png');
+  await resizeDefault();
   for (const field of Object.keys(reportSelections)) {
     assert.equal(await js(`document.querySelector(${JSON.stringify(`${optionForm('executor')} select[name=${field}]`)}).value`), '');
   }
 
   const executorRow = optionRow('executor', executorContact.executor);
+  const executorEditButton = `${executorRow} button[data-option-action=edit]`;
   const executorEditInput = `${executorRow} input[name=value]`;
   const executorEditPhone = `${executorRow} select[name=executorPhone]`;
-  await js(`document.querySelector(${JSON.stringify(`${executorRow} button[data-option-action=edit]`)}).click()`);
+  await js(`document.querySelector(${JSON.stringify(executorEditButton)}).click()`);
   await wait(`document.querySelector(${JSON.stringify(executorEditInput)})?.value === ${JSON.stringify(executorContact.executor)}`);
   for (const [field, value] of Object.entries(reportSelections)) {
     assert.equal(await js(`document.querySelector(${JSON.stringify(`${executorRow} select[name=${field}]`)}).value`), value);
@@ -65,13 +95,11 @@ export async function setupRegistry(driver, fixture) {
   assert.deepEqual(editedSettings.registryOptions, configuredOptions);
   assert.deepEqual(editedSettings.executorContacts, [{ ...executorContact, executorPhone: '' }]);
 
-  const contactsForm = 'form[data-executor-contacts]';
-  await wait(`document.querySelector('${contactsForm} [name=executor]')?.matches(':enabled')`);
-  for (const [field, option] of Object.entries(executorContact)) {
-    await fill(`${contactsForm} [name=${field}]`, { 0: option });
-  }
-  await click('Сохранить', `${contactsForm} button[type=submit]`);
-  await wait(`document.querySelector('${contactsForm} [role=status]')?.textContent.trim() === 'Контакты сохранены.'`);
+  await js(`document.querySelector(${JSON.stringify(executorEditButton)}).click()`);
+  await wait(`document.querySelector(${JSON.stringify(executorEditPhone)})?.matches(':enabled')`);
+  await fill(executorEditPhone, { 0: executorContact.executorPhone });
+  await js(`document.querySelector(${JSON.stringify(executorEditSubmit)}).click()`);
+  await wait(`!document.querySelector(${JSON.stringify(executorEditInput)})`);
   assert.deepEqual((await api('settings', 'get', generation)).executorContacts, [executorContact]);
 
   await navigate('/', 'Реестр указаний');
@@ -80,6 +108,8 @@ export async function setupRegistry(driver, fixture) {
   await verifyEntrance('.registry-instruction-dialog', 'instruction card');
   assert.equal(await js("document.querySelector('.registry-form-grid').disabled"), false);
   assert.equal(await js("Boolean(document.querySelector('.registry-instruction-dialog select[name=controlType]'))"), false);
+  assert.equal(await js("Boolean(document.querySelector('.registry-instruction-dialog [name=status]'))"), false);
+  assert.equal(await js("document.querySelector('.registry-instruction-dialog .attachment-panel, .registry-instruction-dialog input[type=file]') === null"), true);
   for (const [field, option] of Object.entries(registrySelections)) {
     const selector = `.registry-form-grid select[name="${field}"]`;
     await wait(`[...document.querySelector(${JSON.stringify(selector)})?.options ?? []].some(option => option.value === ${JSON.stringify(option)})`);
@@ -87,7 +117,7 @@ export async function setupRegistry(driver, fixture) {
   await fillInstruction({
     controlDate: addCalendarDays(originalDeadline, -1), incomingNumber: '0017', instructionNumber: '0001/К', deadline: originalDeadline, title: 'Проверить отчёт',
     extendedUntil: addCalendarDays(originalDeadline, -1),
-    summary: 'Сверить сведения\nПодготовить итоговую справку.', status: 'pending', executionMark: 'Ожидается ответ',
+    summary: 'Сверить сведения\nПодготовить итоговую справку.', executionMark: 'Ожидается ответ',
     ...registrySelections,
   });
   assert.equal(await js("document.querySelector('[name=extendedUntil]').validity.rangeUnderflow"), true);
@@ -95,11 +125,10 @@ export async function setupRegistry(driver, fixture) {
   await fillInstruction({ extendedUntil: today });
   await fill('[name=control-frequency]', { 0: 'daily' });
   await fill('[name=control-first-date]', { 0: originalDeadline });
-  await js("document.querySelector('.registry-instruction-dialog .attachment-add').click()");
-  await wait("document.querySelectorAll('.attachment-list li').length === 1 && !document.querySelector('.attachment-add').disabled");
   await js("document.querySelector('.registry-instruction-form').requestSubmit()");
   await wait("!document.querySelector('.registry-instruction-dialog[open]') && document.querySelector('.registry-count')?.textContent === '1'");
   const created = (await api('instructions', 'list', { generation })).items[0];
+  assert.equal(created.status, 'pending');
   assert.equal(created.incomingNumber, '0017');
   assert.equal(created.deadline, originalDeadline);
   assert.equal(created.extendedUntil, today);
@@ -107,32 +136,29 @@ export async function setupRegistry(driver, fixture) {
   const savedSchedule = (await api('instructions', 'get', { id: created.id, generation })).controlSchedule;
   assert.deepEqual(savedSchedule, { frequency: 'daily', firstDate: originalDeadline, customDates: [], marks: [] });
   for (const [field, option] of Object.entries(registrySelections)) assert.equal(created[field], option);
-  const headings = await js("[...document.querySelectorAll('.registry-table th')].map(cell => cell.textContent.trim())");
-  assert.equal(headings[0], 'ID');
-  assert.equal(headings[3], 'Подписной номер');
-  assert.equal(headings[4], 'Откуда');
-  assert.equal(headings[6], 'Резолюция');
-  assert.equal(headings[8], 'Продлён до');
-  assert.deepEqual(await js(`(() => {
-    const header = document.querySelector('.registry-table th[data-column=controlFrequency]');
-    return { position: header.cellIndex, title: header.title };
-  })()`), { position: 11, title: controlFrequencyHeader });
-  assert.deepEqual(await js(`(() => {
-    const header = document.querySelector('.registry-table th[data-column=nextCheckpoint]');
-    return { position: header.cellIndex, title: header.title };
-  })()`), { position: 9, title: nextCheckpointHeader });
+  const columns = await js(`Object.fromEntries([...document.querySelectorAll('.registry-table th')].map(header => [
+    header.dataset.column, { index: header.cellIndex, label: header.textContent.trim(), title: header.title },
+  ]))`);
+  assert.equal(columns.id.label, 'ID');
+  assert.equal(columns.instructionNumber.label, 'Подписной номер');
+  assert.equal(columns.documentType.title, 'Вид документа');
+  assert.equal(columns.source.label, 'Откуда');
+  assert.equal(columns.summary.label, 'Резолюция');
+  assert.equal(columns.extendedUntil.label, 'Продлён до');
+  assert.equal(columns.controlFrequency.title, controlFrequencyHeader);
+  assert.equal(columns.nextCheckpoint.title, nextCheckpointHeader);
   const cells = await js("[...document.querySelectorAll('.registry-table tbody tr td')].map(cell => cell.textContent.trim())");
-  assert.equal(cells[0], String(created.id));
-  assert.equal(cells[4], registrySelections.source);
-  assert.equal(cells[10], registrySelections.executor);
-  assert.equal(cells[11], dailyControl);
-  assert.equal(await js("document.querySelector('.registry-row td:nth-child(9) time').dateTime"), today);
-  assert.equal(await js("document.querySelector('.registry-row td:nth-child(9) .registry-urgency').textContent"), 'Срок сегодня');
+  assert.equal(cells[columns.id.index], String(created.id));
+  assert.equal(cells[columns.documentType.index], registrySelections.documentType);
+  assert.equal(cells[columns.source.index], registrySelections.source);
+  assert.equal(cells[columns.executor.index], registrySelections.executor);
+  assert.equal(cells[columns.controlFrequency.index], dailyControl);
+  assert.equal(cells[columns.executionMark.index], 'Ожидается ответ');
+  const extended = `.registry-row td:nth-child(${columns.extendedUntil.index + 1})`;
+  assert.equal(await js(`document.querySelector('${extended} time').dateTime`), today);
+  assert.equal(await js(`document.querySelector('${extended} .registry-urgency').textContent`), 'Срок сегодня');
   assert.equal(await js(`document.querySelector('${nextCheckpointTime}.registry-checkpoint-overdue')?.dateTime`), originalDeadline);
   const overdueTextColor = await js(`getComputedStyle(document.querySelector('${nextCheckpointTime}')).color`);
   assert.equal(overdueTextColor, 'rgb(179, 38, 48)');
-  const instructionFiles = await api('attachments', 'list', { entityType: 'instructions', entityId: created.id, generation });
-  assert.equal(instructionFiles.length, 1);
-  assert.equal(readFileSync(path.join(firstFile + '.files', instructionFiles[0].relativePath), 'utf8'), 'Документ для задачи и указания.');
-  return { generation, created, overdueTextColor, instructionFiles, executorContact };
+  return { generation, created, overdueTextColor, executorContact };
 }

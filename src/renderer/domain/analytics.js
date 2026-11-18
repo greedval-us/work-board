@@ -1,7 +1,9 @@
 import { emptyAnalyticsFilters } from '../../shared/analytics.js';
-import { localDate, normalizeSearch } from '../../shared/registry.js';
+import { DATE_LIMITS } from '../../shared/constants/dates.js';
+import { addCalendarDays, localDate } from '../../shared/dates.js';
+import { normalizeSearch } from '../../shared/registry.js';
 
-export const ANALYTICS_PERIODS = Object.freeze({ MONTH: 'month', YEAR: 'year', ALL: 'all' });
+export const ANALYTICS_PERIODS = Object.freeze({ WEEK: 'week', MONTH: 'month', YEAR: 'year', ALL: 'all' });
 
 export function analyticsExecutorOptions(recorded, configured, selected) {
   const options = new Map(recorded.map(({ key, label }) => [key, label]));
@@ -13,6 +15,10 @@ export function analyticsExecutorOptions(recorded, configured, selected) {
 
 export function applyAnalyticsPeriod(filters, period, today = localDate()) {
   let from = '';
+  if (period === ANALYTICS_PERIODS.WEEK) {
+    const weekStart = addCalendarDays(today, -7);
+    from = weekStart < DATE_LIMITS.MIN ? DATE_LIMITS.MIN : weekStart;
+  }
   if (period === ANALYTICS_PERIODS.MONTH) from = `${today.slice(0, 7)}-01`;
   if (period === ANALYTICS_PERIODS.YEAR) from = `${today.slice(0, 4)}-01-01`;
   return { ...filters, from, to: period === ANALYTICS_PERIODS.ALL ? '' : today };

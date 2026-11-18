@@ -6,7 +6,7 @@ import { mkdtemp, mkdir, readFile, readdir, realpath, rm, symlink, writeFile } f
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { copyAtomicFile, writeAtomicFile } from '../../src/main/files/atomicFile.js';
+import { writeAtomicFile } from '../../src/main/files/atomicFile.js';
 import { CleanupError } from '../../src/main/utils/cleanup.js';
 
 async function fixture(t) {
@@ -42,14 +42,12 @@ test('failed replacement removes the temporary file and leaves the existing dire
   assert.deepEqual(await readdir(destination), []);
 });
 
-test('a stale operation cannot publish a completed copy', async t => {
+test('a stale operation cannot publish a completed file', async t => {
   const { directory, filePath } = await fixture(t);
-  const source = path.join(directory, 'source.txt');
-  await writeFile(source, 'source contents');
   const stale = new Error('database changed');
-  await assert.rejects(copyAtomicFile(source, filePath, { assertCurrent() { throw stale; } }), error => error === stale);
+  await assert.rejects(writeAtomicFile(filePath, 'new contents', { assertCurrent() { throw stale; } }), error => error === stale);
   assert.equal(await readFile(filePath, 'utf8'), 'previous report');
-  assert.deepEqual((await readdir(directory)).sort(), ['report.txt', 'source.txt']);
+  assert.deepEqual(await readdir(directory), ['report.txt']);
 });
 
 test('failed cleanup retains the original operation error and secondary diagnostics', async t => {

@@ -9,6 +9,7 @@ import { DatabaseLocation } from '../../src/main/database/DatabaseLocation.js';
 import { DATABASE_CONFIG } from '../../src/main/database/databaseConfig.js';
 import { migrations } from '../../src/main/database/migrations.js';
 import { InstructionRepository } from '../../src/main/repositories/InstructionRepository.js';
+import { TaskRepository } from '../../src/main/repositories/TaskRepository.js';
 
 function fixture(t) {
   const directory = mkdtempSync(path.join(tmpdir(), 'work-board-selection-'));
@@ -96,7 +97,7 @@ test('opening a version 3 database preserves instruction data and initializes th
   const filePath = path.join(directory, 'version-3.sqlite');
   createLegacyRegistryDatabase(filePath, 3);
   database.replace({ filePath });
-  assert.equal(database.getStatus().schemaVersion, 6);
+  assert.equal(database.getStatus().schemaVersion, 10);
   const { instructionNumber, executor, source, deadline, extendedUntil } = new InstructionRepository(database).get(17);
   assert.deepEqual({ instructionNumber, executor, source, deadline, extendedUntil }, {
     instructionNumber: '007/Б', executor: 'Иванов И. И.', source: '', deadline: '2026-10-26', extendedUntil: '',
@@ -108,7 +109,7 @@ test('opening a version 4 database keeps existing instruction details and defaul
   const filePath = path.join(directory, 'version-4.sqlite');
   createLegacyRegistryDatabase(filePath, 4);
   database.replace({ filePath });
-  assert.equal(database.getStatus().schemaVersion, 6);
+  assert.equal(database.getStatus().schemaVersion, 10);
   const { source, deadline, extendedUntil } = new InstructionRepository(database).get(17);
   assert.deepEqual({ source, deadline, extendedUntil }, {
     source: 'Архив', deadline: '2026-10-26', extendedUntil: '',
@@ -145,7 +146,7 @@ test('opening a version 5 database preserves extensions and initializes the chec
   finally { connection.close(); }
 
   database.replace({ filePath });
-  assert.equal(database.getStatus().schemaVersion, 6);
+  assert.equal(database.getStatus().schemaVersion, 10);
   const { deadline, extendedUntil, controlSchedule } = new InstructionRepository(database).get(17);
   assert.equal(deadline, '2026-10-26');
   assert.equal(extendedUntil, '2026-11-02');
@@ -160,6 +161,79 @@ test('a version 6 database with a missing checkpoint schedule column is rejected
   try { connection.exec('PRAGMA user_version = 6'); }
   finally { connection.close(); }
   assert.throws(() => database.replace({ filePath }), { code: 'DATABASE_INVALID' });
+});
+
+test('opening a version 6 database keeps completed instructions in the open registry', (t) => {
+  const { database, directory } = fixture(t);
+  const filePath = path.join(directory, 'version-6.sqlite');
+  createLegacyRegistryDatabase(filePath, 6);
+  const connection = new DatabaseSync(filePath);
+  try { connection.exec("UPDATE instructions SET status = 'completed' WHERE id = 17"); }
+  finally { connection.close(); }
+
+  database.replace({ filePath });
+  const instructions = new InstructionRepository(database);
+  assert.deepEqual(instructions.list().items.map(({ id, status, closedAt }) => [id, status, closedAt]), [[17, 'completed', null]]);
+  assert.equal(instructions.list({ closed: true }).total, 0);
+});
+
+test('opening version 7 preserves closed records with an initially empty document type', (t) => {
+  const { database, directory } = fixture(t);
+  const filePath = path.join(directory, 'version-7.sqlite');
+  createLegacyRegistryDatabase(filePath, 7);
+  const connection = new DatabaseSync(filePath);
+  try { connection.exec("UPDATE instructions SET closed_at = '2026-10-25T00:00:00Z' WHERE id = 17"); }
+  finally { connection.close(); }
+
+  database.replace({ filePath });
+  assert.equal(database.getStatus().schemaVersion, 10);
+  const instructions = new InstructionRepository(database);
+  const archived = instructions.list({ closed: true });
+  assert.deepEqual(archived.items.map(({ id, documentType }) => [id, documentType]), [[17, '']]);
+  assert.deepEqual(archived.documentTypes, []);
+  assert.equal(instructions.update(17, { documentType: 'Письмо' }).documentType, 'Письмо');
+});
+
+test('opening version 8 keeps a completed task one-time with its saved date', (t) => {
+  const { database, directory } = fixture(t);
+  const filePath = path.join(directory, 'version-8.sqlite');
+  createLegacyRegistryDatabase(filePath, 8);
+  const connection = new DatabaseSync(filePath);
+  try {
+    connection.prepare(`INSERT INTO calendar_tasks
+      (id, title, date, completed, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(8, 'Проверить журнал', '2026-11-16', 1, '2026-11-16T08:00:00Z', '2026-11-16T10:00:00Z');
+  } finally { connection.close(); }
+
+  database.replace({ filePath });
+  const tasks = new TaskRepository(database);
+  assert.equal(database.getStatus().schemaVersion, 10);
+  const task = tasks.get(8);
+  assert.equal(task.completed, true);
+  assert.equal(Object.hasOwn(task, 'recurrence'), false);
+  assert.deepEqual(tasks.occurrences({ from: '2026-11-16', to: '2026-11-30' }), [task]);
+});
+
+test('opening version 9 preserves a series and its existing completion when moving a date', (t) => {
+  const { database, directory } = fixture(t);
+  const filePath = path.join(directory, 'version-9.sqlite');
+  createLegacyRegistryDatabase(filePath, 9);
+  const connection = new DatabaseSync(filePath);
+  const originalDate = '2026-11-23';
+  try {
+    connection.prepare(`INSERT INTO calendar_tasks
+      (id, title, date, recurrence, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(8, 'Проверить журнал', '2026-11-16', '{"frequency":"weekly"}', '2026-11-16T08:00:00Z', '2026-11-16T10:00:00Z');
+    connection.prepare('INSERT INTO calendar_task_completions (task_id, date) VALUES (?, ?)').run(8, originalDate);
+  } finally { connection.close(); }
+
+  database.replace({ filePath });
+  const tasks = new TaskRepository(database);
+  assert.equal(database.getStatus().schemaVersion, 10);
+  assert.equal(tasks.get(8, originalDate).completed, true);
+  const moved = tasks.moveOccurrence(8, originalDate, '2026-11-24');
+  assert.equal(moved.completed, true);
+  assert.equal(moved.originalDate, originalDate);
 });
 
 test('missing selected database and create-on-existing never destroy files', (t) => {

@@ -25,6 +25,7 @@ export const INSTRUCTION_COLUMNS = Object.freeze([
   { key: 'controlDate', label: 'Дата постановки на контроль' },
   { key: 'incomingNumber', label: 'Входящий номер' },
   { key: 'instructionNumber', label: 'Подписной номер' },
+  { key: 'documentType', label: 'Вид документа' },
   { key: 'source', label: 'Откуда' },
   { key: 'title', label: 'Название указания' },
   { key: 'summary', label: 'Резолюция' },
@@ -37,13 +38,14 @@ export const INSTRUCTION_COLUMNS = Object.freeze([
 ].map(Object.freeze));
 
 export const INSTRUCTION_FIELDS = Object.freeze([
-  'controlDate', 'incomingNumber', 'instructionNumber', 'source', 'title', 'summary',
-  'deadline', 'extendedUntil', 'executor', 'status', 'executionMark',
+  'controlDate', 'incomingNumber', 'instructionNumber', 'documentType', 'source', 'title', 'summary',
+  'deadline', 'extendedUntil', 'executor', 'executionMark',
 ]);
 export const TASK_FIELDS = Object.freeze(['title', 'date', 'description', 'priority', 'completed']);
 export const REGISTRY_PAGINATION = Object.freeze({
   DEFAULT_PAGE: 1, DEFAULT_SIZE: 25, SIZES: Object.freeze([25, 50, 100]), MAX_SIZE: 100, DEFAULT_OFFSET: 0,
 });
 export const REGISTRY_DEFAULT_SORT = Object.freeze({ field: 'controlDate', direction: 'desc' });
+export const REGISTRY_REPORT_TYPE = Object.freeze({ FULL: 'full', SHORT: 'short' });
 export const SORT_DIRECTIONS = Object.freeze(['asc', 'desc']);
 export const URGENCY_WINDOW_DAYS = 3;

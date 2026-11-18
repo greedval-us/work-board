@@ -9,8 +9,9 @@ import { InstructionRepository } from '../../src/main/repositories/InstructionRe
 import { SettingsRepository } from '../../src/main/repositories/SettingsRepository.js';
 import { SettingsService } from '../../src/main/services/SettingsService.js';
 
-const emptyRegistryOptions = { source: [], executor: [], department: [], executorPhone: [] };
-const defaultSettings = { theme: 'light', registryOptions: emptyRegistryOptions, executorContacts: [] };
+const emptyRegistryOptions = { documentType: [], source: [], executor: [], department: [], executorPhone: [], office: [] };
+const defaultTypography = { fontFamily: 'inter', fontSize: 14 };
+const defaultSettings = { theme: 'light', typography: defaultTypography, registryOptions: emptyRegistryOptions, executorContacts: [], office: '' };
 
 function fixture(t) {
   const directory = mkdtempSync(path.join(tmpdir(), 'work-board-test-'));
@@ -26,9 +27,10 @@ test('initializes a nested SQLite file with registry schema and settings', (t) =
   const status = database.getStatus();
   assert.equal(status.ready, true);
   assert.equal(status.filePath, filePath);
-  assert.equal(status.schemaVersion, 6);
+  assert.equal(status.schemaVersion, 10);
   assert.match(status.sqliteVersion, /^3\./);
-  assert.deepEqual(database.connection.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all().map(row => row.name), ['app_settings', 'attachments', 'calendar_tasks', 'instructions']);
+  assert.deepEqual(database.connection.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all().map(row => row.name),
+    ['app_settings', 'attachments', 'calendar_task_completions', 'calendar_task_moves', 'calendar_tasks', 'instructions']);
   assert.equal(database.connection.prepare('PRAGMA foreign_keys').get().foreign_keys, 1);
   assert.equal(database.connection.prepare('PRAGMA journal_mode').get().journal_mode, 'wal');
 });
@@ -43,7 +45,7 @@ test('reopening preserves settings and does not reapply migrations', (t) => {
   database.close();
   database.open();
   assert.deepEqual(new SettingsRepository(database).get(), { ...defaultSettings, theme: 'dark' });
-  assert.equal(database.getStatus().schemaVersion, 6);
+  assert.equal(database.getStatus().schemaVersion, 10);
 });
 
 test('invalid settings cannot modify persisted data', (t) => {
@@ -54,6 +56,105 @@ test('invalid settings cannot modify persisted data', (t) => {
     assert.throws(() => settings.setTheme(theme), /тема/i);
   }
   assert.deepEqual(settings.get(), defaultSettings);
+});
+
+test('typography is bounded, supports both font families and persists per database', (t) => {
+  const { database, filePath } = fixture(t);
+  database.open();
+  const settings = new SettingsRepository(database);
+  assert.deepEqual(settings.get().typography, defaultTypography);
+  const chosen = { fontFamily: 'system', fontSize: 16 };
+  assert.deepEqual(settings.setTypography({ fontFamily: 'inter', fontSize: 12 }).typography, { fontFamily: 'inter', fontSize: 12 });
+  assert.deepEqual(settings.setTypography(chosen).typography, chosen);
+  for (const invalid of [
+    null, {}, { ...chosen, fontFamily: 'constructor' }, { ...chosen, fontSize: '14' },
+    { ...chosen, fontSize: 11 }, { ...chosen, fontSize: 17 }, { ...chosen, fontSize: 13.5 },
+  ]) {
+    assert.throws(() => settings.setTypography(invalid), { code: 'VALIDATION' });
+  }
+
+  database.replace({ filePath: path.join(path.dirname(filePath), 'other.sqlite'), create: true });
+  assert.deepEqual(settings.get().typography, defaultTypography);
+  database.replace({ filePath });
+  assert.deepEqual(settings.get().typography, chosen);
+});
+
+test('unrecognized or damaged typography settings fall back to the default', (t) => {
+  const { database } = fixture(t);
+  database.open();
+  const settings = new SettingsRepository(database);
+  const write = database.connection.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)');
+  for (const value of ['{', '{"fontFamily":"unknown","fontSize":20}']) {
+    write.run('typography', value);
+    assert.deepEqual(settings.get().typography, defaultTypography);
+  }
+});
+
+test('the Ф‑21 office is stored per database and preserves executor contacts', (t) => {
+  const { database, filePath } = fixture(t);
+  database.open();
+  const settings = new SettingsRepository(database);
+  assert.equal(settings.get().office, '');
+  const executor = 'Иванов';
+  const department = 'Отдел контроля';
+  settings.addRegistryOption('department', department);
+  settings.addRegistryOption('executor', executor, { department });
+  const contacts = [{ executor, department, executorPhone: '' }];
+  const saved = 'а'.repeat(500);
+  const second = 'Канцелярия';
+  const added = settings.addRegistryOption('office', `  ${saved}  `);
+  assert.deepEqual(added.registryOptions.office, [saved]);
+  assert.equal(added.office, '');
+  settings.addRegistryOption('office', second);
+  assert.equal(settings.setOffice(`  ${saved}  `).office, saved);
+  for (const invalid of [undefined, null, 10, 'а'.repeat(501), 'Несуществующий участок']) {
+    assert.throws(() => settings.setOffice(invalid), { code: 'VALIDATION' });
+  }
+  for (const invalid of ['', 'а'.repeat(501), 'КАНЦЕЛЯРИЯ']) {
+    assert.throws(() => settings.addRegistryOption('office', invalid), { code: 'VALIDATION' });
+  }
+  assert.equal(settings.get().office, saved);
+
+  database.replace({ filePath: path.join(path.dirname(filePath), 'other.sqlite'), create: true });
+  assert.equal(settings.get().office, '');
+  assert.deepEqual(settings.get().registryOptions.office, []);
+  settings.addRegistryOption('office', 'Другой участок');
+  settings.setOffice('Другой участок');
+  database.replace({ filePath });
+  assert.equal(settings.get().office, saved);
+  assert.deepEqual(settings.get().registryOptions.office, [saved, second]);
+  assert.deepEqual(settings.get().executorContacts, contacts);
+
+  assert.equal(settings.removeRegistryOption('office', second).office, saved);
+  settings.addRegistryOption('office', second);
+  const renamed = settings.updateRegistryOption('office', saved, 'Делопроизводство');
+  assert.equal(renamed.office, 'Делопроизводство');
+  assert.deepEqual(renamed.registryOptions.office, ['Делопроизводство', second]);
+  assert.throws(() => settings.setOffice(saved), { code: 'VALIDATION' });
+  const removed = settings.removeRegistryOption('office', 'Делопроизводство');
+  assert.equal(removed.office, '');
+  assert.deepEqual(removed.registryOptions.office, [second]);
+  database.close();
+  database.open();
+  assert.equal(settings.get().office, '');
+  assert.deepEqual(settings.get().registryOptions.office, [second]);
+  assert.deepEqual(settings.get().executorContacts, contacts);
+});
+
+test('the legacy Ф‑21 office remains available when clearing or changing its selection', (t) => {
+  const { database } = fixture(t);
+  database.open();
+  const settings = new SettingsRepository(database);
+  const write = database.connection.prepare('INSERT INTO app_settings (key, value) VALUES (?, ?)');
+  write.run('office', 'Приёмная');
+  assert.equal(settings.get().office, 'Приёмная');
+  assert.deepEqual(settings.get().registryOptions.office, ['Приёмная']);
+  assert.throws(() => settings.addRegistryOption('office', 'ПРИЁМНАЯ'), { code: 'VALIDATION' });
+
+  const cleared = settings.setOffice('');
+  assert.equal(cleared.office, '');
+  assert.deepEqual(cleared.registryOptions.office, ['Приёмная']);
+  assert.equal(settings.setOffice('Приёмная').office, 'Приёмная');
 });
 
 test('registry options stay in insertion order across database connections and reopening', (t) => {
@@ -104,6 +205,7 @@ test('renaming and removing registry options preserves their order and saved ins
   const settings = new SettingsService(new SettingsRepository(database));
   const instructions = new InstructionRepository(database);
   for (const [field, values] of Object.entries({
+    documentType: ['Письмо', 'Распоряжение'],
     source: ['Канцелярия', 'Архив', 'Приёмная'],
     executor: ['Отдел кадров', 'Бухгалтерия'],
     department: ['Отдел контроля', 'Отдел отчётности'],
@@ -114,11 +216,13 @@ test('renaming and removing registry options preserves their order and saved ins
   settings.setTheme('dark');
   const instruction = instructions.create({
     title: 'Проверить отчёт', instructionNumber: '12', controlDate: '2026-11-10', deadline: '2026-11-12',
-    source: 'Архив', executor: 'Отдел кадров',
+    source: 'Архив', executor: 'Отдел кадров', documentType: 'Распоряжение',
   });
 
   const updated = settings.updateRegistryOption('source', 'Архив', '  Общий архив  ');
   assert.deepEqual(updated.registryOptions.source, ['Канцелярия', 'Общий архив', 'Приёмная']);
+  settings.updateRegistryOption('documentType', 'Письмо', 'Служебное письмо');
+  settings.removeRegistryOption('documentType', 'Распоряжение');
   settings.updateRegistryOption('executor', 'Отдел кадров', 'Отдел Кадров');
   settings.updateRegistryOption('department', 'Отдел контроля', 'Управление контроля');
   settings.updateRegistryOption('executorPhone', '102', '103');
@@ -130,8 +234,9 @@ test('renaming and removing registry options preserves their order and saved ins
     ...defaultSettings,
     theme: 'dark',
     registryOptions: {
+      documentType: ['Служебное письмо'],
       source: ['Общий архив', 'Приёмная'], executor: ['Отдел Кадров'],
-      department: ['Управление контроля'], executorPhone: ['103'],
+      department: ['Управление контроля'], executorPhone: ['103'], office: [],
     },
   };
   assert.deepEqual(removed, expected);
@@ -139,6 +244,7 @@ test('renaming and removing registry options preserves their order and saved ins
   database.open();
   assert.deepEqual(settings.get(), expected);
   assert.deepEqual(instructions.get(instruction.id), instruction);
+  assert.deepEqual(instructions.list().documentTypes, ['Распоряжение']);
 });
 
 test('invalid, duplicate, or stale registry option changes leave settings intact', (t) => {

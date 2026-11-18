@@ -2,18 +2,26 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, shallowRef } from 'vue';
 import { Trash2, X } from 'lucide-vue-next';
 import { TASK_PRIORITIES } from '../../../shared/registry.js';
+import { CONTROL_WEEKDAY_LABELS, supportsControlDayOfMonth } from '../../../shared/controlSchedule.js';
+import { TASK_RECURRENCE_FREQUENCIES } from '../../../shared/taskRecurrence.js';
 import { DATE_LIMITS } from '../../../shared/constants/dates.js';
-import { ENTITY_TYPES } from '../../../shared/constants/entities.js';
+import { formatDate } from '../../../shared/dates.js';
+import { CALENDAR_MONTHS } from '../../constants/calendar.js';
 import { useTaskEditor } from './useTaskEditor.js';
 import { createDialogMotion } from '../../infrastructure/dialogMotion.js';
-import AttachmentPanel from '../attachments/AttachmentPanel.vue';
 
 const props = defineProps({
   task: { type: Object, default: null }, date: { type: String, required: true },
   generation: { required: true }, saveTask: { type: Function, required: true }, removeTask: { type: Function, required: true },
+  moveTaskOccurrence: { type: Function, required: true },
 });
 const emit = defineEmits(['close']);
-const { draft, dirty, busy, error, save, remove } = useTaskEditor(props);
+const { draft, recurring, occurrenceDate, occurrenceCompleted, occurrenceAvailable, firstOccurrence,
+  movableOccurrence, dirty, busy, error, save, remove, moveOccurrence } = useTaskEditor(props);
+const customDate = shallowRef('');
+const moveDate = shallowRef(occurrenceDate);
+const canAddCustomDate = computed(() => Boolean(draft.date && customDate.value > draft.date
+  && !draft.recurrence.customDates.includes(customDate.value)));
 const dialog = shallowRef(null);
 const confirmation = shallowRef(null);
 const form = shallowRef(null);
@@ -22,9 +30,10 @@ const confirmationMode = shallowRef('unsaved');
 const closing = shallowRef(false);
 const confirmationClosing = shallowRef(false);
 const actionPending = shallowRef(false);
-const attachmentBusy = shallowRef(false);
-const fieldsDisabled = computed(() => busy.value || attachmentBusy.value || closing.value || confirmationClosing.value);
+const fieldsDisabled = computed(() => busy.value || closing.value || confirmationClosing.value);
 const interactionBusy = computed(() => fieldsDisabled.value || actionPending.value);
+const moveDisabled = computed(() => interactionBusy.value || dirty.value);
+const canMove = computed(() => !moveDisabled.value && moveDate.value && moveDate.value !== occurrenceDate);
 const dialogMotion = createDialogMotion(() => dialog.value);
 const confirmationMotion = createDialogMotion(() => confirmation.value);
 let pendingClose;
@@ -32,6 +41,16 @@ let resolveClose;
 let finishingClose;
 let confirmationIntent = 0;
 let disposed = false;
+
+function addCustomDate() {
+  if (!canAddCustomDate.value || fieldsDisabled.value) return;
+  draft.recurrence.customDates = [...draft.recurrence.customDates, customDate.value].sort();
+  customDate.value = '';
+}
+
+function removeCustomDate(date) {
+  draft.recurrence.customDates = draft.recurrence.customDates.filter(candidate => candidate !== date);
+}
 
 function settleClose(value) {
   resolveClose?.(value);
@@ -55,7 +74,7 @@ async function closeConfirmation() {
   finally { confirmationClosing.value = false; }
 }
 
-function finishClose(operationFinished = false) {
+function finishClose(operationFinished = false, nextDate) {
   if (finishingClose) return finishingClose;
   if (disposed || busy.value || confirmationClosing.value || (actionPending.value && operationFinished !== true)) return Promise.resolve(false);
   closing.value = true;
@@ -66,7 +85,7 @@ function finishClose(operationFinished = false) {
       return false;
     }
     settleClose(true);
-    emit('close');
+    emit('close', nextDate);
     return true;
   })().finally(() => { closing.value = false; finishingClose = undefined; });
   return finishingClose;
@@ -113,6 +132,20 @@ async function saveAndClose() {
   } finally { actionPending.value = false; }
 }
 
+async function moveAndClose() {
+  if (!canMove.value || disposed) return false;
+  const destination = moveDate.value;
+  actionPending.value = true;
+  try {
+    if (await moveOccurrence(destination)) return await finishClose(true, destination);
+    if (!disposed) {
+      await nextTick();
+      errorRegion.value?.focus();
+    }
+    return false;
+  } finally { actionPending.value = false; }
+}
+
 function confirmDelete() {
   if (interactionBusy.value || disposed) return;
   void openConfirmation('delete');
@@ -152,20 +185,85 @@ defineExpose({ requestClose });
 <template>
   <dialog ref="dialog" class="calendar-task-dialog" aria-labelledby="calendar-task-title" aria-describedby="calendar-task-help" @cancel.prevent="requestClose">
     <header class="calendar-dialog-header">
-      <div><h2 id="calendar-task-title">{{ task ? 'Карточка задачи' : 'Новая задача' }}</h2><p id="calendar-task-help">Самостоятельная задача на выбранную дату.</p></div>
+      <div><h2 id="calendar-task-title">{{ task ? 'Карточка задачи' : 'Новая задача' }}</h2>
+        <p id="calendar-task-help">{{ task?.recurrence?.frequency ? 'Изменения расписания применяются ко всей серии.' : 'Задача на одну дату или с повторением.' }}</p>
+      </div>
       <button class="calendar-icon-button" :disabled="interactionBusy" aria-label="Закрыть карточку задачи" @click="requestClose"><X :size="19" aria-hidden="true" /></button>
     </header>
     <form ref="form" class="calendar-task-form" @submit.prevent="saveAndClose">
       <fieldset :disabled="fieldsDisabled">
         <label class="calendar-field">Название задачи <span aria-hidden="true">*</span><input v-model="draft.title" name="task-title" required autofocus autocomplete="off" placeholder="Что нужно сделать" /></label>
         <div class="calendar-form-row">
-          <label class="calendar-field">Дата <span aria-hidden="true">*</span><input v-model="draft.date" name="task-date" type="date" :min="DATE_LIMITS.MIN" :max="DATE_LIMITS.MAX" required /></label>
+          <label class="calendar-field">{{ recurring ? 'Начало графика' : 'Дата' }} <span aria-hidden="true">*</span><input v-model="draft.date" name="task-date" type="date" :min="DATE_LIMITS.MIN" :max="DATE_LIMITS.MAX" required /></label>
           <label class="calendar-field">Срочность<select v-model="draft.priority" name="task-priority"><option v-for="(label, value) in TASK_PRIORITIES" :key="value" :value="value">{{ label }}</option></select></label>
         </div>
         <label class="calendar-field">Описание<textarea v-model="draft.description" name="task-description" rows="5" placeholder="Подробности и заметки" /></label>
-        <label class="calendar-completion-field"><input v-model="draft.completed" type="checkbox" />Задача выполнена</label>
+        <div class="calendar-task-recurrence">
+          <div class="calendar-recurrence-fields">
+            <label class="calendar-field">Повторение
+              <select v-model="draft.recurrence.frequency" name="task-recurrence">
+                <option v-for="(label, value) in TASK_RECURRENCE_FREQUENCIES" :key="value" :value="value">{{ label }}</option>
+              </select>
+            </label>
+            <label v-if="draft.recurrence.frequency === 'weekly'" class="calendar-field">День недели
+              <select v-model.number="draft.recurrence.dayOfWeek" name="task-day-of-week">
+                <option value="">Как в дате начала</option>
+                <option v-for="(label, day) in CONTROL_WEEKDAY_LABELS" :key="day" :value="day">{{ label }}</option>
+              </select>
+            </label>
+            <label v-if="supportsControlDayOfMonth(draft.recurrence.frequency)" class="calendar-field">День месяца
+              <input v-model.number="draft.recurrence.dayOfMonth" name="task-day-of-month" type="number"
+                min="1" max="31" step="1" inputmode="numeric" placeholder="Как в дате начала" />
+            </label>
+            <label v-if="draft.recurrence.frequency === 'yearly'" class="calendar-field">Месяц
+              <select v-model.number="draft.recurrence.monthOfYear" name="task-month-of-year">
+                <option value="">Как в дате начала</option>
+                <option v-for="(label, index) in CALENDAR_MONTHS" :key="label" :value="index + 1">{{ label }}</option>
+              </select>
+            </label>
+          </div>
+          <p v-if="firstOccurrence && firstOccurrence !== draft.date" class="calendar-recurrence-help">
+            Первая задача по графику — {{ formatDate(firstOccurrence) }}.
+          </p>
+          <div v-if="draft.recurrence.frequency === 'custom'" class="calendar-recurrence-custom">
+            <p class="calendar-recurrence-help">Дата начала уже входит в график. Можно добавить следующие даты.</p>
+            <div class="calendar-custom-date">
+              <label class="calendar-field">Дополнительная дата
+                <input v-model="customDate" name="task-custom-date" type="date" :min="draft.date || DATE_LIMITS.MIN"
+                  :max="DATE_LIMITS.MAX" @keydown.enter.prevent="addCustomDate" />
+              </label>
+              <button type="button" class="calendar-button" :disabled="!canAddCustomDate" @click="addCustomDate">Добавить дату</button>
+            </div>
+            <ul v-if="draft.recurrence.customDates.length" class="calendar-recurrence-dates">
+              <li v-for="date in draft.recurrence.customDates" :key="date">
+                <time :datetime="date">{{ formatDate(date) }}</time>
+                <button type="button" class="calendar-remove-recurrence-date" :aria-label="`Убрать дату ${formatDate(date)}`" @click="removeCustomDate(date)">
+                  <X :size="13" aria-hidden="true" />
+                </button>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <label v-if="!recurring" class="calendar-completion-field"><input v-model="draft.completed" name="task-completed" type="checkbox" />Задача выполнена</label>
+        <label v-else-if="occurrenceAvailable" class="calendar-completion-field">
+          <input v-model="occurrenceCompleted" name="task-completed" type="checkbox" />Выполнено за {{ formatDate(occurrenceDate) }}
+        </label>
+        <section v-if="movableOccurrence" class="calendar-occurrence-move" aria-labelledby="calendar-occurrence-move-title">
+          <h3 id="calendar-occurrence-move-title">Перенос одного повторения</h3>
+          <p class="calendar-recurrence-help">
+            Текущая дата — <time :datetime="occurrenceDate">{{ formatDate(occurrenceDate) }}</time>.
+            <template v-if="task.originalDate"> По графику — <time :datetime="task.originalDate">{{ formatDate(task.originalDate) }}</time>.</template>
+          </p>
+          <div class="calendar-custom-date">
+            <label class="calendar-field">Новая дата повторения
+              <input v-model="moveDate" name="task-move-date" type="date" :min="DATE_LIMITS.MIN" :max="DATE_LIMITS.MAX"
+                :disabled="moveDisabled" :aria-describedby="dirty ? 'calendar-move-dirty-help' : undefined" @keydown.enter.prevent="moveAndClose" />
+            </label>
+            <button type="button" class="calendar-button calendar-move-occurrence-button" :disabled="!canMove" @click="moveAndClose">Перенести</button>
+          </div>
+          <p v-if="dirty" id="calendar-move-dirty-help" class="calendar-recurrence-help">Сохраните изменения карточки, чтобы перенести повторение.</p>
+        </section>
       </fieldset>
-      <AttachmentPanel v-model="draft.attachments" :entity-type="ENTITY_TYPES.TASKS" :entity-id="task?.id" :generation="generation" :disabled="interactionBusy" @busy="attachmentBusy = $event" />
       <p v-if="error" ref="errorRegion" class="calendar-task-error" role="alert" tabindex="-1">{{ error }}</p>
       <div class="calendar-dialog-footer">
         <button v-if="task" type="button" class="calendar-button calendar-delete-button" :disabled="interactionBusy" @click="confirmDelete"><Trash2 :size="15" aria-hidden="true" />Удалить</button>
@@ -176,7 +274,8 @@ defineExpose({ requestClose });
   </dialog>
   <dialog ref="confirmation" class="calendar-confirm-dialog" aria-labelledby="calendar-confirm-title" aria-describedby="calendar-confirm-description" @cancel.prevent="cancelConfirmation">
     <template v-if="confirmationMode === 'delete'">
-      <h2 id="calendar-confirm-title">Удалить задачу?</h2><p id="calendar-confirm-description">«{{ draft.title }}» будет удалена из базы данных.</p>
+      <h2 id="calendar-confirm-title">{{ task?.recurrence?.frequency ? 'Удалить всю серию?' : 'Удалить задачу?' }}</h2>
+      <p id="calendar-confirm-description">{{ task?.recurrence?.frequency ? `Все повторы задачи «${draft.title}» будут удалены.` : `«${draft.title}» будет удалена из базы данных.` }}</p>
       <div class="calendar-confirm-actions"><button class="calendar-button" :disabled="interactionBusy" autofocus @click="cancelConfirmation">Отмена</button><button class="calendar-button calendar-button-danger" :disabled="interactionBusy" @click="deleteAndClose">{{ busy ? 'Удаление…' : 'Удалить' }}</button></div>
     </template>
     <template v-else>

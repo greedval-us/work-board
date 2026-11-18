@@ -30,12 +30,13 @@ function setup(t, overrides = {}, now) {
   return { app, store };
 }
 
-test('saving attachments sends plain cloneable data through the desktop boundary', async t => {
+test('saving a record ignores obsolete attachment changes at the desktop boundary', async t => {
   let sent;
   const { store } = setup(t, { create: async ({ data }) => { sent = structuredClone(data); return { id: 1 }; } });
   const data = reactive({ ...record(1), attachments: { add: [{ token: 'selected', name: 'file.txt', size: 1 }], remove: [] } });
   assert.equal(await store.saveRecord({ data, generation: 1 }), true);
-  assert.equal(sent.attachments.add[0].token, 'selected');
+  assert.equal(sent.title, 'Доклад');
+  assert.equal(Object.hasOwn(sent, 'attachments'), false);
 });
 
 test('a response queued before a new filter request cannot publish under that filter', async (t) => {
@@ -47,16 +48,18 @@ test('a response queued before a new filter request cannot publish under that fi
   const transitions = [];
   const stop = watch(() => store.loading, (value) => transitions.push(value), { flush: 'sync' });
   t.after(stop);
-  previous.resolve({ items: [record(1)], total: 1 });
+  previous.resolve({ items: [record(1)], total: 1, documentTypes: ['Распоряжение'] });
   store.draftFilters.executor = 'Петров';
   const reading = store.applyFilters();
   await nextTick();
   assert.deepEqual(store.items, []);
+  assert.deepEqual(store.documentTypes, []);
   assert.equal(store.loading, true);
   assert.equal(transitions.includes(false), false);
-  next.resolve({ items: [{ ...record(2), executor: 'Петров' }], total: 1 });
+  next.resolve({ items: [{ ...record(2), executor: 'Петров' }], total: 1, documentTypes: ['Письмо', 'Приказ'] });
   await reading;
   assert.equal(store.items[0].id, 2);
+  assert.deepEqual(store.documentTypes, ['Письмо', 'Приказ']);
   assert.equal(store.loading, false);
 });
 
@@ -104,6 +107,50 @@ test('saving an instruction and returning to the list refreshes that revision on
   assert.equal(app.revision, 1);
   assert.equal(calls, 2);
   assert.equal(store.items[0].id, 2);
+});
+
+test('closing control moves the saved record between the independently filtered registry views', async (t) => {
+  const pinia = createPinia();
+  t.after(() => disposePinia(pinia));
+  const app = reactive({ database: { ready: true, generation: 1 }, revision: 0, databaseSwitching: false,
+    async withOperation(operation) { return operation(); }, touchData() { this.revision++; } });
+  let saved = { ...record(1), closedAt: null };
+  const service = {
+    list: async ({ closed, filters }) => {
+      const items = Boolean(closed) === Boolean(saved.closedAt)
+        && (!filters.executor || filters.executor === saved.executor) ? [saved] : [];
+      return { items, total: items.length };
+    },
+    async closeControl() { saved = { ...saved, closedAt: '2026-11-16T10:00:00.000Z' }; return saved; },
+  };
+  const registry = createRegistryStore({ app, service })(pinia);
+  const archive = createRegistryStore({ app, service, closed: true })(pinia);
+  registry.draftFilters.executor = 'Иванов';
+  await Promise.all([registry.applyFilters(), archive.ensureLoaded()]);
+  assert.equal(registry.total, 1);
+  assert.deepEqual(archive.items, []);
+
+  assert.equal(await registry.closeControl({ id: 1, generation: 1 }), true);
+  await Promise.all([registry.ensureLoaded(), archive.ensureLoaded()]);
+  assert.equal(registry.total, 0);
+  assert.equal(archive.items[0].id, 1);
+  assert.equal(archive.items[0].status, 'pending');
+  assert.equal(archive.appliedFilters.executor, '');
+});
+
+test('an unsuccessful control closure leaves the registry usable and reports the action error', async (t) => {
+  const { app, store } = setup(t, {
+    list: async () => ({ items: [record(1)], total: 1 }),
+    closeControl: async () => { throw new Error('private SQLite detail'); },
+  });
+  await store.ensureLoaded();
+
+  assert.equal(await store.closeControl({ id: 1, generation: 1 }), false);
+  assert.equal(store.items[0].id, 1);
+  assert.equal(app.revision, 0);
+  assert.match(store.error, /закрыть контроль/);
+  assert.doesNotMatch(store.error, /SQLite/);
+  assert.equal(store.canMutate, true);
 });
 
 test('queries superseded before their queued work starts do not issue obsolete IPC reads', async (t) => {
@@ -186,6 +233,48 @@ test('export captures the current date for an active checkpoint filter', async (
   assert.equal(await store.exportRecords(), true);
   assert.equal(exports[0].filters.checkpoint, 'overdue');
   assert.equal(exports[0].today, '2026-10-27');
+});
+
+test('the short and full reports use the same applied filters and sort across all pages', async (t) => {
+  const exports = [];
+  const { store } = setup(t, {
+    list: async () => ({ items: [], total: 34 }),
+    export: async (request) => { exports.push(request); return { cancelled: false, count: 34 }; },
+  });
+  store.draftFilters.executor = 'Иванов';
+  store.draftFilters.documentType = 'Приказ';
+  await store.applyFilters();
+  await store.changeSort('documentType');
+  await store.changeSort('documentType');
+  await store.setPage(2);
+  store.draftFilters.executor = 'Петров';
+
+  assert.equal(await store.exportRecords('full'), true);
+  assert.equal(await store.exportRecords('short'), true);
+  const [full, { reportType, ...short }] = exports;
+  assert.equal(reportType, 'short');
+  assert.deepEqual(short, full);
+  assert.equal(full.filters.executor, 'Иванов');
+  assert.equal(full.filters.documentType, 'Приказ');
+  assert.deepEqual(full.sort, { field: 'documentType', direction: 'desc' });
+  assert.equal(full.offset, undefined);
+  assert.equal(full.limit, undefined);
+});
+
+test('an Excel launch failure keeps the saved export successful and its path available', async (t) => {
+  const filePath = 'C:/Отчёты/Реестр.xlsx';
+  let result = { cancelled: false, count: 2, filePath, opened: false };
+  const { store } = setup(t, { export: async () => result });
+
+  assert.equal(await store.exportRecords(), true);
+  assert.equal(store.notice, 'Выгружено записей: 2.');
+  assert.equal(store.unopenedExportPath, filePath);
+  assert.equal(store.error, '');
+
+  result = { cancelled: true };
+  assert.equal(await store.exportRecords(), false);
+  assert.equal(store.notice, 'Выгрузка отменена.');
+  assert.equal(store.unopenedExportPath, null);
 });
 
 test('an unfiltered date change updates display state and reuses the cached list', async (t) => {

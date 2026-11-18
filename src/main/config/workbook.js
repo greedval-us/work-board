@@ -1,11 +1,24 @@
+import { INSTRUCTION_COLUMNS } from '../../shared/constants/registry.js';
+
 export const WORKBOOK_CONFIG = Object.freeze({
   CREATOR: 'Work Board', INSTRUCTIONS_SHEET: 'Указания', PARAMETERS_SHEET: 'Параметры',
-  HEADER_ROW: 1, HEADER_HEIGHT: 34, FONT_NAME: 'Calibri', FONT_SIZE: 11,
+  HEADER_ROW: 1, FONT_NAME: 'Calibri', FONT_SIZE: 13,
   HEADER_TEXT_COLOR: 'FFFFFFFF', HEADER_FILL_COLOR: 'FF0068D9',
   OVERDUE_TEXT_COLOR: 'FFB32630',
-  PARAMETER_NAME_WIDTH: 32, PARAMETER_VALUE_WIDTH: 75,
+  MIN_COLUMN_WIDTH: 10, MAX_COLUMN_WIDTH: 64,
+  CELL_PADDING: 2, FILTER_PADDING: 4,
+  LINE_HEIGHT: 18, ROW_PADDING: 4, MAX_ROW_HEIGHT: 408,
 });
-export const INSTRUCTION_COLUMN_WIDTHS = Object.freeze({
-  id: 20, controlDate: 23, incomingNumber: 20, instructionNumber: 20, source: 32, title: 40,
-  summary: 65, deadline: 21, extendedUntil: 19, nextCheckpoint: 28, executor: 30, controlFrequency: 27, executionMark: 50,
-});
+
+export const FULL_INSTRUCTION_COLUMNS = Object.freeze(INSTRUCTION_COLUMNS.filter(({ key }) => key !== 'documentType'));
+
+export const SHORT_INSTRUCTION_COLUMNS = Object.freeze([
+  { key: 'id', label: 'ID' },
+  { key: 'incomingNumber', label: 'Входящий №' },
+  { key: 'instructionNumber', label: 'Подписной №' },
+  { key: 'title', label: 'Название' },
+  { key: 'summary', label: 'Резолюция' },
+  { key: 'deadline', label: 'Срок' },
+  { key: 'executor', label: 'Исполнитель' },
+  { key: 'executionMark', label: 'Исполнение' },
+].map(Object.freeze));

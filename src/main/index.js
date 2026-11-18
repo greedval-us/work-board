@@ -1,4 +1,4 @@
-import { app, dialog, ipcMain, Menu, Notification, powerMonitor, Tray } from 'electron';
+import { app, dialog, ipcMain, Menu, Notification, powerMonitor, shell, Tray } from 'electron';
 import { appPath } from './utils/appPaths.js';
 import { createWindow } from './app.js';
 import { createApplicationServices } from './createApplicationServices.js';
@@ -12,6 +12,7 @@ startDesktopApplication({
   app, dialog, ipcMain, createWindow, logger: log,
   createTray: () => new Tray(icon), buildMenu: template => Menu.buildFromTemplate(template),
   createServices: options => createApplicationServices({ ...options,
+    openPath: filePath => shell.openPath(filePath),
     nativeNotifications: process.platform === 'win32' ? {
       createNotification: options => new Notification({ ...options, icon }),
       isSupported: () => Notification.isSupported(), powerMonitor,

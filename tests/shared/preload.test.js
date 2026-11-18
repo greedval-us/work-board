@@ -5,12 +5,15 @@ import { createPreloadApis } from '../../src/shared/createPreloadApis.js';
 test('bridge exposes named operations and sends only their explicit payloads', async () => {
   const calls = [];
   const api = createPreloadApis({ invoke: async (...args) => { calls.push(args); return { ok: true, value: 'ok' }; } });
-  assert.deepEqual(Object.keys(api).sort(), ['analytics', 'app', 'attachments', 'calendar', 'database', 'instructions', 'notifications', 'settings', 'tasks']);
+  assert.deepEqual(Object.keys(api).sort(), ['analytics', 'app', 'calendar', 'database', 'instructions', 'notifications', 'settings', 'tasks']);
   assert.equal(api.invoke, undefined);
   await api.app.getInfo();
   await api.database.getStatus();
   await api.settings.get(1);
   assert.deepEqual(await api.settings.setTheme('dark', 1), { ok: true, value: 'ok' });
+  const typography = { fontFamily: 'system', fontSize: 15 };
+  await api.settings.setTypography(typography, 1);
+  await api.settings.setOffice('Приёмная', 1);
   await api.settings.addRegistryOption('source', 'Канцелярия', 1);
   await api.settings.updateRegistryOption('source', 'Канцелярия', 'Архив', 1);
   await api.settings.removeRegistryOption('source', 'Архив', 1);
@@ -19,12 +22,19 @@ test('bridge exposes named operations and sends only their explicit payloads', a
   await api.settings.updateRegistryOption('executor', 'Иванов', 'Иванов И. И.', 1, contact);
   await api.settings.setExecutorContact('Иванов', { department: 'Отдел контроля', executorPhone: '' }, 1);
   await api.instructions.create({ generation: 1, data: { title: 'Указание' } });
+  await api.instructions.closeControl({ generation: 1, id: 4 });
   await api.instructions.exportControlCard({ generation: 1, id: 4, fields: { executorPhone: '' } });
+  const taskOccurrence = { generation: 1, id: 9, date: '2026-11-17', completed: true };
+  await api.tasks.setOccurrenceCompleted(taskOccurrence);
+  const taskMove = { generation: 1, id: 9, from: '2026-11-17', to: '2026-11-20' };
+  await api.tasks.moveOccurrence(taskMove);
   await api.database.open();
   await api.notifications.list({ generation: 1 });
   await api.notifications.acknowledge({ generation: 1, items: [{ id: 'task:1', occurrence: '2026-11-12:2026-11-12' }], read: true });
   assert.deepEqual(calls, [
     ['app:get-info'], ['database:get-status'], ['settings:get', { generation: 1 }], ['settings:set-theme', { theme: 'dark', generation: 1 }],
+    ['settings:set-typography', { typography, generation: 1 }],
+    ['settings:set-office', { office: 'Приёмная', generation: 1 }],
     ['settings:add-registry-option', { field: 'source', value: 'Канцелярия', generation: 1 }],
     ['settings:update-registry-option', { field: 'source', previousValue: 'Канцелярия', value: 'Архив', generation: 1 }],
     ['settings:remove-registry-option', { field: 'source', value: 'Архив', generation: 1 }],
@@ -32,7 +42,9 @@ test('bridge exposes named operations and sends only their explicit payloads', a
     ['settings:update-registry-option', { field: 'executor', previousValue: 'Иванов', value: 'Иванов И. И.', generation: 1, contact }],
     ['settings:set-executor-contact', { executor: 'Иванов', contact: { department: 'Отдел контроля', executorPhone: '' }, generation: 1 }],
     ['instructions:create', { generation: 1, data: { title: 'Указание' } }],
-    ['instructions:export-control-card', { generation: 1, id: 4, fields: { executorPhone: '' } }], ['database:open'],
+    ['instructions:close-control', { generation: 1, id: 4 }],
+    ['instructions:export-control-card', { generation: 1, id: 4, fields: { executorPhone: '' } }],
+    ['tasks:set-occurrence-completed', taskOccurrence], ['tasks:move-occurrence', taskMove], ['database:open'],
     ['notifications:list', { generation: 1 }],
     ['notifications:acknowledge', { generation: 1, items: [{ id: 'task:1', occurrence: '2026-11-12:2026-11-12' }], read: true }],
   ]);

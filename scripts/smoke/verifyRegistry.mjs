@@ -1,21 +1,69 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import ExcelJS from 'exceljs';
 import { formatDate } from '../../src/shared/registry.js';
+import { chooseExcelReport, createSmokeForms } from './forms.mjs';
 
 export async function verifyRegistry(driver, fixture, { generation, created, overdueTextColor }) {
-  const { window, js, wait, click, fill, openFilters, pressKey, verifyEntrance, resizeSweep, screenshot } = driver;
-  const { exportFile, downloadedFile, today, originalDeadline, firstCheckpointMark, nextCheckpointCell, nextCheckpointTime, nextCheckpointHeader, controlFrequencyCell, controlFrequencyHeader, dailyControl, customControl, overdueColor, registrySelections } = fixture;
+  const { window, js, api, wait, click, fill, openFilters, pressKey, verifyEntrance, resizeSweep, screenshot } = driver;
+  const { exportFile, shortExportFile, openRequests, today, originalDeadline, firstCheckpointMark, nextCheckpointCell, nextCheckpointTime, nextCheckpointHeader, controlFrequencyCell, controlFrequencyHeader, dailyControl, customControl, overdueColor, registrySelections, historicalDocumentType } = fixture;
+  const { instructionField, fillInstruction } = createSmokeForms(driver);
 
   // Fixture rows make pagination meaningful; user CRUD above exercised the actual form.
-  await js(`(async () => { for(let index=0;index<26;index++) await window.desktopAPI.instructions.create({generation:${generation},data:{controlDate:${JSON.stringify(today)},incomingNumber:'00'+index,instructionNumber:'К-'+index,title:'Плановое указание '+(index+1),summary:'Подготовить документы и проверить исполнение.',deadline:${JSON.stringify(today)},executor:index === 0 ? 'Иванов А.А.' : 'Иванов И.И.',status:'pending',executionMark:'',controlSchedule:index === 0 ? {frequency:'custom',customDates:[${JSON.stringify(today)}]} : undefined}}); })()`);
+  for (let index = 0; index < 26; index++) {
+    const first = index === 0;
+    await api('instructions', 'create', { generation, data: {
+      controlDate: today, incomingNumber: `00${index}`, instructionNumber: `К-${index}`,
+      title: `Плановое указание ${index + 1}`, summary: 'Подготовить документы и проверить исполнение.',
+      deadline: today, executor: first ? 'Иванов А.А.' : registrySelections.executor,
+      documentType: first ? historicalDocumentType : index === 25 ? '' : registrySelections.documentType,
+      controlSchedule: first ? { frequency: 'custom', customDates: [today] } : undefined,
+    } });
+  }
   await openFilters();
   await verifyEntrance('.registry-filters', 'filter popover');
-  await fill('.registry-filter-fields input,.registry-filter-fields select', { 1: today, 2: today, 3: 'иванов' });
+  assert.equal(await js("Boolean(document.querySelector('.registry-filter-fields [data-filter=status]'))"), false);
+  const retainedFilters = '[data-filter=deadlineFrom], [data-filter=deadlineTo], [data-filter=executor]';
+  await fill(retainedFilters, { 0: today, 1: today, 2: 'иванов' });
   await click('Применить', '.registry-filters button');
   await wait("document.querySelector('.registry-count')?.textContent === '27' && document.querySelectorAll('.registry-table tbody tr').length === 25");
   assert.equal(await js(`document.querySelector('${nextCheckpointCell}:not(:has(time))')?.textContent.trim()`), '—');
   assert.equal(await js(`document.querySelector('${controlFrequencyCell}')?.textContent.trim()`), '—');
+
+  const documentTypeCell = 'td[data-column=documentType]';
+  const firstDocumentType = `[...document.querySelectorAll('.registry-row ${documentTypeCell}')].map(cell => cell.textContent.trim()).find(value => value !== '—')`;
+  const changeSort = async (field, direction, expected = 'true') => {
+    const heading = `.registry-table th[data-column=${field}]`;
+    await js(`document.querySelector('${heading} button').click()`);
+    await wait(`document.querySelector('${heading}')?.getAttribute('aria-sort') === '${direction}' &&
+      !document.querySelector('.registry-table-scroll[aria-busy=true]') && (${expected})`);
+  };
+  await changeSort('documentType', 'ascending', `(${firstDocumentType}) === ${JSON.stringify(historicalDocumentType)}`);
+  await changeSort('documentType', 'descending', `(${firstDocumentType}) === ${JSON.stringify(registrySelections.documentType)}`);
+  await changeSort('controlDate', 'ascending');
+  await changeSort('controlDate', 'descending');
+
+  const documentTypeFilter = '[data-filter=documentType]';
+  await openFilters();
+  const filterOptions = await js(`[...document.querySelector('${documentTypeFilter}').options].map(option => option.value)`);
+  for (const value of [historicalDocumentType, registrySelections.documentType]) assert.ok(filterOptions.includes(value));
+  await fill(documentTypeFilter, { 0: historicalDocumentType });
+  await click('Применить', '.registry-filters button');
+  await wait(`document.querySelector('.registry-count')?.textContent === '1' &&
+    document.querySelector('.registry-row ${documentTypeCell}')?.textContent.trim() === ${JSON.stringify(historicalDocumentType)}`);
+  const editedId = await js("Number(document.querySelector('.registry-row td:first-child').textContent.trim())");
+  await js("document.querySelector('.registry-row .registry-record-link').click()");
+  await wait(`document.querySelector(${JSON.stringify(instructionField('documentType'))})?.value === ${JSON.stringify(historicalDocumentType)}`);
+  await fillInstruction({ documentType: registrySelections.documentType });
+  await js("document.querySelector('.registry-instruction-form').requestSubmit()");
+  await wait("!document.querySelector('.registry-instruction-dialog[open]') && document.querySelector('.registry-count')?.textContent === '0'");
+  assert.equal((await api('instructions', 'get', { id: editedId, generation })).documentType, registrySelections.documentType);
+  await openFilters();
+  assert.deepEqual(await js(`[...document.querySelectorAll('${retainedFilters}')].map(field => field.value)`), [today, today, 'иванов']);
+  await fill(documentTypeFilter, { 0: '' });
+  await click('Применить', '.registry-filters button');
+  await wait("document.querySelector('.registry-count')?.textContent === '27'");
+
   await screenshot('registry-light.png');
   await resizeSweep('registry');
   await js("document.querySelector('.registry-column-toggle').click()");
@@ -40,18 +88,23 @@ export async function verifyRegistry(driver, fixture, { generation, created, ove
   await wait("!document.querySelector('.sidebar-frame-overlay') && document.activeElement?.classList.contains('sidebar-toggle')");
   assert.equal(await js("document.querySelector('.app-body').inert"), false);
   await openFilters();
-  await fill('.registry-filter-fields input,.registry-filter-fields select', { 0: 'Черновик фильтра' });
+  await fill('[data-filter=instructionNumber]', { 0: 'Черновик фильтра' });
   await pressKey('Escape');
   await wait("!document.querySelector('.registry-filters[data-open=true]') && document.activeElement?.classList.contains('registry-filter-toggle')");
   assert.equal(await js("document.querySelector('.registry-count').textContent"), '27');
   await openFilters();
   assert.equal(await js("document.querySelector('[data-filter=instructionNumber]').value"), 'Черновик фильтра');
-  await fill('.registry-filter-fields input,.registry-filter-fields select', { 0: '' });
+  await fill('[data-filter=instructionNumber]', { 0: '' });
   await click('Применить', '.registry-filters button');
   await wait("!document.querySelector('.registry-filters[data-open=true]')");
-  await click('Выгрузить Excel', '.registry-toolbar button');
+  await chooseExcelReport(driver, 'Отмена');
+  assert.equal(existsSync(exportFile), false);
+  assert.equal(existsSync(shortExportFile), false);
+  assert.deepEqual(openRequests, []);
+  await chooseExcelReport(driver, 'Полный отчёт');
   await wait("document.querySelector('.registry-notice')?.textContent.includes('27')");
   assert.equal(existsSync(exportFile), true);
+  assert.deepEqual(openRequests, [realpathSync(exportFile)]);
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(exportFile);
   const worksheet = workbook.getWorksheet('Указания');
@@ -78,6 +131,7 @@ export async function verifyRegistry(driver, fixture, { generation, created, ove
   assert.equal(todayCheckpoint.value, formatDate(today));
   assert.notEqual(todayCheckpoint.font.color?.argb, overdueColor);
   assert.match(JSON.stringify(workbook.getWorksheet('Параметры').getSheetValues()), /иванов/);
+  assert.equal(worksheet.getCell('D2').font.size, 13);
 
   const checkpointFilter = '[data-filter=checkpoint]';
   const applyCheckpointFilter = async (value, expectedCount) => {
@@ -124,7 +178,7 @@ export async function verifyRegistry(driver, fixture, { generation, created, ove
     .map(key => document.querySelector('[data-filter=' + key + ']').value)`), [today, today, 'иванов']);
 
   await openFilters();
-  await fill('.registry-filter-fields input,.registry-filter-fields select', { 0: '0001/к' });
+  await fill('[data-filter=instructionNumber]', { 0: '0001/к' });
   await click('Применить', '.registry-filters button');
   await wait("document.querySelector('.registry-count')?.textContent === '1'");
   const checkpointDate = `${nextCheckpointCell} button.registry-checkpoint-link time[datetime="${originalDeadline}"]`;
@@ -137,12 +191,7 @@ export async function verifyRegistry(driver, fixture, { generation, created, ove
   await wait(firstCheckpointFocused);
   assert.equal(await js('location.hash'), registryRoute);
   assert.match(await js("document.querySelector('.registry-card-id').textContent"), new RegExp(`ID ${created.id}$`));
-  await wait("Boolean(document.querySelector('.attachment-list button.attachment-name'))");
-  await js("document.querySelector('.attachment-list button.attachment-name').click()");
-  await wait("document.querySelector('.attachment-panel')?.textContent.includes('сохранён.')");
-  assert.equal(readFileSync(downloadedFile, 'utf8'), 'Документ для задачи и указания.');
-  await js("document.querySelector('.attachment-panel').scrollIntoView({block:'center'})");
-  await screenshot('instruction-attachments.png');
+  assert.equal(await js("document.querySelector('.registry-instruction-dialog .attachment-panel, .registry-instruction-dialog input[type=file]') === null"), true);
 
   await js("document.querySelector('.registry-instruction-dialog .registry-close-button').click()");
   await wait("!document.querySelector('.registry-instruction-dialog')");
@@ -164,4 +213,18 @@ export async function verifyRegistry(driver, fixture, { generation, created, ove
   await applyCheckpointFilter('overdue', 0);
   await wait("document.querySelector('.registry-empty-results h2')?.textContent === 'Указания не найдены'");
   await applyCheckpointFilter('', 1);
+
+  await chooseExcelReport(driver, 'Краткий отчёт');
+  await wait("document.querySelector('.registry-notice')?.textContent === 'Выгружено записей: 1.'");
+  assert.deepEqual(openRequests, [realpathSync(exportFile), realpathSync(shortExportFile)]);
+  const shortWorkbook = new ExcelJS.Workbook();
+  await shortWorkbook.xlsx.readFile(shortExportFile);
+  const shortSheet = shortWorkbook.getWorksheet('Указания');
+  assert.deepEqual(shortSheet.getRow(1).values.slice(1), ['ID', 'Входящий №', 'Подписной №', 'Название', 'Резолюция', 'Срок', 'Исполнитель', 'Исполнение']);
+  assert.equal(shortSheet.rowCount, 2);
+  assert.equal(shortSheet.getCell('C2').value, created.instructionNumber);
+  assert.equal(shortSheet.getCell('F2').value, formatDate(today));
+  assert.equal(shortSheet.getCell('H2').value, 'Ожидается ответ');
+  assert.equal(shortSheet.getCell('C2').font.size, 13);
+  assert.match(JSON.stringify(shortWorkbook.getWorksheet('Параметры').getSheetValues()), /Краткий отчёт/);
 }

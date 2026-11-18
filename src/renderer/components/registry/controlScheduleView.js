@@ -1,4 +1,5 @@
-import { listControlCheckpoints } from '../../../shared/controlSchedule.js';
+import { getNextControlCheckpoint, listControlCheckpoints } from '../../../shared/controlSchedule.js';
+import { DATE_LIMITS } from '../../../shared/constants/dates.js';
 import { daysInMonth, localDate, validateDate } from '../../../shared/dates.js';
 import { getUrgency, INSTRUCTION_STATUS } from '../../../shared/registry.js';
 
@@ -16,6 +17,11 @@ export function effectiveCustomDates(schedule) {
   return schedule.customDates.map(date => moves.get(date) ?? date).sort();
 }
 
+export function firstScheduledMonth(schedule, deadline) {
+  const first = getNextControlCheckpoint({ ...schedule, marks: [] }, deadline || DATE_LIMITS.MAX);
+  return (first || schedule.firstDate).slice(0, 7);
+}
+
 export function startingMonth(schedule, { controlDate, deadline }, today = localDate()) {
   const recentMark = schedule.marks.at(-1)?.date;
   if (schedule.frequency === 'custom' && schedule.customDates.length) {
@@ -24,6 +30,9 @@ export function startingMonth(schedule, { controlDate, deadline }, today = local
     return (upcoming || dates.at(-1)).slice(0, 7);
   }
   if (schedule.frequency && isDate(schedule.firstDate)) {
+    if (schedule.frequency === 'yearly' && schedule.monthOfYear !== undefined && schedule.firstDate >= today) {
+      return firstScheduledMonth(schedule, deadline);
+    }
     if (schedule.firstDate > today) return schedule.firstDate.slice(0, 7);
     if (!deadline || deadline >= today) return today.slice(0, 7);
     return (recentMark > deadline ? recentMark : deadline).slice(0, 7);
@@ -31,15 +40,16 @@ export function startingMonth(schedule, { controlDate, deadline }, today = local
   return (recentMark || (isDate(controlDate) ? controlDate : today)).slice(0, 7);
 }
 
-function checkpointStatus(row, today, configured) {
+function checkpointStatus(row, today, configured, closed) {
   if (row.mark) return { label: 'Есть отметка', tone: 'success' };
   if (!row.scheduled) return { label: configured ? 'Вне периода контроля' : 'Вне текущего графика', tone: 'warning' };
+  if (closed) return { label: 'Нет отметки' };
   const urgency = getUrgency({ deadline: row.date, status: INSTRUCTION_STATUS.PENDING }, today);
   return urgency.tone === 'info' ? { ...urgency, label: 'По графику' } : urgency;
 }
 
 // Include repairable dates and draft history alongside the current month's scheduled checkpoints.
-export function controlScheduleRows(schedule, { month, controlDate, deadline, editedHistoryDate = '' }, today = localDate()) {
+export function controlScheduleRows(schedule, { month, controlDate, deadline, editedHistoryDate = '', closed = false }, today = localDate()) {
   const period = { controlDate, deadline };
   const [year, monthNumber] = month.split('-').map(Number);
   const from = `${month}-01`;
@@ -71,7 +81,7 @@ export function controlScheduleRows(schedule, { month, controlDate, deadline, ed
       configured,
       movable: Boolean(row.scheduled || row.originalDate),
       canOpen: Boolean(row.scheduled || row.originalDate || row.mark || editedHistoryDate === row.date),
-      status: checkpointStatus(row, today, configured),
+      status: checkpointStatus(row, today, configured, closed),
     };
   });
 }

@@ -1,10 +1,10 @@
-import { REGISTRY_OPTION_LIMITS } from './constants/settings.js';
+import { CONTROL_CARD_OFFICE_LIMIT, REGISTRY_OPTION_LIMITS } from './constants/settings.js';
 import { validateDate } from './dates.js';
 import { ValidationError } from './errors.js';
 import { validateRecord, validateText } from './validation.js';
 
 export const CONTROL_CARD_FIELD_LIMITS = Object.freeze({
-  instructionNumber: 200, incomingNumber: 200, source: 500,
+  instructionNumber: 200, incomingNumber: 200, office: CONTROL_CARD_OFFICE_LIMIT, source: 500,
   title: 500, summary: 20_000, executor: 500,
   department: REGISTRY_OPTION_LIMITS.department, executorPhone: REGISTRY_OPTION_LIMITS.executorPhone,
   executionMark: 10_000, removalMark: 500,
@@ -25,7 +25,7 @@ export function controlCardFields(record, contacts = []) {
   return {
     instructionNumber: record.instructionNumber ?? '', documentDate: '',
     incomingNumber: record.incomingNumber ?? '', incomingDate: '',
-    source: record.source ?? '',
+    office: '', source: record.source ?? '',
     title: record.title ?? '', summary: record.summary ?? '',
     deadline: record.deadline ?? '', extendedUntil: record.extendedUntil ?? '',
     executor: record.executor ?? '', ...executorContactFor(record.executor, contacts),

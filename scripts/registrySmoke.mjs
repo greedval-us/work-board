@@ -17,6 +17,9 @@ import { verifyAnalytics } from './smoke/verifyAnalytics.mjs';
 import { verifyDatabaseSettings } from './smoke/verifyDatabaseSettings.mjs';
 import { verifyCheckpointNotifications } from './smoke/verifyCheckpointNotifications.mjs';
 import { verifyMotion } from './smoke/verifyMotion.mjs';
+import { verifyClosedControl } from './smoke/verifyClosedControl.mjs';
+import { verifyScheduleCadence } from './smoke/verifyScheduleCadence.mjs';
+import { verifyTaskRecurrence } from './smoke/verifyTaskRecurrence.mjs';
 
 const SMOKE_TIMEOUT_MS = 80_000;
 const userData = process.env.WORK_BOARD_SMOKE_USER_DATA;
@@ -35,15 +38,18 @@ app.once('browser-window-created', (_event, window) => {
       const initial = await setupRegistry(driver, fixture);
       await verifyRegistry(driver, fixture, initial);
       await verifyControlCard(driver, fixture, initial);
-      const calendar = await verifyCalendar(driver, fixture, initial);
+      await verifyCalendar(driver, fixture, initial);
       await verifyAnalytics(driver, fixture, initial);
-      const { reopened } = await verifyDatabaseSettings(driver, fixture, { ...initial, ...calendar });
+      const { reopened } = await verifyDatabaseSettings(driver, fixture, initial);
       await verifyCheckpointNotifications(driver, fixture, { created: initial.created, reopened });
+      await verifyScheduleCadence(driver, fixture, reopened.generation);
       await verifyMotion(driver);
+      await verifyClosedControl(driver, fixture, reopened.generation);
+      await verifyTaskRecurrence(driver, fixture, reopened.generation);
       assert.deepEqual(driver.errors, []);
       window.webContents.debugger.detach();
       clearTimeout(timeout);
-      console.log('Registry desktop smoke passed: create/open DB, dropdown settings, CRUD UI, attachments/download/discard, analytics/filter/empty state, 27-row Excel, F-21 Word export, calendar, checkpoint filters and marks, generation isolation, unsaved close guard, light/dark, compact window.');
+      console.log('Registry desktop smoke passed: create/open DB, dropdown settings, CRUD UI, analytics/filter/empty state, 27-row Excel, F-21 Word export, calendar, checkpoint filters and marks, closed control, generation isolation, unsaved close guard, light/dark, compact window.');
       app.quit();
     } catch (error) {
       console.error(error);
@@ -55,7 +61,8 @@ app.once('browser-window-created', (_event, window) => {
 });
 
 // Keep fallback/in-app scenarios; native delivery and tray have a separate smoke.
-startDesktopApplication({ app, dialog, ipcMain, createWindow, createServices: createApplicationServices,
+startDesktopApplication({ app, dialog, ipcMain, createWindow,
+  createServices: options => createApplicationServices({ ...options, openPath: fixture.openPath }),
   createTray: () => { throw new Error('Tray unavailable in fallback smoke scenario.'); },
   buildMenu: template => template, logger: { error: (...args) => {
     if (args.some(value => value?.message === 'Tray unavailable in fallback smoke scenario.')) return;
