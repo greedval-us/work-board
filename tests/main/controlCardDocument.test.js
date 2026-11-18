@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import JSZip from 'jszip';
-import { createControlCardDocument } from '../../src/main/services/ControlCardDocument.js';
+import { createControlCardDocument } from '../../src/main/exports/word/ControlCardDocument.js';
 
 function elements(xml, name) {
   return xml.match(new RegExp(`<w:${name}(?=[\\s>])[^>]*>[\\s\\S]*?</w:${name}>`, 'g')) ?? [];

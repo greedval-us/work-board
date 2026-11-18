@@ -2,12 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequestChannel, createRequestScope, createSingleFlight } from '../../src/renderer/infrastructure/requestScope.js';
 
-function deferred() {
-  let resolve;
-  const promise = new Promise(done => { resolve = done; });
-  return { promise, resolve };
-}
-
 test('new requests and database invalidation reject stale replies', () => {
   const scope = createRequestScope();
   const first = scope.issue('database-1');
@@ -35,8 +29,8 @@ test('identical pending reads share one promise and can be retried after failure
 
 test('completion before clear cannot remove newer pending work with the same key', async () => {
   const flight = createSingleFlight();
-  const old = deferred();
-  const current = deferred();
+  const old = Promise.withResolvers();
+  const current = Promise.withResolvers();
   const first = flight.run('query', () => old.promise);
   flight.clear();
   const second = flight.run('query', () => current.promise);
@@ -50,7 +44,7 @@ test('completion before clear cannot remove newer pending work with the same key
 
 test('a request channel can accept shared work for the latest caller without reviving an older ticket', async () => {
   const channel = createRequestChannel();
-  const pending = deferred();
+  const pending = Promise.withResolvers();
   const first = channel.issue('first');
   const reading = channel.run('first', () => pending.promise);
   channel.issue('second');
@@ -66,8 +60,8 @@ test('a request channel can accept shared work for the latest caller without rev
 
 test('channel invalidation replaces pending work and disposal permanently rejects publication', async () => {
   const channel = createRequestChannel();
-  const previous = deferred();
-  const fresh = deferred();
+  const previous = Promise.withResolvers();
+  const fresh = Promise.withResolvers();
   const first = channel.issue('query');
   const oldRead = channel.run('query', () => previous.promise);
   channel.invalidate();

@@ -8,8 +8,8 @@ export const PROJECT_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const DEFAULT_PROCESS_TIMEOUT_MS = 30_000;
 const TEMP_CLEANUP_OPTIONS = { recursive: true, force: true, maxRetries: 3, retryDelay: 100 };
 
-export function readProjectMetadata() {
-  return JSON.parse(readFileSync(path.join(PROJECT_ROOT, 'package.json'), 'utf8'));
+export function readProjectMetadata(directory = PROJECT_ROOT) {
+  return JSON.parse(readFileSync(path.join(directory, 'package.json'), 'utf8'));
 }
 
 export function createElectronEnvironment({ source = process.env, runAsNode = false, devServerUrl, overrides = {} } = {}) {

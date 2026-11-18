@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { AppError } from '../utils/AppError.js';
+import { AppError } from '../errors/AppError.js';
 
 export class DatabaseSelectionService {
   #selecting = false;

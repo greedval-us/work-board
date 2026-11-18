@@ -6,7 +6,7 @@ import waitOn from 'wait-on';
 import { DEV_SERVER } from '../src/shared/constants/runtime.js';
 import { createElectronEnvironment, PROJECT_ROOT } from './lib/runtime.mjs';
 
-await waitOn({ resources: [DEV_SERVER.URL, path.join(PROJECT_ROOT, 'build/main/preload.cjs')] });
+await waitOn({ resources: [DEV_SERVER.URL, path.join(PROJECT_ROOT, 'build/preload/preload.cjs')] });
 const desktop = spawn(electron, ['.'], {
   cwd: PROJECT_ROOT, stdio: 'inherit', windowsHide: true,
   env: createElectronEnvironment({ devServerUrl: DEV_SERVER.URL }),

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildMonthGrid, moveMonth, millisecondsUntilTomorrow } from '../../src/renderer/domain/calendarDates.js';
+import { buildMonthGrid, moveMonth, millisecondsUntilTomorrow } from '../../src/renderer/ui/calendarDates.js';
 
 test('March grid starts on Monday and contains the adjacent month days', () => {
   const days = buildMonthGrid('2026-03');

@@ -9,14 +9,14 @@ import {
   PROJECT_ROOT as root, createElectronEnvironment, readProjectMetadata, runProcess, TemporaryDirectory,
 } from './lib/runtime.mjs';
 
-const PACKAGED_DIRECTORIES = ['src/main', 'src/shared', 'build/main', 'build/renderer'];
+const PACKAGED_DIRECTORIES = ['src/main', 'src/shared', 'build/preload', 'build/renderer'];
 const MIN_PACKAGE_BYTES = 50_000_000;
 const ICON_RESOURCE_TYPE = 3;
 const legacy = process.argv.includes('--legacy');
 const packaging = legacy ? (await import('../electron-builder.legacy.config.cjs')).default : modernPackaging;
 const metadata = readProjectMetadata();
 const architecture = legacy ? 'ia32' : 'x64';
-const electronVersion = legacy ? '22.3.27' : metadata.devDependencies.electron;
+const electronVersion = packaging.electronVersion ?? metadata.devDependencies.electron;
 const releaseDirectory = path.join(root, packaging.directories.output);
 const unpackedDirectory = path.join(releaseDirectory, legacy ? 'win-ia32-unpacked' : 'win-unpacked');
 const archive = path.join(unpackedDirectory, 'resources/app.asar');
@@ -51,8 +51,8 @@ for (const directory of PACKAGED_DIRECTORIES) verifyDirectory(directory);
 if (legacy) verifyFile('build/legacy/main.cjs');
 assert.equal(JSON.parse(asar.extractFile(archive, path.normalize('node_modules/exceljs/package.json'))).version, metadata.dependencies.exceljs);
 if (legacy) {
-  assert.equal(packaging.electronVersion, electronVersion);
-  assert.equal(JSON.parse(asar.extractFile(archive, path.normalize('node_modules/better-sqlite3/package.json'))).version, '9.6.0');
+  const { dependencies } = readProjectMetadata(path.join(root, 'packaging/legacy'));
+  assert.equal(JSON.parse(asar.extractFile(archive, path.normalize('node_modules/better-sqlite3/package.json'))).version, dependencies['better-sqlite3']);
   assert.equal(JSON.parse(asar.extractFile(archive, 'package.json')).main, 'build/legacy/main.cjs');
   assert.deepEqual(asar.extractFile(archive, path.normalize(nativeModuleRelative)), readFileSync(nativeModule));
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ANALYTICS_PERIODS, analyticsExecutorOptions, applyAnalyticsPeriod, initialAnalyticsFilters } from '../../src/renderer/domain/analytics.js';
+import { ANALYTICS_PERIODS, analyticsExecutorOptions, applyAnalyticsPeriod, initialAnalyticsFilters } from '../../src/renderer/features/analytics/analyticsFilters.js';
 
 test('analytics opens with the current month and instruction filters', () => {
   assert.deepEqual(initialAnalyticsFilters('2026-10-26'), {
@@ -9,7 +9,7 @@ test('analytics opens with the current month and instruction filters', () => {
 });
 
 test('analytics presets use the supplied local day and preserve the executor', () => {
-  const draft = { from: '2026-01-01', to: '2026-10-26', executor: 'Иванов' };
+  const draft = { from: '2025-12-01', to: '2025-12-31', executor: 'Иванов' };
   assert.deepEqual(applyAnalyticsPeriod(draft, 'month', '0001-02-03'), { ...draft, from: '0001-02-01', to: '0001-02-03' });
   assert.deepEqual(applyAnalyticsPeriod(draft, 'year', '2026-10-26'), { ...draft, from: '2026-01-01', to: '2026-10-26' });
   assert.deepEqual(applyAnalyticsPeriod(draft, 'all', '2026-10-26'), { ...draft, from: '', to: '' });

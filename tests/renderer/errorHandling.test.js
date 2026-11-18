@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPinia } from 'pinia';
 import { DesktopError, ERROR_CODES } from '../../src/shared/errors.js';
-import { useErrorStore } from '../../src/renderer/stores/errorStore.js';
-import { installErrorHandling } from '../../src/renderer/infrastructure/installErrorHandling.js';
+import { useErrorStore } from '../../src/renderer/app/errorStore.js';
+import { installErrorHandling } from '../../src/renderer/app/installErrorHandling.js';
 
 test('unexpected renderer exceptions stay out of user-visible state', () => {
   const errors = useErrorStore(createPinia());

@@ -1,11 +1,14 @@
 import { closeSync, mkdirSync, openSync, rmSync } from 'node:fs';
 import path from 'node:path';
-import { DatabaseSync } from './sqlite.js';
-import { migrate } from './migrations.js';
+import { openExistingDatabase } from './sqlite.js';
+import { applyMigrations } from './migrations.js';
+import { runTransaction } from './transaction.js';
 import { DATABASE_CONFIG } from './databaseConfig.js';
-import { inspectDatabase } from './inspectDatabase.js';
-import { AppError } from '../utils/AppError.js';
-import { rethrowAfterCleanup } from '../utils/cleanup.js';
+import { inspectConnection, inspectDatabase } from './inspectDatabase.js';
+import { AppError } from '../errors/AppError.js';
+import { rethrowAfterCleanup } from '../errors/cleanup.js';
+import { publicError } from '../errors/publicError.js';
+import { ERROR_CODES } from '../../shared/errors.js';
 
 export function discardConnection({ connection, created }, filePath) {
   const removeCreatedFile = () => { if (created) rmSync(filePath, { force: true }); };
@@ -25,12 +28,22 @@ export function prepareConnection(filePath, create) {
         if (error.code === 'EEXIST') throw new AppError('Этот файл уже существует. Используйте «Открыть базу» или выберите другое имя.', 'DATABASE_EXISTS', { cause: error });
         throw error;
       }
-    } else inspectDatabase(filePath);
-    connection = new DatabaseSync(filePath);
-    connection.exec(`PRAGMA busy_timeout = ${DATABASE_CONFIG.BUSY_TIMEOUT_MS}; PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;`);
-    migrate(connection);
+    }
+    const needsWrite = created || inspectDatabase(filePath).needsWrite;
+    connection = openExistingDatabase(filePath);
+    connection.exec(`PRAGMA busy_timeout = ${DATABASE_CONFIG.BUSY_TIMEOUT_MS}; PRAGMA foreign_keys = ON;`);
+    runTransaction(connection, () => {
+      // Inspect the actual handle again. A different file or committed WAL
+      // snapshot may have replaced the one observed during preflight.
+      if (!created) inspectConnection(connection);
+      applyMigrations(connection);
+    }, { deferred: !needsWrite });
+    connection.exec('PRAGMA journal_mode = WAL');
     return { connection, created };
   } catch (error) {
-    rethrowAfterCleanup(error, [() => discardConnection({ connection, created }, filePath)]);
+    const { code, message } = publicError(error);
+    const failure = error instanceof AppError || code === ERROR_CODES.UNEXPECTED
+      ? error : new AppError(message, code, { cause: error });
+    rethrowAfterCleanup(failure, [() => discardConnection({ connection, created }, filePath)]);
   }
 }

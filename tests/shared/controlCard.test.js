@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { controlCardFields, normalizeControlCardFields } from '../../src/shared/controlCard.js';
-import { validateRegistryOption } from '../../src/shared/constants/settings.js';
+import { validateRegistryOption } from '../../src/shared/settings.js';
 import { ValidationError } from '../../src/shared/errors.js';
 
 test('Ф‑21 prefills only the fields with the same meaning as the registry data', () => {

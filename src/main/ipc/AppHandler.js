@@ -1,4 +1,4 @@
-import { IPC_CHANNELS as channels } from '../../shared/constants/ipcChannels.js';
+import { IPC_CHANNELS as channels } from '../../shared/ipc/channels.js';
 
 export class AppHandler {
   constructor(appService, database) { this.appService = appService; this.database = database; }

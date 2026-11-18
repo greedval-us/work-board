@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { setImmediate } from 'node:timers/promises';
 import { createPinia, disposePinia } from 'pinia';
 import { effectScope, reactive } from 'vue';
-import { createNotificationsStore } from '../../src/renderer/stores/notificationsStore.js';
-import { useNotifications } from '../../src/renderer/composables/useNotifications.js';
+import { createNotificationsStore } from '../../src/renderer/features/notifications/notificationsStore.js';
+import { useNotifications } from '../../src/renderer/features/notifications/useNotifications.js';
 
 const day = '2026-11-12';
 const reminder = (overrides = {}) => ({
@@ -11,12 +12,6 @@ const reminder = (overrides = {}) => ({
   date: day, title: 'Подготовить отчёт', unread: true, popupPending: true, ...overrides,
 });
 const snapshot = items => ({ today: day, items });
-function deferred() {
-  let resolve; let reject;
-  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
-  return { promise, resolve, reject };
-}
-const flush = async () => { for (let index = 0; index < 20; index++) await Promise.resolve(); };
 function setup(t, service, options = {}) {
   const app = reactive({ database: { ready: true, generation: 1 }, revision: 0, databaseSwitching: false,
     pendingOperations: 0,
@@ -38,12 +33,12 @@ test('popup acknowledgement keeps reminders unread and does not repeat after ref
       return snapshot([item]);
     },
   });
-  await store.refresh(); await flush();
+  await store.refresh(); await setImmediate();
   assert.equal(store.popup.items.length, 1);
   assert.equal(store.unreadCount, 1);
   assert.equal(acknowledgements[0].popup, true);
   assert.equal(acknowledgements[0].read, undefined);
-  store.dismissPopup(); await store.refresh(); await flush();
+  store.dismissPopup(); await store.refresh(); await setImmediate();
   assert.equal(store.popup, null);
   assert.equal(acknowledgements.length, 1);
   assert.equal(await store.markAllRead(), true);
@@ -51,9 +46,9 @@ test('popup acknowledgement keeps reminders unread and does not repeat after ref
 });
 
 test('old database replies and popups never leak into the newly selected database', async t => {
-  const pending = deferred();
+  const pending = Promise.withResolvers();
   const { app, store } = setup(t, { list: ({ generation }) => generation === 1 ? pending.promise : Promise.resolve(snapshot([])) });
-  const old = store.refresh(); await flush();
+  const old = store.refresh(); await setImmediate();
   app.database = { ready: true, generation: 2 };
   await store.refresh();
   pending.resolve(snapshot([reminder()])); await old;
@@ -66,12 +61,12 @@ test('new daily occurrences alert again but dismissed popups do not repeat after
     list: async () => snapshot([item]),
     acknowledge: async () => { writes++; throw new Error('SQL sensitive detail'); },
   });
-  await store.refresh(); await flush();
+  await store.refresh(); await setImmediate();
   assert.match(store.error, /сохранить/i); assert.doesNotMatch(store.error, /SQL/);
-  store.dismissPopup(); await store.refresh(); await flush();
+  store.dismissPopup(); await store.refresh(); await setImmediate();
   assert.equal(store.popup, null); assert.ok(writes >= 1);
   item = reminder({ occurrence: `${day}:2026-11-13` });
-  await store.refresh(); await flush(); assert.equal(store.popup.items[0].occurrence, item.occurrence);
+  await store.refresh(); await setImmediate(); assert.equal(store.popup.items[0].occurrence, item.occurrence);
 });
 
 test('completion and date changes remove stale entries from an already visible popup', async t => {
@@ -80,7 +75,7 @@ test('completion and date changes remove stale entries from an already visible p
     list: async () => snapshot(items),
     acknowledge: async () => snapshot(items.map(item => ({ ...item, popupPending: false }))),
   });
-  await store.refresh(); await flush(); assert.ok(store.popup);
+  await store.refresh(); await setImmediate(); assert.ok(store.popup);
   items = []; await store.refresh(); assert.equal(store.popup, null); assert.deepEqual(store.items, []);
 });
 
@@ -91,13 +86,13 @@ test('hidden or modal-covered application waits to show and acknowledge a popup'
     acknowledge: async () => { writes++; return snapshot([reminder({ popupPending: false })]); },
   }, { canShowPopup: () => visible });
   await store.refresh(); assert.equal(store.popup, null); assert.equal(writes, 0);
-  visible = true; await store.refresh(); await flush(); assert.ok(store.popup); assert.equal(writes, 1);
+  visible = true; await store.refresh(); await setImmediate(); assert.ok(store.popup); assert.equal(writes, 1);
 });
 
 test('a read acknowledgement cannot replace newer record data after revision changes', async t => {
-  const write = deferred(); let items = [reminder({ popupPending: false })];
+  const write = Promise.withResolvers(); let items = [reminder({ popupPending: false })];
   const { app, store } = setup(t, { list: async () => snapshot(items), acknowledge: () => write.promise });
-  await store.refresh(); const marked = store.markAllRead(); await flush();
+  await store.refresh(); const marked = store.markAllRead(); await setImmediate();
   assert.equal(app.pendingOperations, 1);
   items = []; app.revision++;
   const updated = store.refresh();
@@ -107,16 +102,16 @@ test('a read acknowledgement cannot replace newer record data after revision cha
 });
 
 test('a list response from before acknowledgement cannot regain validity during a newer same-revision refresh', async t => {
-  const oldRead = deferred(); const newRead = deferred(); let reads = 0;
+  const oldRead = Promise.withResolvers(); const newRead = Promise.withResolvers(); let reads = 0;
   const item = reminder({ popupPending: false });
   const { store } = setup(t, {
     list: () => ++reads === 1 ? Promise.resolve(snapshot([item])) : reads === 2 ? oldRead.promise : newRead.promise,
     acknowledge: async () => snapshot([{ ...item, unread: false }]),
   });
   await store.refresh();
-  const old = store.refresh(); await flush();
+  const old = store.refresh(); await setImmediate();
   await store.markAllRead(); assert.equal(store.unreadCount, 0);
-  const latest = store.refresh(); await flush();
+  const latest = store.refresh(); await setImmediate();
   oldRead.resolve(snapshot([item])); await old;
   assert.equal(store.unreadCount, 0);
   newRead.resolve(snapshot([{ ...item, unread: false }])); await latest;
@@ -124,12 +119,12 @@ test('a list response from before acknowledgement cannot regain validity during 
 });
 
 test('disposal suppresses late failures and readiness loss clears displayed notifications immediately', async t => {
-  const failure = deferred(); let first = true;
+  const failure = Promise.withResolvers(); let first = true;
   const { app, store } = setup(t, { list: () => first ? Promise.resolve(snapshot([reminder({ popupPending: false })])) : failure.promise });
   await store.refresh(); assert.equal(store.items.length, 1);
   app.databaseSwitching = true; assert.deepEqual(store.items, []);
   app.databaseSwitching = false; first = false;
-  const request = store.refresh(); await flush(); store.$dispose();
+  const request = store.refresh(); await setImmediate(); store.$dispose();
   failure.reject(new Error('private')); await request; assert.equal(store.error, '');
 });
 
@@ -160,7 +155,7 @@ test('native delivery suppresses renderer popups and surfaces delivery errors wi
     list: async () => ({ ...snapshot([reminder()]), delivery }),
     acknowledge: async () => { writes++; return snapshot([]); },
   });
-  await store.refresh(); await flush();
+  await store.refresh(); await setImmediate();
   assert.equal(store.popup, null); assert.equal(writes, 0); assert.equal(store.unreadCount, 1);
   delivery = { mode: 'system', error: 'Windows не удалось показать напоминание.' };
   await store.refresh(); assert.equal(store.error, delivery.error);
@@ -182,24 +177,24 @@ for (const selectedGeneration of [1, 2]) test(`a native click during bootstrap i
   await store.openFromSystem({ generation: 1 });
   app.database = { ready: true, generation: selectedGeneration };
   app.initialized = true;
-  await flush();
+  await setImmediate();
   assert.equal(store.openRequest, selectedGeneration === 1 ? 1 : 0);
 });
 
 test('concurrent notification reads share IPC while a newer revision owns loading and the displayed snapshot', async t => {
-  const previous = deferred();
-  const fresh = deferred();
+  const previous = Promise.withResolvers();
+  const fresh = Promise.withResolvers();
   let calls = 0;
   const { app, store } = setup(t, {
     list: () => ++calls === 1 ? previous.promise : fresh.promise,
   });
   const first = store.refresh();
   const duplicate = store.refresh();
-  await flush();
+  await setImmediate();
   assert.equal(calls, 1);
   app.revision++;
   const latest = store.refresh();
-  await flush();
+  await setImmediate();
   previous.resolve(snapshot([reminder({ popupPending: false })]));
   assert.deepEqual(await Promise.all([first, duplicate]), [true, true]);
   assert.deepEqual(store.items, []);

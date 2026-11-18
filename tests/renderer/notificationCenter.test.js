@@ -16,7 +16,7 @@ function find(node, predicate) {
 }
 
 async function mountCenter(t, options = {}) {
-  const component = new URL('../../src/renderer/components/notifications/NotificationCenter.vue', import.meta.url);
+  const component = new URL('../../src/renderer/features/notifications/NotificationCenter.vue', import.meta.url);
   assert.ok(existsSync(component), 'the header has a notification center');
   const fixtureKey = `notificationUi${Math.random().toString(36).slice(2)}`;
   const pinia = createPinia();

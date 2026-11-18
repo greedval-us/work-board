@@ -4,7 +4,7 @@ import * as gateway from '../../src/renderer/infrastructure/desktopApi.js';
 import { errorMessage } from '../../src/renderer/infrastructure/errorMessage.js';
 import { DesktopError } from '../../src/shared/errors.js';
 import { ValidationError } from '../../src/shared/registry.js';
-import { createPreloadApis } from '../../src/shared/createPreloadApis.js';
+import { createPreloadApis } from '../../src/preload/createPreloadApis.js';
 import { registerIpcHandlers } from '../../src/main/ipc/registerIpcHandlers.js';
 
 function bridge(t, value) {

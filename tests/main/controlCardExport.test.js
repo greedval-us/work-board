@@ -5,7 +5,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import JSZip from 'jszip';
 import { ControlCardExportService } from '../../src/main/services/ControlCardExportService.js';
-import { AppError } from '../../src/main/utils/AppError.js';
+import { AppError } from '../../src/main/errors/AppError.js';
 
 async function fixture(t, openPath = async () => '') {
   const directory = await realpath(await mkdtemp(path.join(tmpdir(), 'work-board-f21-')));

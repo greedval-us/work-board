@@ -1,4 +1,4 @@
-import { IPC_CHANNELS } from '../../shared/constants/ipcChannels.js';
+import { IPC_CHANNELS } from '../../shared/ipc/channels.js';
 import { DesktopError, ERROR_CODES, isErrorCode } from '../../shared/errors.js';
 
 export function getDesktopApi() {

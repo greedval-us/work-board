@@ -1,9 +1,11 @@
+const { APP_USER_MODEL_ID } = require('./src/main/desktop/windowsIdentity.js');
+
 module.exports = {
-  appId: 'com.workboard.desktop',
+  appId: APP_USER_MODEL_ID,
   productName: 'Work Board',
   asar: true,
   directories: { output: 'release', buildResources: 'src/public' },
-  files: ['build/main/**', 'build/renderer/**', 'src/main/**', 'src/shared/**', 'package.json'],
+  files: ['build/preload/**', 'build/renderer/**', 'src/main/**', 'src/shared/**', 'package.json'],
   // Resource editing uses pure JavaScript; the legacy winCodeSign archive
   // contains macOS symlinks that require extra privileges to unpack on Windows.
   afterPack: async (context) => {

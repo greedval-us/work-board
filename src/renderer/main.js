@@ -1,12 +1,12 @@
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
-import App from './App.vue';
-import router from './router/index.js';
-import { useErrorStore } from './stores/errorStore.js';
-import { installErrorHandling } from './infrastructure/installErrorHandling.js';
-import './style.css';
-import './styles/motion.css';
-import './styles/notifications.css';
+import App from './app/App.vue';
+import router from './app/router.js';
+import { useErrorStore } from './app/errorStore.js';
+import { installErrorHandling } from './app/installErrorHandling.js';
+import './app/style.css';
+import './ui/motion.css';
+import './features/notifications/notifications.css';
 
 const app = createApp(App);
 const pinia = createPinia();

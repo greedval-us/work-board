@@ -5,7 +5,7 @@ import {
   listTaskOccurrences, occurrenceCompletion, occurrenceView, originalDateForMove, originalOccurrenceDate, planOccurrenceUpdate,
   validateOccurrenceCompletion,
 } from '../domain/taskOccurrences.js';
-import { AppError } from '../utils/AppError.js';
+import { AppError } from '../errors/AppError.js';
 
 const COLUMNS = 'id, title, date, description, priority, completed, recurrence, created_at AS createdAt, updated_at AS updatedAt';
 const MOVE_COLUMNS = 'task_id AS taskId, original_date AS originalDate, target_date AS date';

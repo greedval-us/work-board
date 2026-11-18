@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { effectScope, nextTick, reactive } from 'vue';
 import { createPinia, disposePinia, setActivePinia } from 'pinia';
 import { DesktopError } from '../../src/shared/errors.js';
-import { useRegistry } from '../../src/renderer/composables/useRegistry.js';
+import { useRegistry } from '../../src/renderer/features/registry/useRegistry.js';
 
 const row = (id = 1) => ({
   id, controlDate: '2026-10-23', incomingNumber: '001/в', instructionNumber: '0007-А',

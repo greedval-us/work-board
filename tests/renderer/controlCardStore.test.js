@@ -3,15 +3,8 @@ import { test } from 'node:test';
 import { createPinia, disposePinia } from 'pinia';
 import { reactive } from 'vue';
 import { DesktopError, ERROR_CODES } from '../../src/shared/errors.js';
-import { useAppStore } from '../../src/renderer/stores/appStore.js';
-import { createControlCardStore } from '../../src/renderer/stores/controlCardStore.js';
-
-function deferred() {
-  let resolve;
-  let reject;
-  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
-  return { promise, resolve, reject };
-}
+import { useAppStore } from '../../src/renderer/app/appStore.js';
+import { createControlCardStore } from '../../src/renderer/features/registry/state/controlCardStore.js';
 
 function setup(t, exportControlCard) {
   const pinia = createPinia();
@@ -50,7 +43,7 @@ test('export sends a plain normalized snapshot without changing the report draft
 });
 
 test('duplicate submissions share one pending operation and cancellation preserves the editable draft', async t => {
-  const result = deferred();
+  const result = Promise.withResolvers();
   let calls = 0;
   const { app, store } = setup(t, () => { calls++; return result.promise; });
   const input = draft();
@@ -154,7 +147,7 @@ test('database selection blocks exports through the application guard and allows
 });
 
 test('changing databases discards late export feedback while releasing the pending operation', async t => {
-  const result = deferred();
+  const result = Promise.withResolvers();
   const { app, store } = setup(t, () => result.promise);
   const saving = store.exportCard(draft());
   app.database = { ready: true, generation: 8 };
@@ -167,7 +160,7 @@ test('changing databases discards late export feedback while releasing the pendi
 });
 
 test('refreshing the status of the same database preserves the result of an ongoing export', async t => {
-  const result = deferred();
+  const result = Promise.withResolvers();
   const { app, store } = setup(t, () => result.promise);
   const saving = store.exportCard(draft());
   app.database = { ...app.database };
@@ -177,7 +170,7 @@ test('refreshing the status of the same database preserves the result of an ongo
 });
 
 test('a fresh dialog clears old feedback without allowing a second export or accepting late errors', async t => {
-  const result = deferred();
+  const result = Promise.withResolvers();
   let pending = false;
   let calls = 0;
   const { app, store } = setup(t, () => {
@@ -202,7 +195,7 @@ test('a fresh dialog clears old feedback without allowing a second export or acc
 });
 
 test('disposing the store suppresses late feedback and still releases the application operation', async t => {
-  const result = deferred();
+  const result = Promise.withResolvers();
   const { app, store } = setup(t, () => result.promise);
   const saving = store.exportCard(draft());
   store.$dispose();

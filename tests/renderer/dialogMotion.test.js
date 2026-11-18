@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createDialogMotion } from '../../src/renderer/infrastructure/dialogMotion.js';
+import { createDialogMotion } from '../../src/renderer/ui/dialogMotion.js';
 
 function fixture(reduced = false) {
   const jobs = [];

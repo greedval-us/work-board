@@ -38,7 +38,7 @@ coverage/
 database-location.json
 *.xlsx
 *.docx
-!/src/main/templates/control-card-f21.docx
+!/src/main/exports/word/control-card-f21.docx
 ~$*
 .~lock.*#
 *.bak

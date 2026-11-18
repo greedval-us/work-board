@@ -8,7 +8,7 @@ import { TaskRepository } from '../../src/main/repositories/TaskRepository.js';
 import { RecordService } from '../../src/main/services/RecordService.js';
 import { ENTITY_TYPES } from '../../src/shared/constants/entities.js';
 import { BusinessHandler } from '../../src/main/ipc/BusinessHandler.js';
-import { IPC_CHANNELS } from '../../src/shared/constants/ipcChannels.js';
+import { IPC_CHANNELS } from '../../src/shared/ipc/channels.js';
 
 test('record service writes record data and ignores former attachment changes', t => {
   const directory = mkdtempSync(path.join(tmpdir(), 'work-board-record-service-'));

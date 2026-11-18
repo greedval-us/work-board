@@ -9,7 +9,7 @@ import { InstructionRepository } from '../../src/main/repositories/InstructionRe
 import { TaskRepository } from '../../src/main/repositories/TaskRepository.js';
 import { NotificationStateRepository } from '../../src/main/repositories/NotificationStateRepository.js';
 import { NotificationService } from '../../src/main/services/NotificationService.js';
-import { NativeNotificationScheduler } from '../../src/main/notifications/NativeNotificationScheduler.js';
+import { NativeNotificationScheduler } from '../../src/main/desktop/notifications/NativeNotificationScheduler.js';
 import { localDate } from '../../src/shared/dates.js';
 
 class Clock {

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { CleanupError, rethrowAfterCleanup } from '../../src/main/utils/cleanup.js';
-import { AppError } from '../../src/main/utils/AppError.js';
-import { publicError } from '../../src/main/utils/publicError.js';
+import { CleanupError, rethrowAfterCleanup } from '../../src/main/errors/cleanup.js';
+import { AppError } from '../../src/main/errors/AppError.js';
+import { publicError } from '../../src/main/errors/publicError.js';
 import { registerIpcHandlers } from '../../src/main/ipc/registerIpcHandlers.js';
 
 test('cleanup attempts every resource and retains the original error without mutation', () => {

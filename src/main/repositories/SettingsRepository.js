@@ -1,4 +1,5 @@
-import { DEFAULT_SETTINGS, validateTheme, validateTypography } from '../../shared/constants/settings.js';
+import { DEFAULT_SETTINGS } from '../../shared/constants/settings.js';
+import { validateTheme, validateTypography } from '../../shared/settings.js';
 import { ValidationError } from '../../shared/errors.js';
 
 const registryOptionKey = field => `registryOptions.${field}`;

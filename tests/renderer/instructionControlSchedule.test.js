@@ -15,7 +15,7 @@ function find(node, predicate) {
 }
 
 async function mountEditor(t, value, options = {}) {
-  const component = new URL('../../src/renderer/components/registry/InstructionControlSchedule.vue', import.meta.url);
+  const component = new URL('../../src/renderer/features/registry/schedule/InstructionControlSchedule.vue', import.meta.url);
   const filename = fileURLToPath(component);
   assert.ok(existsSync(filename), 'the instruction form has a checkpoint editor');
   const { descriptor } = parse(readFileSync(filename, 'utf8'), { filename });

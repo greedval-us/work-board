@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { migrations } from '../../src/main/database/migrations.js';
 import { addCalendarDays } from '../../src/shared/registry.js';
 import { createSmokeForms } from './forms.mjs';
 
@@ -22,7 +23,7 @@ export async function setupRegistry(driver, fixture) {
   await wait("document.querySelector('.file-path')?.textContent.includes('selected-controls.sqlite')");
   const initial = await api('database', 'getStatus');
   const generation = initial.generation;
-  assert.equal(initial.schemaVersion, 10);
+  assert.equal(initial.schemaVersion, migrations.at(-1).version);
   assert.equal(initial.filePath, firstFile);
   await navigate('/', 'Реестр указаний');
   await click('Добавить указание', '.registry-toolbar button');

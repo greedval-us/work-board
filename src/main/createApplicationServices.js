@@ -16,7 +16,7 @@ import { ENTITY_TYPES } from '../shared/constants/entities.js';
 import { AnalyticsRepository } from './repositories/AnalyticsRepository.js';
 import { NotificationStateRepository } from './repositories/NotificationStateRepository.js';
 import { NotificationService } from './services/NotificationService.js';
-import { NativeNotificationScheduler } from './notifications/NativeNotificationScheduler.js';
+import { NativeNotificationScheduler } from './desktop/notifications/NativeNotificationScheduler.js';
 
 // Composition root: platform dependencies enter here; repositories and services
 // do not create windows or discover each other through global state.

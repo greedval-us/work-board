@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { writeAtomicFile } from '../../src/main/files/atomicFile.js';
-import { CleanupError } from '../../src/main/utils/cleanup.js';
+import { CleanupError } from '../../src/main/errors/cleanup.js';
 
 async function fixture(t) {
   const directory = await realpath(await mkdtemp(path.join(tmpdir(), 'work-board-atomic-')));

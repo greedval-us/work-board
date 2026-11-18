@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { useTaskEditor } from '../../src/renderer/components/calendar/useTaskEditor.js';
+import { useTaskEditor } from '../../src/renderer/features/calendar/useTaskEditor.js';
 import { DesktopError } from '../../src/shared/errors.js';
 
 test('task save failures retain the edited fields for another attempt', async () => {

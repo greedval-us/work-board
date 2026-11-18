@@ -1,9 +1,9 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { prepareConnection, discardConnection } from './prepareConnection.js';
-import { AppError } from '../utils/AppError.js';
+import { AppError } from '../errors/AppError.js';
 import { runTransaction } from './transaction.js';
-import { rethrowAfterCleanup } from '../utils/cleanup.js';
+import { rethrowAfterCleanup } from '../errors/cleanup.js';
 
 export class DatabaseService {
   #connection = null;

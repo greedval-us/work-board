@@ -1,7 +1,7 @@
 import { localDate, normalizeExportRequest, REGISTRY_REPORT_TYPE } from '../../shared/registry.js';
 import { writeAtomicFile } from '../files/atomicFile.js';
 import { openSavedFile } from '../files/openSavedFile.js';
-import { createRegistryWorkbook } from './RegistryWorkbook.js';
+import { createRegistryWorkbook } from '../exports/excel/RegistryWorkbook.js';
 
 export class ExcelExportService {
   constructor({ database, instructions, dialog, getWindow, openPath }) {

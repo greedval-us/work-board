@@ -2,11 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createPinia, disposePinia, setActivePinia } from 'pinia';
 import { effectScope, nextTick, reactive } from 'vue';
-import { createRegistryStore } from '../../src/renderer/stores/registryStore.js';
-import { useRegistry } from '../../src/renderer/composables/useRegistry.js';
+import { createRegistryStore } from '../../src/renderer/features/registry/state/registryStore.js';
+import { useRegistry } from '../../src/renderer/features/registry/useRegistry.js';
 
 const record = (id, executor = 'Иванов') => ({ id, controlDate: '2026-10-23', incomingNumber: '001', instructionNumber: '0007', title: `Указание ${id}`, summary: '', deadline: '2026-10-26', executor, status: 'pending', executionMark: '', createdAt: '', updatedAt: '' });
-const deferred = () => { let resolve; let reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 
 function fixture(t, overrides = {}) {
   const pinia = createPinia();
@@ -56,7 +55,7 @@ test('registry query and results survive route scope disposal without a duplicat
 });
 
 test('only the newest open can select a checkpoint when reads share an instruction', async (t) => {
-  const pending = deferred();
+  const pending = Promise.withResolvers();
   const { app, service } = fixture(t, { get: () => pending.promise });
   const scope = effectScope();
   t.after(() => scope.stop());
@@ -74,7 +73,7 @@ test('only the newest open can select a checkpoint when reads share an instructi
 });
 
 test('opening a row while its control closure is pending cannot show its old card', async (t) => {
-  const pending = deferred();
+  const pending = Promise.withResolvers();
   const { app, service } = fixture(t, { closeControl: () => pending.promise });
   const scope = effectScope();
   t.after(() => scope.stop());
@@ -88,7 +87,7 @@ test('opening a row while its control closure is pending cannot show its old car
 });
 
 test('a checkpoint opened from a route is ignored if that route changes during the read', async (t) => {
-  const pending = deferred();
+  const pending = Promise.withResolvers();
   const { app, service } = fixture(t, { get: () => pending.promise });
   const scope = effectScope();
   t.after(() => scope.stop());
@@ -105,7 +104,7 @@ test('a checkpoint opened from a route is ignored if that route changes during t
 });
 
 test('equal current reads share one pending IPC while a newer query defeats its late answer', async (t) => {
-  const initial = deferred();
+  const initial = Promise.withResolvers();
   const calls = [];
   const { store } = fixture(t, { list: (request) => {
     calls.push(request);
@@ -125,8 +124,8 @@ test('equal current reads share one pending IPC while a newer query defeats its 
 });
 
 test('query A to B to A never reuses the now stale first A flight', async (t) => {
-  const oldA = deferred();
-  const newA = deferred();
+  const oldA = Promise.withResolvers();
+  const newA = Promise.withResolvers();
   let aCalls = 0;
   const { store } = fixture(t, { list: ({ filters }) => filters.executor
     ? Promise.resolve({ items: [record(2)], total: 1 })
@@ -145,7 +144,7 @@ test('query A to B to A never reuses the now stale first A flight', async (t) =>
 });
 
 test('generation and revision changes in one turn produce one fresh read and hide the late old error', async (t) => {
-  const old = deferred();
+  const old = Promise.withResolvers();
   const calls = [];
   const { app, store } = fixture(t, { list: (request) => {
     calls.push(request);
@@ -164,7 +163,7 @@ test('generation and revision changes in one turn produce one fresh read and hid
 });
 
 test('mutation revision starts one fresh read even if the old query is still pending', async (t) => {
-  const old = deferred();
+  const old = Promise.withResolvers();
   const calls = [];
   const { app, store } = fixture(t, { list: (request) => {
     calls.push(request);

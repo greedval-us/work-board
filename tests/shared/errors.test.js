@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { DesktopError, defaultErrorMessage } from '../../src/shared/errors.js';
 import { ValidationError } from '../../src/shared/registry.js';
-import { validateTheme } from '../../src/shared/constants/settings.js';
+import { validateTheme } from '../../src/shared/settings.js';
 
 test('unknown and inherited error codes resolve to a safe unexpected failure', () => {
   for (const code of ['SQLITE_ERROR', 'toString', 'constructor', '__proto__', null, {}]) {

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseService } from '../../src/main/database/DatabaseService.js';
 import { runTransaction } from '../../src/main/database/transaction.js';
-import { publicError } from '../../src/main/utils/publicError.js';
+import { publicError } from '../../src/main/errors/publicError.js';
 
 function fixture(t) {
   const directory = mkdtempSync(path.join(tmpdir(), 'work-board-transaction-'));

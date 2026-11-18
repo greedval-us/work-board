@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import builderConfig from '../../electron-builder.config.cjs';
-import { APP_USER_MODEL_ID, registerWindowsAppIdentity } from '../../src/main/notifications/windowsIdentity.js';
+import { registerWindowsAppIdentity } from '../../src/main/desktop/windowsIdentity.js';
 
 test('Windows notifications use the identity registered by the NSIS Start menu shortcut', () => {
   const registeredIds = [];
@@ -11,7 +11,7 @@ test('Windows notifications use the identity registered by the NSIS Start menu s
   });
 
   assert.deepEqual(registeredIds, [builderConfig.appId]);
-  assert.equal(APP_USER_MODEL_ID, builderConfig.appId);
+  assert.equal(builderConfig.appId, 'com.workboard.desktop', 'existing Start menu shortcuts use this ID');
   assert.equal(builderConfig.nsis.createStartMenuShortcut, true);
 });
 

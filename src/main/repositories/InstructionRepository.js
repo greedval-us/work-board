@@ -1,130 +1,22 @@
-import {
-  localDate, normalizeListRequest, normalizeSearch, validateId, validateInstruction, ValidationError,
-} from '../../shared/registry.js';
-import { CONTROL_FREQUENCIES, emptyControlSchedule, getNextControlCheckpoint, listControlCheckpoints } from '../../shared/controlSchedule.js';
-import { EFFECTIVE_INSTRUCTION_DEADLINE_SQL } from '../database/instructionDeadline.js';
-import { AppError } from '../utils/AppError.js';
-
-const COLUMNS = `id, control_date AS controlDate, incoming_number AS incomingNumber,
-  instruction_number AS instructionNumber, document_type AS documentType, source, title, summary, deadline, extended_until AS extendedUntil,
-  executor, status,
-  execution_mark AS executionMark, created_at AS createdAt, updated_at AS updatedAt, closed_at AS closedAt`;
-const NEXT_CHECKPOINT_SQL = `next_instruction_checkpoint(control_schedule, ${EFFECTIVE_INSTRUCTION_DEADLINE_SQL})`;
-const CONTROL_FREQUENCY_SQL = `NULLIF(json_extract(NULLIF(control_schedule, ''), '$.frequency'), '')`;
-const frequencyCases = Object.keys(CONTROL_FREQUENCIES).filter(Boolean)
-  .map((frequency, index) => `WHEN '${frequency}' THEN ${index}`).join(' ');
-
-const SORT_COLUMNS = Object.freeze({
-  id: 'id', controlDate: 'control_date', incomingNumber: 'incoming_number', instructionNumber: 'instruction_number_search',
-  documentType: 'document_type_search', source: 'source', title: 'title', summary: 'summary', deadline: 'deadline', extendedUntil: 'extended_until',
-  nextCheckpoint: 'nextCheckpoint', executor: 'executor_search', controlFrequency: `CASE controlFrequency ${frequencyCases} END`,
-  status: 'status', executionMark: 'execution_mark_search',
-});
-
-const registeredConnections = new WeakSet();
-
-function registerCheckpointFunctions(connection) {
-  if (registeredConnections.has(connection)) return;
-  connection.function('next_instruction_checkpoint', { deterministic: true, directOnly: true }, (schedule, deadline) => {
-    return schedule ? getNextControlCheckpoint(JSON.parse(schedule), deadline) || null : null;
-  });
-  connection.function('has_unmarked_instruction_checkpoint', { deterministic: true, directOnly: true }, (schedule, deadline, date) => {
-    if (!schedule) return 0;
-    const checkpoints = listControlCheckpoints(JSON.parse(schedule), { from: date, to: date, deadline });
-    return checkpoints.some(checkpoint => checkpoint.scheduled && !checkpoint.mark) ? 1 : 0;
-  });
-  registeredConnections.add(connection);
-}
-
-function queryParts(request) {
-  const { filters, sort, offset, limit, today, closed } = normalizeListRequest(request);
-  const scope = closed ? 'closed_at IS NOT NULL' : 'closed_at IS NULL';
-  const clauses = [scope];
-  const values = [];
-  for (const [key, column] of [
-    ['instructionNumber', 'instruction_number_search'], ['executor', 'executor_search'], ['executionMark', 'execution_mark_search'],
-  ]) {
-    if (!filters[key]) continue;
-    clauses.push(`instr(${column}, ?) > 0`);
-    values.push(normalizeSearch(filters[key]));
-  }
-  for (const [value, clause] of [
-    [normalizeSearch(filters.documentType), 'document_type_search = ?'],
-    [filters.deadlineFrom, `${EFFECTIVE_INSTRUCTION_DEADLINE_SQL} >= ?`],
-    [filters.deadlineTo, `${EFFECTIVE_INSTRUCTION_DEADLINE_SQL} <= ?`],
-    [filters.status, 'status = ?'],
-  ]) {
-    if (!value) continue;
-    clauses.push(clause);
-    values.push(value);
-  }
-  const checkpointDate = !closed && filters.checkpoint === 'today' ? today ?? localDate() : '';
-  if (closed && filters.checkpoint) {
-    clauses.push('0');
-  } else if (checkpointDate) {
-    clauses.push(`has_unmarked_instruction_checkpoint(control_schedule, ${EFFECTIVE_INSTRUCTION_DEADLINE_SQL}, ?) = 1`);
-    values.push(checkpointDate);
-  } else if (filters.checkpoint === 'overdue') {
-    clauses.push(`${NEXT_CHECKPOINT_SQL} < ?`);
-    values.push(today ?? localDate());
-  }
-  const direction = sort.direction.toUpperCase();
-  const nulls = sort.field === 'nextCheckpoint' || sort.field === 'controlFrequency' ? ' NULLS LAST' : '';
-  const order = `ORDER BY ${SORT_COLUMNS[sort.field]} ${direction}${nulls}`;
-  const nextCheckpoint = closed ? 'NULL' : checkpointDate ? '?' : NEXT_CHECKPOINT_SQL;
-  return {
-    scope, where: `WHERE ${clauses.join(' AND ')}`, values, offset, limit,
-    columns: `${COLUMNS}, ${nextCheckpoint} AS nextCheckpoint, ${CONTROL_FREQUENCY_SQL} AS controlFrequency`,
-    selectValues: checkpointDate ? [checkpointDate, ...values] : values,
-    order: sort.field === 'id' ? order : `${order}, id ${direction}`,
-  };
-}
-
-function parameters(data) {
-  const schedule = data.controlSchedule;
-  return [
-    data.controlDate, data.incomingNumber, data.instructionNumber, data.documentType, data.source, data.title, data.summary,
-    data.deadline, data.extendedUntil, data.executor, data.status, data.executionMark,
-    normalizeSearch(data.instructionNumber), normalizeSearch(data.documentType), normalizeSearch(data.executor), normalizeSearch(data.executionMark),
-    schedule.frequency || schedule.marks.length ? JSON.stringify(schedule) : '',
-  ];
-}
-
-function withControlSchedule({ controlSchedule, ...row }) {
-  return { ...row, controlSchedule: controlSchedule ? JSON.parse(controlSchedule) : emptyControlSchedule() };
-}
-
-function registryRow(row) {
-  return { ...row, nextCheckpoint: row.nextCheckpoint ?? '', controlFrequency: row.controlFrequency ?? '' };
-}
+import { validateId, validateInstruction, ValidationError } from '../../shared/registry.js';
+import { AppError } from '../errors/AppError.js';
+import { instructionRegistryQuery } from './instructions/registryQuery.js';
+import { INSTRUCTION_COLUMNS_SQL, instructionRecord, withControlSchedule } from './instructions/row.js';
 
 export class InstructionRepository {
   constructor(database) { this.database = database; }
 
   list(request) {
-    const query = queryParts(request);
-    const connection = this.database.connection;
-    registerCheckpointFunctions(connection);
-    const total = connection.prepare(`SELECT COUNT(*) AS total FROM instructions ${query.where}`).get(...query.values).total;
-    const items = connection.prepare(`SELECT ${query.columns} FROM instructions ${query.where} ${query.order} LIMIT ? OFFSET ?`)
-      .all(...query.selectValues, query.limit, query.offset).map(registryRow);
-    const documentTypes = connection.prepare(`SELECT MIN(document_type) AS label FROM instructions
-      WHERE ${query.scope} AND document_type_search <> ''
-      GROUP BY document_type_search ORDER BY document_type_search`).all().map(({ label }) => label);
-    return { items, total, documentTypes };
+    return instructionRegistryQuery(this.database, request).page();
   }
 
   all(request) {
-    const query = queryParts(request);
-    const connection = this.database.connection;
-    registerCheckpointFunctions(connection);
-    return connection.prepare(`SELECT ${query.columns} FROM instructions ${query.where} ${query.order}`)
-      .all(...query.selectValues).map(registryRow);
+    return instructionRegistryQuery(this.database, request).all();
   }
 
   get(id) {
     validateId(id);
-    const row = this.database.connection.prepare(`SELECT ${COLUMNS}, control_schedule AS controlSchedule FROM instructions WHERE id = ?`).get(id);
+    const row = this.database.connection.prepare(`SELECT ${INSTRUCTION_COLUMNS_SQL}, control_schedule AS controlSchedule FROM instructions WHERE id = ?`).get(id);
     return row ? withControlSchedule(row) : null;
   }
 
@@ -138,12 +30,11 @@ export class InstructionRepository {
   create(value) {
     const data = validateInstruction(value);
     const now = new Date().toISOString();
-    const result = this.database.connection.prepare(`INSERT INTO instructions (
-      control_date, incoming_number, instruction_number, document_type, source, title, summary, deadline, extended_until,
-      executor, status, execution_mark,
-      instruction_number_search, document_type_search, executor_search, execution_mark_search, control_schedule, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(...parameters(data), now, now);
+    const record = { ...instructionRecord(data), created_at: now, updated_at: now };
+    const columns = Object.keys(record);
+    const placeholders = columns.map(() => '?').join(', ');
+    const result = this.database.connection.prepare(`INSERT INTO instructions (${columns.join(', ')}) VALUES (${placeholders})`)
+      .run(...Object.values(record));
     return this.get(Number(result.lastInsertRowid));
   }
 
@@ -152,11 +43,9 @@ export class InstructionRepository {
     if (!existing) throw new AppError('Указание не найдено.', 'NOT_FOUND');
     if (!changes || typeof changes !== 'object' || Array.isArray(changes)) throw new ValidationError('Некорректные изменения указания.');
     const data = validateInstruction({ ...existing, ...changes });
-    this.database.connection.prepare(`UPDATE instructions SET
-      control_date = ?, incoming_number = ?, instruction_number = ?, document_type = ?, source = ?, title = ?, summary = ?, deadline = ?, extended_until = ?,
-      executor = ?, status = ?, execution_mark = ?, instruction_number_search = ?, document_type_search = ?, executor_search = ?,
-      execution_mark_search = ?, control_schedule = ?, updated_at = ? WHERE id = ?`)
-      .run(...parameters(data), new Date().toISOString(), id);
+    const record = { ...instructionRecord(data), updated_at: new Date().toISOString() };
+    const assignments = Object.keys(record).map(column => `${column} = ?`).join(', ');
+    this.database.connection.prepare(`UPDATE instructions SET ${assignments} WHERE id = ?`).run(...Object.values(record), id);
     return this.get(id);
   }
 

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { runInNewContext } from 'node:vm';
 import { test } from 'node:test';
-import { WindowLifecycle } from '../../src/main/lifecycle/WindowLifecycle.js';
+import { WindowLifecycle } from '../../src/main/desktop/WindowLifecycle.js';
 
 function fixture(options = {}) {
   const window = Object.assign(new EventEmitter(), {

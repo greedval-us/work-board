@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createPinia, setActivePinia } from 'pinia';
-import { useAppStore } from '../../src/renderer/stores/appStore.js';
+import { useAppStore } from '../../src/renderer/app/appStore.js';
 import { transportFixture } from '../helpers/desktopTransport.js';
 
 function setup(t) {

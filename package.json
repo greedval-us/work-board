@@ -32,7 +32,7 @@
     "build:win": "npm run build:client && electron-builder --config electron-builder.config.cjs --win nsis portable",
     "prepare:win:legacy": "npm run build:client && vite build --config vite.legacy.config.js && node scripts/prepareLegacyWindows.mjs",
     "build:win:legacy": "npm run prepare:win:legacy && electron-builder --config electron-builder.legacy.config.cjs --win nsis portable --ia32",
-    "test": "node --test tests/main/*.test.js tests/shared/*.test.js tests/renderer/*.test.js",
+    "test": "node --test \"tests/**/*.test.js\"",
     "test:desktop": "npm run build:client && node scripts/checkDesktop.mjs",
     "check": "npm test && npm run build:client"
   },

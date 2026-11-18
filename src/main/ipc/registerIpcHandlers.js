@@ -1,5 +1,5 @@
-import { AppError } from '../utils/AppError.js';
-import { publicError } from '../utils/publicError.js';
+import { AppError } from '../errors/AppError.js';
+import { publicError } from '../errors/publicError.js';
 
 export function registerIpcHandlers({ ipcMain, requests, isTrusted, logger, onSuccess }) {
   const registered = [];

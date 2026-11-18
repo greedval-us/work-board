@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createPinia, setActivePinia } from 'pinia';
 import { DEFAULT_SETTINGS } from '../../src/shared/constants/settings.js';
-import { useAppStore } from '../../src/renderer/stores/appStore.js';
+import { useAppStore } from '../../src/renderer/app/appStore.js';
 import { transportFixture } from '../helpers/desktopTransport.js';
 
 function bridge(t, overrides = {}) {
@@ -30,6 +30,18 @@ test('theme changes only after persistence succeeds', async (t) => {
   assert.equal(store.saving, false);
   assert.match(store.error, /Связь с приложением недоступна/);
   assert.doesNotMatch(store.error, /Хранилище недоступно/);
+});
+
+test('a settings save with no returned settings reports failure and preserves the loaded values', async (t) => {
+  const store = bridge(t, { settings: {
+    get: async () => ({ theme: 'dark', office: 'Архив' }),
+    setOffice: async () => undefined,
+  } });
+  await store.initialize();
+  assert.equal(await store.setOffice('Канцелярия'), false);
+  assert.equal(store.office, 'Архив');
+  assert.equal(store.theme, 'dark');
+  assert.ok(store.officeError);
 });
 
 test('typography follows the active database and applies only after a successful save', async (t) => {

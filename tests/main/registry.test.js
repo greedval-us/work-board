@@ -9,7 +9,7 @@ import { InstructionRepository } from '../../src/main/repositories/InstructionRe
 import { TaskRepository } from '../../src/main/repositories/TaskRepository.js';
 import { CalendarService } from '../../src/main/services/CalendarService.js';
 import { ValidationError } from '../../src/shared/registry.js';
-import { AppError } from '../../src/main/utils/AppError.js';
+import { AppError } from '../../src/main/errors/AppError.js';
 
 function fixture(t) {
   const directory = mkdtempSync(path.join(tmpdir(), 'work-board-registry-'));
@@ -29,19 +29,6 @@ function instruction(changes = {}) {
     executor: 'Иванов И. И.', status: 'pending', executionMark: '', ...changes,
   };
 }
-
-test('migration upgrades legacy settings once and preserves existing values', () => {
-  const database = new DatabaseSync(':memory:');
-  try {
-    database.exec("CREATE TABLE app_settings (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL) STRICT; INSERT INTO app_settings VALUES ('theme', 'dark'); PRAGMA user_version = 1");
-    migrate(database);
-    migrate(database);
-    assert.equal(database.prepare('PRAGMA user_version').get().user_version, 10);
-    assert.equal(database.prepare("SELECT value FROM app_settings WHERE key = 'theme'").get().value, 'dark');
-    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM instructions').get().count, 0);
-    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM calendar_tasks').get().count, 0);
-  } finally { database.close(); }
-});
 
 test('instruction CRUD persists full data and accepts duplicate text identifiers', (t) => {
   const { instructions, database, filePath } = fixture(t);

@@ -1,0 +1,84 @@
+import { storeToRefs } from 'pinia';
+import { onScopeDispose, shallowRef, watch } from 'vue';
+import { INSTRUCTION_FIELDS, localDate } from '../../../shared/registry.js';
+import { createRegistryStore, useClosedRegistryStore, useRegistryStore } from './state/registryStore.js';
+import { useAppStore } from '../../app/appStore.js';
+
+// Route-local card state only. Queries, results and operations belong to Pinia.
+export function useRegistry(suppliedApp, service, { closed = false } = {}) {
+  const app = suppliedApp ?? useAppStore();
+  const useStore = suppliedApp || service ? createRegistryStore({ app, service, closed }) : closed ? useClosedRegistryStore : useRegistryStore;
+  const store = useStore();
+  const refs = storeToRefs(store);
+  const selected = shallowRef(null);
+  const selectedCheckpoint = shallowRef('');
+  let selectedGeneration = null;
+  let recordVersion = 0;
+  let active = true;
+  const isCurrent = (generation) => active && app.database?.ready && app.database.generation === generation;
+
+  function closeRecord() {
+    ++recordVersion;
+    selected.value = null;
+    selectedCheckpoint.value = '';
+    selectedGeneration = null;
+    store.cancelRecordRead();
+    store.clearMutationError();
+  }
+
+  function createRecord() {
+    if (closed || !store.canMutate) return false;
+    closeRecord();
+    selectedGeneration = app.database.generation;
+    const fields = Object.fromEntries(INSTRUCTION_FIELDS.map(field => [field, '']));
+    selected.value = { ...fields, id: null, controlDate: localDate() };
+    return true;
+  }
+
+  async function openRecord(id, checkpoint = '', isRequested = () => true) {
+    if (store.closingControl) return false;
+    const generation = app.database?.generation;
+    const version = ++recordVersion;
+    const record = await store.getRecord(id, generation);
+    if (!record || !isCurrent(generation) || version !== recordVersion || !isRequested()) return false;
+    selectedGeneration = generation;
+    selectedCheckpoint.value = checkpoint;
+    selected.value = record;
+    store.clearMutationError();
+    return true;
+  }
+
+  async function saveRecord(data) {
+    if (!selected.value || !isCurrent(selectedGeneration)) return false;
+    const version = recordVersion;
+    const saved = await store.saveRecord({ id: selected.value.id, data, generation: selectedGeneration });
+    if (saved && active && version === recordVersion) closeRecord();
+    return saved;
+  }
+
+  async function removeRecord() {
+    if (!selected.value?.id || !isCurrent(selectedGeneration)) return false;
+    const version = recordVersion;
+    const removed = await store.removeRecord({ id: selected.value.id, generation: selectedGeneration });
+    if (removed && active && version === recordVersion) closeRecord();
+    return removed;
+  }
+
+  async function closeSelectedControl() {
+    if (!selected.value?.id || selected.value.closedAt || !isCurrent(selectedGeneration)) return false;
+    const version = recordVersion;
+    const didClose = await store.closeControl({ id: selected.value.id, generation: selectedGeneration, fromCard: true });
+    if (didClose && active && version === recordVersion) closeRecord();
+    return didClose;
+  }
+
+  watch([() => app.database?.generation, () => app.database?.ready], closeRecord, { flush: 'sync' });
+  store.ensureLoaded();
+  onScopeDispose(() => { active = false; closeRecord(); });
+
+  return { ...refs, draftFilters: store.draftFilters, formError: refs.mutationError, selected, selectedCheckpoint,
+    refresh: store.refresh, updateToday: store.updateToday, applyFilters: store.applyFilters, resetFilters: store.resetFilters,
+    changeSort: store.changeSort, setPage: store.setPage, setPageSize: store.setPageSize,
+    exportRecords: store.exportRecords, closeControl: store.closeControl, closeRecord, createRecord, openRecord, saveRecord,
+    removeRecord, closeSelectedControl };
+}

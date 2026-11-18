@@ -1,10 +1,10 @@
 import { app, dialog, ipcMain, Menu, Notification, powerMonitor, shell, Tray } from 'electron';
-import { appPath } from './utils/appPaths.js';
-import { createWindow } from './app.js';
+import { appPath } from './runtime/appPaths.js';
+import { createWindow } from './desktop/createWindow.js';
 import { createApplicationServices } from './createApplicationServices.js';
-import { startDesktopApplication } from './startDesktopApplication.js';
-import { registerWindowsAppIdentity } from './notifications/windowsIdentity.js';
-import log from './utils/logger.js';
+import { startDesktopApplication } from './desktop/startDesktopApplication.js';
+import { registerWindowsAppIdentity } from './desktop/windowsIdentity.js';
+import log from './runtime/logger.js';
 
 registerWindowsAppIdentity({ app });
 const icon = appPath('build/renderer/icons/app.ico');

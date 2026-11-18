@@ -1,6 +1,5 @@
-import {
-  CONTROL_CARD_OPTION_LABELS, REGISTRY_OPTION_LABELS, validateOffice, validateRegistryOption, validateTheme, validateTypography,
-} from '../../shared/constants/settings.js';
+import { CONTROL_CARD_OPTION_LABELS, REGISTRY_OPTION_LABELS } from '../../shared/constants/settings.js';
+import { validateOffice, validateRegistryOption, validateTheme, validateTypography } from '../../shared/settings.js';
 import { ValidationError } from '../../shared/errors.js';
 import { validateEnum, validateRecord, validateText } from '../../shared/validation.js';
 

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { getTaskPriorityPresentation } from '../../src/renderer/presentation/taskPriorities.js';
-import { presentCalendarCheckpoints, presentCalendarRecords } from '../../src/renderer/presentation/calendarRecords.js';
+import { getTaskPriorityPresentation } from '../../src/renderer/features/calendar/taskPriorities.js';
+import { presentCalendarCheckpoints, presentCalendarRecords } from '../../src/renderer/features/calendar/calendarRecords.js';
 
 test('task priority presentation shares labels and preserves the normal-tone chart override', () => {
   assert.deepEqual(getTaskPriorityPresentation('normal'), { label: 'Обычная', tone: 'info' });

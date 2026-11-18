@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { reactive } from 'vue';
-import { createInstructionDraft, snapshotInstruction } from '../../src/renderer/domain/instructions.js';
+import { createInstructionDraft, snapshotInstruction } from '../../src/renderer/features/registry/instructionDraft.js';
 
 test('instruction drafts contain only editable fields and have independent schedules', () => {
   const record = { id: 7, title: 'Указание', status: 'pending', createdAt: 'private', controlType: 'Плановый', attachments: { add: [{ token: 'stale' }], remove: [8] } };

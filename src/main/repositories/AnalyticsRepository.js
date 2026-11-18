@@ -1,11 +1,10 @@
-import { EFFECTIVE_INSTRUCTION_DEADLINE_SQL } from '../database/instructionDeadline.js';
+import { EFFECTIVE_INSTRUCTION_DEADLINE_SQL, instructionDeadlineRange } from '../database/instructionDeadline.js';
 
 function queryParts(filters) {
   const clauses = [];
   const values = [];
   for (const [value, clause] of [
-    [filters.from, `${EFFECTIVE_INSTRUCTION_DEADLINE_SQL} >= ?`],
-    [filters.to, `${EFFECTIVE_INSTRUCTION_DEADLINE_SQL} <= ?`],
+    ...instructionDeadlineRange(filters.from, filters.to),
     [filters.executor, 'executor_search = ?'],
   ]) {
     if (!value) continue;

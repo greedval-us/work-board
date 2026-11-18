@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
-import { appPath } from '../utils/appPaths.js';
+import { pathToFileURL } from 'node:url';
+import { appPath } from '../runtime/appPaths.js';
 
 const runtimeRequire = createRequire(appPath('package.json'));
 const usesBuiltinSqlite = Number(process.versions.node.split('.')[0]) >= 22;
@@ -13,3 +14,26 @@ export const DatabaseSync = usesBuiltinSqlite ? Backend : class DatabaseSync ext
     super(filename, { ...options, readonly: readOnly });
   }
 };
+
+function sqliteFileUri(filePath, option, value) {
+  const uri = pathToFileURL(filePath);
+  if (uri.host) {
+    const uncPath = `//${uri.host}${uri.pathname}`;
+    uri.hostname = '';
+    uri.pathname = uncPath;
+  }
+  uri.searchParams.set(option, value);
+  return uri.href;
+}
+
+export function openExistingDatabase(filePath) {
+  if (!usesBuiltinSqlite) return new DatabaseSync(filePath, { fileMustExist: true });
+  return new DatabaseSync(sqliteFileUri(filePath, 'mode', 'rw'));
+}
+
+// An immutable view is only used for preliminary inspection of checkpointed
+// files. The legacy driver is compiled without SQLite URI support.
+export function openImmutableDatabase(filePath) {
+  if (!usesBuiltinSqlite) return null;
+  return new DatabaseSync(sqliteFileUri(filePath, 'immutable', '1'), { readOnly: true });
+}

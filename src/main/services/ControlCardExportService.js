@@ -2,8 +2,8 @@ import { controlCardFields, executorContactFor, normalizeControlCardFields } fro
 import { validateId } from '../../shared/validation.js';
 import { writeAtomicFile } from '../files/atomicFile.js';
 import { openSavedFile } from '../files/openSavedFile.js';
-import { AppError } from '../utils/AppError.js';
-import { createControlCardDocument } from './ControlCardDocument.js';
+import { AppError } from '../errors/AppError.js';
+import { createControlCardDocument } from '../exports/word/ControlCardDocument.js';
 
 export class ControlCardExportService {
   constructor({ database, instructions, settings, dialog, getWindow, openPath }) {

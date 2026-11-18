@@ -1,6 +1,6 @@
-import { IPC_CHANNELS as channels } from '../../shared/constants/ipcChannels.js';
+import { IPC_CHANNELS as channels } from '../../shared/ipc/channels.js';
 import { ENTITY_TYPES } from '../../shared/constants/entities.js';
-import { AppError } from '../utils/AppError.js';
+import { AppError } from '../errors/AppError.js';
 
 const RECORD_OPERATIONS = Object.freeze(['list', 'get', 'create', 'update', 'remove']);
 

@@ -2,17 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { effectScope, nextTick, reactive } from 'vue';
 import { createPinia, disposePinia, setActivePinia } from 'pinia';
-import { useCalendar } from '../../src/renderer/composables/useCalendar.js';
-import { createCalendarStore } from '../../src/renderer/stores/calendarStore.js';
+import { useCalendar } from '../../src/renderer/features/calendar/useCalendar.js';
+import { createCalendarStore } from '../../src/renderer/features/calendar/calendarStore.js';
 import { DesktopError } from '../../src/shared/errors.js';
-import { useAppStore } from '../../src/renderer/stores/appStore.js';
-
-function deferred() {
-  let resolve;
-  let reject;
-  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
-  return { promise, resolve, reject };
-}
+import { useAppStore } from '../../src/renderer/app/appStore.js';
 
 function setup(t, service) {
   const app = reactive({
@@ -36,8 +29,8 @@ function setup(t, service) {
 }
 
 test('late calendar responses from a previous database cannot replace current data', async (t) => {
-  const oldMonth = deferred();
-  const oldDay = deferred();
+  const oldMonth = Promise.withResolvers();
+  const oldDay = Promise.withResolvers();
   const checkpoint = { instructionId: 22, date: '2026-10-23', mark: '', scheduled: true };
   const service = {
     month: ({ generation }) => generation === 1 ? oldMonth.promise : Promise.resolve({ days: [{ date: '2026-10-23', controls: 2, checkpoints: 1 }] }),
@@ -61,7 +54,7 @@ test('late calendar responses from a previous database cannot replace current da
 });
 
 test('a slower selected day cannot overwrite the most recent selection', async (t) => {
-  const oldDay = deferred();
+  const oldDay = Promise.withResolvers();
   const { calendar } = setup(t, {
     month: async () => ({ days: [] }),
     day: ({ date }) => date === '2026-10-23' ? oldDay.promise : Promise.resolve({ instructions: [], tasks: [{ id: 24, date }] }),
@@ -88,7 +81,7 @@ test('a draft from an old database cannot write an ID into the new database', as
 });
 
 test('saving a task binds its generation, tracks pending operations and refreshes counts', async (t) => {
-  const save = deferred();
+  const save = Promise.withResolvers();
   const requests = [];
   let count = 0;
   const { app, calendar } = setup(t, {
@@ -109,7 +102,7 @@ test('saving a task binds its generation, tracks pending operations and refreshe
 });
 
 test('removing the active database clears both lists and late failures stay hidden', async (t) => {
-  const oldDay = deferred();
+  const oldDay = Promise.withResolvers();
   const { app, calendar } = setup(t, {
     month: async () => ({ days: [{ date: '2026-10-23', tasks: 1 }] }),
     day: () => oldDay.promise,
@@ -141,8 +134,8 @@ test('returning after local midnight updates urgency date without moving the sel
 });
 
 test('identical pending calendar reads share IPC and accept the shared response', async (t) => {
-  const month = deferred();
-  const day = deferred();
+  const month = Promise.withResolvers();
+  const day = Promise.withResolvers();
   let monthCalls = 0;
   let dayCalls = 0;
   const { calendar } = setup(t, {
@@ -202,8 +195,8 @@ test('an inactive calendar invalidates on revision and fetches once when reopene
 });
 
 test('a pending old revision cannot replace the refreshed calendar or poison remount', async (t) => {
-  const oldMonth = deferred();
-  const oldDay = deferred();
+  const oldMonth = Promise.withResolvers();
+  const oldDay = Promise.withResolvers();
   let monthCalls = 0;
   let dayCalls = 0;
   const { app, calendar, scope, mount } = setup(t, {
@@ -274,8 +267,8 @@ test('a successful mutation refreshes each active query exactly once', async (t)
 });
 
 test('returning while the initial read is pending shares it across view lifetimes', async (t) => {
-  const day = deferred();
-  const month = deferred();
+  const day = Promise.withResolvers();
+  const month = Promise.withResolvers();
   let monthCalls = 0;
   let dayCalls = 0;
   const { scope, mount } = setup(t, {
@@ -294,7 +287,7 @@ test('returning while the initial read is pending shares it across view lifetime
 });
 
 test('returning to a pending date reuses its request and accepts it as the current selection', async (t) => {
-  const firstDay = deferred();
+  const firstDay = Promise.withResolvers();
   let dayCalls = 0;
   const { calendar } = setup(t, {
     month: async () => ({ days: [] }),
@@ -325,7 +318,7 @@ test('request payloads retain the query captured before an immediate navigation'
 });
 
 test('an unrelated revision refresh cannot unlock a pending task completion', async (t) => {
-  const writing = deferred();
+  const writing = Promise.withResolvers();
   const task = { id: 6, title: 'Доклад', date: '2026-10-23', description: '', priority: 'normal', completed: false };
   let writes = 0;
   const { app, calendar } = setup(t, {
@@ -345,7 +338,7 @@ test('an unrelated revision refresh cannot unlock a pending task completion', as
 });
 
 test('a completed write from an old generation cannot invalidate the replacement database', async (t) => {
-  const writing = deferred();
+  const writing = Promise.withResolvers();
   const { app, calendar } = setup(t, {
     month: async () => ({ days: [] }), day: async () => ({ instructions: [], tasks: [] }),
     createTask: () => writing.promise,
@@ -396,8 +389,8 @@ test('page focus updates its local clock and its listener is removed on disposal
 });
 
 test('forced calendar refreshes share pending reads and preserve only the month while loading', async t => {
-  const month = deferred();
-  const day = deferred();
+  const month = Promise.withResolvers();
+  const day = Promise.withResolvers();
   let monthCalls = 0;
   let dayCalls = 0;
   const { store } = setup(t, {
@@ -449,8 +442,8 @@ test('a failed forced calendar refresh keeps its successful cache available for 
 });
 
 test('returning to the calendar waits for an ongoing refresh before restoring the cached day', async t => {
-  const month = deferred();
-  const day = deferred();
+  const month = Promise.withResolvers();
+  const day = Promise.withResolvers();
   let monthCalls = 0;
   let dayCalls = 0;
   const { store, scope, mount } = setup(t, {
@@ -475,7 +468,7 @@ test('returning to the calendar waits for an ongoing refresh before restoring th
 });
 
 test('restoring database readiness cannot revive a calendar read invalidated for the same date', async t => {
-  const oldDay = deferred();
+  const oldDay = Promise.withResolvers();
   let calls = 0;
   const { app, store } = setup(t, {
     month: async () => ({ days: [] }),

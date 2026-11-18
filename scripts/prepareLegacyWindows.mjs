@@ -7,7 +7,7 @@ import { PROJECT_ROOT as root, readProjectMetadata, runProcess } from './lib/run
 
 const stage = path.resolve(root, packaging.directories.app);
 const dependencyDirectory = path.join(root, 'packaging/legacy');
-const dependencies = JSON.parse(readFileSync(path.join(dependencyDirectory, 'package.json'), 'utf8')).dependencies;
+const { dependencies } = readProjectMetadata(dependencyDirectory);
 const metadata = readProjectMetadata();
 for (const [name, version] of Object.entries(dependencies)) {
   if (name !== 'better-sqlite3') assert.equal(version, metadata.dependencies[name], `Update legacy lockfile for ${name}.`);
@@ -20,7 +20,7 @@ for (const directory of ['src', 'build']) {
   assert.ok(stage.startsWith(path.join(root, '.cache') + path.sep));
   rmSync(target, { recursive: true, force: true });
 }
-for (const directory of ['src/main', 'src/shared', 'build/main', 'build/renderer', 'build/legacy']) {
+for (const directory of ['src/main', 'src/shared', 'build/preload', 'build/renderer', 'build/legacy']) {
   cpSync(path.join(root, directory), path.join(stage, directory), { recursive: true });
 }
 const { devDependencies, scripts, overrides, engines, ...application } = metadata;

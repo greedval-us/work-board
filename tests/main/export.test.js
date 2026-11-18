@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import ExcelJS from 'exceljs';
-import { createRegistryWorkbook } from '../../src/main/services/RegistryWorkbook.js';
+import { createRegistryWorkbook } from '../../src/main/exports/excel/RegistryWorkbook.js';
 
 async function reloadWorkbook(options) {
   const workbook = createRegistryWorkbook(options);

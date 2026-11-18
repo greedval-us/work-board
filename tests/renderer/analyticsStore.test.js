@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createPinia, setActivePinia } from 'pinia';
 import { nextTick, reactive } from 'vue';
-import { createAnalyticsStore } from '../../src/renderer/stores/analyticsStore.js';
+import { createAnalyticsStore } from '../../src/renderer/features/analytics/analyticsStore.js';
 
 test('analytics clears the executor and ignores replies from the previous database', async () => {
   setActivePinia(createPinia());

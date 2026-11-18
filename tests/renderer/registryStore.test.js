@@ -2,13 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createPinia, disposePinia } from 'pinia';
 import { nextTick, reactive, watch } from 'vue';
-import { createRegistryStore } from '../../src/renderer/stores/registryStore.js';
-
-function deferred() {
-  let resolve;
-  const promise = new Promise((yes) => { resolve = yes; });
-  return { promise, resolve };
-}
+import { createRegistryStore } from '../../src/renderer/features/registry/state/registryStore.js';
 
 function record(id) {
   return { id, controlDate: '2026-10-23', incomingNumber: '001', instructionNumber: '007-А', title: 'Доклад',
@@ -40,8 +34,8 @@ test('saving a record ignores obsolete attachment changes at the desktop boundar
 });
 
 test('a response queued before a new filter request cannot publish under that filter', async (t) => {
-  const previous = deferred();
-  const next = deferred();
+  const previous = Promise.withResolvers();
+  const next = Promise.withResolvers();
   const { store } = setup(t, { list: ({ filters }) => filters.executor ? next.promise : previous.promise });
   await nextTick();
   assert.equal(store.loading, true);
@@ -64,8 +58,8 @@ test('a response queued before a new filter request cannot publish under that fi
 });
 
 test('a queued previous card cannot resolve or stop loading after a newer card is requested', async (t) => {
-  const previous = deferred();
-  const next = deferred();
+  const previous = Promise.withResolvers();
+  const next = Promise.withResolvers();
   const { store } = setup(t, { get: ({ id }) => id === 1 ? previous.promise : next.promise });
   const first = store.getRecord(1);
   await nextTick();
@@ -84,7 +78,7 @@ test('a queued previous card cannot resolve or stop loading after a newer card i
 });
 
 test('a list snapshot is available to navigation before the pending flight is released', async (t) => {
-  const result = deferred();
+  const result = Promise.withResolvers();
   let calls = 0;
   const { store } = setup(t, { list: () => { calls++; return result.promise; } });
   const first = store.ensureLoaded();
@@ -192,8 +186,8 @@ test('returning to the initial filter and card in one turn only starts the final
 });
 
 test('a checkpoint filter resets to the first page when the local date changes', async (t) => {
-  const previous = deferred();
-  const next = deferred();
+  const previous = Promise.withResolvers();
+  const next = Promise.withResolvers();
   const requests = [];
   let day = 26;
   const { store } = setup(t, { list: (request) => {

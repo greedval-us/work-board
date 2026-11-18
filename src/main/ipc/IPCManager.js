@@ -2,7 +2,7 @@ import { AppHandler } from './AppHandler.js';
 import { SettingsHandler } from './SettingsHandler.js';
 import { registerIpcHandlers } from './registerIpcHandlers.js';
 import { BusinessHandler } from './BusinessHandler.js';
-import { IPC_CHANNELS } from '../../shared/constants/ipcChannels.js';
+import { IPC_CHANNELS } from '../../shared/ipc/channels.js';
 
 const REMINDER_CHANGE_CHANNELS = new Set([
   IPC_CHANNELS.database.create, IPC_CHANNELS.database.open,

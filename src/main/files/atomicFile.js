@@ -3,7 +3,7 @@ import { realpathSync, renameSync } from 'node:fs';
 import filesystem from 'node:fs/promises';
 import path from 'node:path';
 import { ValidationError } from '../../shared/errors.js';
-import { CleanupError } from '../utils/cleanup.js';
+import { CleanupError } from '../errors/cleanup.js';
 
 const DATABASE_FILE_SUFFIXES = Object.freeze(['', '-wal', '-shm']);
 const LEGACY_ATTACHMENT_ROOT_SUFFIX = '.files';

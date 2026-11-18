@@ -5,9 +5,12 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import { DatabaseService } from '../../src/main/database/DatabaseService.js';
+import { migrate, migrations } from '../../src/main/database/migrations.js';
 import { InstructionRepository } from '../../src/main/repositories/InstructionRepository.js';
 import { SettingsRepository } from '../../src/main/repositories/SettingsRepository.js';
 import { SettingsService } from '../../src/main/services/SettingsService.js';
+
+const currentSchemaVersion = migrations.at(-1).version;
 
 const emptyRegistryOptions = { documentType: [], source: [], executor: [], department: [], executorPhone: [], office: [] };
 const defaultTypography = { fontFamily: 'inter', fontSize: 14 };
@@ -31,12 +34,25 @@ test('initializes a nested SQLite file with registry schema and settings', (t) =
   const status = database.getStatus();
   assert.equal(status.ready, true);
   assert.equal(status.filePath, filePath);
-  assert.equal(status.schemaVersion, 10);
+  assert.equal(status.schemaVersion, currentSchemaVersion);
   assert.match(status.sqliteVersion, /^3\./);
   assert.deepEqual(database.connection.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all().map(row => row.name),
     ['app_settings', 'attachments', 'calendar_task_completions', 'calendar_task_moves', 'calendar_tasks', 'instructions']);
   assert.equal(database.connection.prepare('PRAGMA foreign_keys').get().foreign_keys, 1);
   assert.equal(database.connection.prepare('PRAGMA journal_mode').get().journal_mode, 'wal');
+});
+
+test('migration upgrades legacy settings once and preserves existing values', () => {
+  const database = new DatabaseSync(':memory:');
+  try {
+    database.exec("CREATE TABLE app_settings (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL) STRICT; INSERT INTO app_settings VALUES ('theme', 'dark'); PRAGMA user_version = 1");
+    migrate(database);
+    migrate(database);
+    assert.equal(database.prepare('PRAGMA user_version').get().user_version, currentSchemaVersion);
+    assert.equal(database.prepare("SELECT value FROM app_settings WHERE key = 'theme'").get().value, 'dark');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM instructions').get().count, 0);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM calendar_tasks').get().count, 0);
+  } finally { database.close(); }
 });
 
 test('reopening preserves settings and does not reapply migrations', (t) => {
@@ -49,7 +65,7 @@ test('reopening preserves settings and does not reapply migrations', (t) => {
   database.close();
   database.open();
   assert.deepEqual(new SettingsRepository(database).get(), { ...defaultSettings, theme: 'dark' });
-  assert.equal(database.getStatus().schemaVersion, 10);
+  assert.equal(database.getStatus().schemaVersion, currentSchemaVersion);
 });
 
 test('invalid settings cannot modify persisted data', (t) => {
@@ -402,11 +418,12 @@ test('closing is idempotent and reports an unavailable connection', (t) => {
 test('a newer database schema is rejected without downgrading it', (t) => {
   const { database, filePath } = fixture(t);
   database.open();
-  database.connection.exec('PRAGMA user_version = 99');
+  const futureVersion = currentSchemaVersion + 1;
+  database.connection.exec(`PRAGMA user_version = ${futureVersion}`);
   database.close();
   assert.throws(() => database.open(), /новее/i);
   assert.equal(database.getStatus().ready, false);
   const raw = new DatabaseSync(filePath);
-  try { assert.equal(raw.prepare('PRAGMA user_version').get().user_version, 99); }
+  try { assert.equal(raw.prepare('PRAGMA user_version').get().user_version, futureVersion); }
   finally { raw.close(); }
 });

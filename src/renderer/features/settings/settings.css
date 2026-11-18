@@ -1,0 +1,48 @@
+.settings-section { padding: 20px; margin-bottom: 14px; border: 1px solid var(--border); border-radius: 16px; background: var(--grouped); }
+.section-heading { margin-bottom: 18px; }
+.section-heading h2 { font-size: calc(15px + var(--app-font-offset)); font-weight: 600; letter-spacing: -.025em; }
+.section-heading p { max-width: 64ch; margin-top: 6px; color: var(--muted); font-size: calc(12px + var(--app-font-offset)); }
+.theme-options { display: flex; flex-wrap: wrap; gap: 14px; border: 0; margin: 0; padding: 0; }
+.theme-option { display: flex; flex-direction: column; gap: 13px; width: 184px; padding: 8px 8px 12px; border: 2px solid transparent; border-radius: 17px; background: var(--panel); color: var(--text); cursor: pointer; box-shadow: var(--control-shadow); }
+.theme-option:hover { background: var(--panel); box-shadow: 0 4px 14px rgb(25 35 55 / .09), 0 0 0 1px var(--border); }
+.theme-option-selected { border-color: var(--accent); }
+.theme-options:disabled .theme-option { cursor: not-allowed; opacity: .55; }
+.theme-option-caption { display: flex; align-items: center; gap: 7px; width: 100%; padding: 0 5px; font-size: calc(12px + var(--app-font-offset)); font-weight: 550; }
+.theme-option-caption > svg { color: var(--muted); }
+.theme-check { display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: auto; border: 1px solid var(--border); border-radius: 50%; }
+.theme-option-selected .theme-check { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.appearance-preview { position: relative; display: block; width: 100%; height: 98px; overflow: hidden; border: 1px solid rgb(0 0 0 / .05); border-radius: 10px; background: #f7f8fa; }
+.preview-toolbar { position: absolute; inset: 0 0 auto; display: flex; align-items: center; gap: 3px; height: 16px; padding: 0 7px; border-bottom: 1px solid rgb(0 0 0 / .035); background: #fff; }
+.preview-toolbar i { width: 4px; height: 4px; border-radius: 50%; background: #d3d6dc; }
+.preview-sidebar { position: absolute; top: 16px; bottom: 0; left: 0; width: 36px; padding: 12px 5px; background: #e9ecf1; }
+.preview-sidebar i { display: block; height: 5px; margin-bottom: 7px; border-radius: 3px; background: #d0d5dd; }
+.preview-sidebar i:first-child { background: #418dee; }
+.preview-content { position: absolute; top: 30px; right: 11px; left: 48px; }
+.preview-content i { display: block; height: 10px; margin-bottom: 7px; border-radius: 4px; background: #e5e8ee; }
+.preview-content i:first-child { width: 64%; height: 5px; margin-bottom: 11px; background: #bec5d0; }
+.appearance-preview-dark { border-color: rgb(255 255 255 / .04); background: #29292d; }
+.appearance-preview-dark .preview-toolbar { background: #353539; border-color: rgb(255 255 255 / .04); }
+.appearance-preview-dark .preview-toolbar i { background: #606068; }
+.appearance-preview-dark .preview-sidebar { background: #202023; }
+.appearance-preview-dark .preview-sidebar i { background: #43434b; }
+.appearance-preview-dark .preview-sidebar i:first-child { background: #4388df; }
+.appearance-preview-dark .preview-content i { background: #3c3c44; }
+.appearance-preview-dark .preview-content i:first-child { background: #71717d; }
+.details-list { margin: 0; padding: 0 16px; border: 1px solid var(--border); border-radius: 15px; background: var(--panel); }
+.details-list > div { display: grid; grid-template-columns: 118px minmax(0, 1fr); align-items: baseline; gap: 18px; padding: 14px 0; }
+.details-list > div + div { border-top: 1px solid var(--border); }
+.details-list dt { color: var(--muted); font-size: calc(12px + var(--app-font-offset)); }
+.details-list dd { margin: 0; font-size: calc(12px + var(--app-font-offset)); }
+.file-path { overflow-wrap: anywhere; user-select: text; }
+.save-status { margin: -9px 10px 14px; color: var(--muted); font-size: calc(11px + var(--app-font-offset)); }
+
+@media (max-width: 860px) {
+  .settings-section { padding: 18px; }
+}
+
+@media (max-width: 520px) {
+  .settings-section { padding: 18px; border-radius: 18px; }
+  .theme-option { width: 100%; }
+  .appearance-preview { height: 112px; }
+  .details-list > div { grid-template-columns: 1fr; gap: 5px; }
+}

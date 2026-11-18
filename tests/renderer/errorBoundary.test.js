@@ -9,16 +9,16 @@ import {
   callWithAsyncErrorHandling, createRenderer, getCurrentInstance, h,
   nextTick, onBeforeUnmount, onMounted, shallowRef,
 } from 'vue';
-import { useAppStore } from '../../src/renderer/stores/appStore.js';
-import { useErrorStore } from '../../src/renderer/stores/errorStore.js';
+import { useAppStore } from '../../src/renderer/app/appStore.js';
+import { useErrorStore } from '../../src/renderer/app/errorStore.js';
 
 // Compile the shipped component so the test covers its real hooks and template.
-const filename = path.resolve('src/renderer/components/ui/ErrorBoundary.vue');
+const filename = path.resolve('src/renderer/app/ErrorBoundary.vue');
 const { descriptor } = parse(readFileSync(filename, 'utf8'), { filename });
 const compiled = compileScript(descriptor, { id: 'boundary-test', inlineTemplate: true }).content
   .replaceAll('from "vue"', `from "${import.meta.resolve('vue')}"`)
   .replaceAll("from 'vue'", `from '${import.meta.resolve('vue')}'`)
-  .replace("from '../../stores/errorStore.js'", `from '${pathToFileURL(path.resolve('src/renderer/stores/errorStore.js')).href}'`);
+  .replace("from './errorStore.js'", `from '${pathToFileURL(path.resolve('src/renderer/app/errorStore.js')).href}'`);
 const { default: ErrorBoundary } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
 
 function renderer() {
