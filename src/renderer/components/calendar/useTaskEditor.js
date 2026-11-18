@@ -2,7 +2,7 @@ import { computed, reactive, shallowRef } from 'vue';
 import { TASK_PRIORITY, validateTask } from '../../../shared/registry.js';
 import { supportsControlDayOfMonth } from '../../../shared/controlSchedule.js';
 import { validateDate } from '../../../shared/dates.js';
-import { firstTaskOccurrence, isTaskOccurrence } from '../../../shared/taskRecurrence.js';
+import { isTaskOccurrence } from '../../../shared/taskRecurrence.js';
 import { errorMessage } from '../../infrastructure/errorMessage.js';
 
 function scheduleFromDraft({ frequency, dayOfWeek, dayOfMonth, monthOfYear, customDates }) {
@@ -37,7 +37,6 @@ export function useTaskEditor({ task, date, generation, saveTask, removeTask, mo
     ...draft, completed: !recurring.value && draft.completed, recurrence: scheduleFromDraft(draft.recurrence),
   }));
   const occurrenceAvailable = computed(() => Boolean(task && recurring.value && isTaskOccurrence(taskData.value, originalOccurrenceDate)));
-  const firstOccurrence = computed(() => recurring.value ? firstTaskOccurrence(taskData.value) : '');
   const completionChange = computed(() => {
     if (!occurrenceAvailable.value) return undefined;
     const previous = existingRecurrence ? Boolean(task.completed) : false;
@@ -72,6 +71,6 @@ export function useTaskEditor({ task, date, generation, saveTask, removeTask, mo
       'Не удалось перенести повторение задачи.');
   }
 
-  return { draft, recurring, occurrenceDate, occurrenceCompleted, occurrenceAvailable, firstOccurrence,
+  return { draft, recurring, occurrenceDate, occurrenceCompleted, occurrenceAvailable,
     movableOccurrence, dirty, busy, error, save, remove, moveOccurrence };
 }

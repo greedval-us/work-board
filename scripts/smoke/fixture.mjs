@@ -51,7 +51,7 @@ export function createSmokeFixture(userData, dialog, today = localDate()) {
     nextCheckpointHeader: 'Ближайший промежуточный контроль',
     controlFrequencyCell: '.registry-table tbody td[data-column=controlFrequency]',
     controlFrequencyHeader: 'Промежуточный контроль',
-    dailyControl: 'Ежедневно', customControl: 'Другое (даты вручную)', overdueColor: 'FFB32630',
+    dailyControl: 'Ежедневно', customControl: 'Другое (даты вручную)',
     registrySelections, reportSelections, settingsSelections: { ...registrySelections, ...reportSelections },
     historicalDocumentType: 'Акт',
     controlCardOffice: 'Канцелярия, 101',

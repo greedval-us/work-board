@@ -169,6 +169,28 @@ test('queries superseded before their queued work starts do not issue obsolete I
   assert.equal(store.loading, false);
 });
 
+test('returning to the initial filter and card in one turn only starts the final reads', async t => {
+  const lists = [];
+  const cards = [];
+  const { store } = setup(t, {
+    list: async ({ filters }) => {
+      lists.push(filters.executor);
+      return { items: [], total: 0 };
+    },
+    get: async ({ id }) => { cards.push(id); return record(id); },
+  });
+  store.draftFilters.executor = 'Петров';
+  const filtered = store.applyFilters();
+  const reset = store.resetFilters();
+  const first = store.getRecord(1);
+  const second = store.getRecord(2);
+  const last = store.getRecord(1);
+
+  assert.deepEqual(await Promise.all([filtered, reset, first, second, last]), [false, true, null, null, record(1)]);
+  assert.deepEqual(lists, ['']);
+  assert.deepEqual(cards, [1]);
+});
+
 test('a checkpoint filter resets to the first page when the local date changes', async (t) => {
   const previous = deferred();
   const next = deferred();
@@ -311,6 +333,8 @@ test('a failed registry refresh retains its displayed rows and ensureLoaded retr
   assert.equal(store.loading, false);
   assert.match(store.error, /реестр/);
   assert.doesNotMatch(store.error, /SQLite/);
+  assert.equal((await store.getRecord(1)).id, 1);
+  assert.equal(store.error, '', 'opening a card clears visible feedback');
   assert.equal(await store.ensureLoaded(), true);
   assert.equal(calls, 3);
   assert.equal(store.items[0].id, 3);

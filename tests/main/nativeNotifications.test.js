@@ -222,23 +222,16 @@ test('completed, removed and rescheduled occurrences cannot be acknowledged by a
   assert.equal(f.shown.length, 2);
 });
 
-test('session deduplication prevents repeated native popups when saving a delivery receipt fails', t => {
-  const f = fixture(t);
-  f.task(); f.scheduler.start();
-  f.service.acknowledge = () => { throw new Error('write failed'); };
-  f.shown[0].emit('show'); f.shown[0].emit('show');
-  f.clock.advance(5 * 60_000);
-  assert.equal(f.shown.length, 1);
-  assert.equal(f.service.list().items[0].popupPending, true);
-  assert.notEqual(f.errors.length, 0);
-});
-
-test('a failed popup receipt is saved on the next check without displaying another toast', t => {
+test('a displayed toast stays unique through receipt write failures and is acknowledged after recovery', t => {
   const f = fixture(t);
   f.task(); f.scheduler.start();
   const acknowledge = f.service.acknowledge.bind(f.service);
   f.service.acknowledge = () => { throw new Error('database temporarily busy'); };
   f.shown[0].emit('show');
+  f.shown[0].emit('show');
+  f.clock.advance(5 * 60_000);
+  assert.equal(f.shown.length, 1);
+  assert.ok(f.errors.length);
   assert.match(f.scheduler.getStatus().error, /сохранить/i);
   assert.doesNotMatch(f.scheduler.getStatus().error, /разрешения/i);
   assert.equal(f.service.list().items[0].popupPending, true);

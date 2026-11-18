@@ -1,7 +1,8 @@
 <script setup>
-import { computed, nextTick, reactive, shallowRef, useId, watch } from 'vue';
+import { computed, nextTick, reactive, shallowRef, watch } from 'vue';
 import { Pencil, Trash2 } from 'lucide-vue-next';
-import { CONTROL_CARD_OFFICE_LABEL, CONTROL_CARD_OPTION_LABELS,
+import ControlCardOfficeSetting from './ControlCardOfficeSetting.vue';
+import { CONTROL_CARD_OPTION_LABELS,
   REGISTRY_OPTION_LABELS, REGISTRY_OPTION_LIMITS } from '../../../shared/constants/settings.js';
 import { executorContactFor } from '../../../shared/controlCard.js';
 
@@ -24,48 +25,9 @@ const drafts = reactive(Object.fromEntries(fields.map(field => [field, ''])));
 const addContact = reactive(executorContactFor(''));
 const edits = reactive(Object.fromEntries(fields.map(field => [field, new Map()])));
 const errorTarget = shallowRef(null);
-const officeDraft = shallowRef(props.office);
-const officeNotice = shallowRef('');
-const showOfficeError = shallowRef(false);
-const officeHelpId = useId();
-const officeErrorId = useId();
-const officeChanged = computed(() => officeDraft.value !== props.office);
-const officeErrorVisible = computed(() => showOfficeError.value && Boolean(props.officeError));
 const executorDetails = computed(() => new Map(props.executorContacts.map(({ executor, department, executorPhone }) => [
   executor, [department, executorPhone].filter(Boolean).join(' · '),
 ])));
-
-watch(() => props.office, (value) => {
-  officeDraft.value = value;
-  clearOfficeFeedback();
-});
-
-watch(() => props.options.office, (options) => {
-  if (officeDraft.value && !options.includes(officeDraft.value)) {
-    officeDraft.value = props.office;
-    clearOfficeFeedback();
-  }
-});
-
-function clearOfficeFeedback() {
-  officeNotice.value = '';
-  showOfficeError.value = false;
-}
-
-async function saveOffice(event) {
-  if (props.disabled || !officeChanged.value) return;
-  const select = event.currentTarget.elements.namedItem('office');
-  const value = officeDraft.value;
-  clearOfficeFeedback();
-  if (await props.saveOffice(value)) {
-    officeDraft.value = value;
-    officeNotice.value = 'Значение сохранено.';
-  } else {
-    showOfficeError.value = true;
-  }
-  await nextTick();
-  if (select.isConnected && document.activeElement === document.body) select.focus({ preventScroll: true });
-}
 
 watch([() => props.options, () => props.executorContacts], ([options, contacts], [, previousContacts]) => {
   for (const field of contactFields) {
@@ -172,23 +134,8 @@ function remove(field, option, event) {
       <div class="registry-option-groups">
         <div v-for="field in fields" :key="field" class="registry-option-group"
           :class="{ 'registry-office-group': field === 'office', 'registry-executor-group': field === 'executor' }">
-          <template v-if="field === 'office'">
-            <form data-control-card-office @submit.prevent="saveOffice">
-              <label>
-                <span>{{ CONTROL_CARD_OFFICE_LABEL }}</span>
-                <select v-model="officeDraft" name="office" :disabled="props.disabled"
-                  :aria-describedby="officeErrorVisible ? `${officeHelpId} ${officeErrorId}` : officeHelpId"
-                  :aria-invalid="officeErrorVisible || undefined" @change="clearOfficeFeedback">
-                  <option value="">Не указано</option>
-                  <option v-for="choice in props.options.office" :key="choice" :value="choice">{{ choice }}</option>
-                </select>
-              </label>
-              <button type="submit" :disabled="props.disabled || !officeChanged">Сохранить</button>
-            </form>
-            <p :id="officeHelpId" class="registry-settings-help">Выбирается по умолчанию при выгрузке Ф‑21 из этой базы.</p>
-            <p v-if="officeErrorVisible" :id="officeErrorId" class="registry-option-error" role="alert">{{ props.officeError }}</p>
-            <p v-else class="registry-option-notice" role="status">{{ officeNotice }}</p>
-          </template>
+          <ControlCardOfficeSetting v-if="field === 'office'" :office="props.office" :options="props.options.office"
+            :error="props.officeError" :disabled="props.disabled" :save-office="props.saveOffice" />
           <div v-else-if="field === 'executor'" class="registry-executor-heading">
             <h3>Исполнители</h3>
             <p class="registry-settings-help">Подразделение и телефон для Ф‑21 можно указать при добавлении или редактировании исполнителя.</p>
@@ -253,17 +200,17 @@ function remove(field, option, event) {
 .registry-executor-group { grid-column: 1 / -1; padding-top: 14px; border-top: 1px solid var(--border); }
 .registry-executor-heading { margin-bottom: 10px; }
 .registry-executor-heading h3 { margin: 0; font-size: calc(13px + var(--app-font-offset)); font-weight: 650; }
-.registry-settings-help { margin-top: 5px; color: var(--muted); font-size: calc(12px + var(--app-font-offset)); }
-.registry-option-group form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
-.registry-option-group label { display: grid; flex: 1 1 110px; gap: 5px; min-width: 0; font-size: calc(12px + var(--app-font-offset)); font-weight: 550; }
-.registry-office-group label { flex-basis: 190px; max-width: 520px; }
+.registry-option-group :deep(.registry-settings-help) { margin-top: 5px; color: var(--muted); font-size: calc(12px + var(--app-font-offset)); }
+.registry-option-group :deep(form) { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+.registry-option-group :deep(label) { display: grid; flex: 1 1 110px; gap: 5px; min-width: 0; font-size: calc(12px + var(--app-font-offset)); font-weight: 550; }
+.registry-office-group :deep(label) { flex-basis: 190px; max-width: 520px; }
 .registry-office-group ul { max-width: 520px; }
 .registry-executor-group label { flex-basis: 130px; }
-.registry-option-group input, .registry-option-group select, .registry-option-group button { min-height: 36px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); color: var(--text); font-size: calc(12px + var(--app-font-offset)); }
-.registry-option-group input, .registry-option-group select { width: 100%; min-width: 0; font-weight: 400; }
+.registry-option-group input, .registry-option-group :deep(select), .registry-option-group :deep(button) { min-height: 36px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); color: var(--text); font-size: calc(12px + var(--app-font-offset)); }
+.registry-option-group input, .registry-option-group :deep(select) { width: 100%; min-width: 0; font-weight: 400; }
 .registry-option-group input::placeholder { color: var(--muted); }
-.registry-option-group button { font-weight: 550; }
-.registry-option-group button:enabled:hover { background: var(--raised); }
+.registry-option-group :deep(button) { font-weight: 550; }
+.registry-option-group :deep(button:enabled:hover) { background: var(--raised); }
 .registry-option-group ul { display: grid; gap: 4px; margin: 8px 0 0; padding: 0; list-style: none; }
 .registry-option-group li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; padding: 4px 6px 4px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); font-size: calc(12px + var(--app-font-offset)); }
 .registry-option-value { display: flex; flex: 1; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; min-width: 0; overflow-wrap: anywhere; }
@@ -273,7 +220,7 @@ function remove(field, option, event) {
 .registry-option-group .registry-option-edit { flex: 1; min-width: 0; }
 .registry-option-edit input { flex: 1 1 150px; }
 .registry-option-edit label { flex-basis: 150px; }
-.registry-option-error { flex-basis: 100%; margin: 4px 0; color: var(--error); font-size: calc(12px + var(--app-font-offset)); overflow-wrap: anywhere; }
-.registry-option-notice { margin-top: 4px; color: var(--accent); font-size: calc(12px + var(--app-font-offset)); }
-.registry-option-notice:empty { margin-top: 0; }
+.registry-option-group :deep(.registry-option-error) { flex-basis: 100%; margin: 4px 0; color: var(--error); font-size: calc(12px + var(--app-font-offset)); overflow-wrap: anywhere; }
+.registry-option-group :deep(.registry-option-notice) { margin-top: 4px; color: var(--accent); font-size: calc(12px + var(--app-font-offset)); }
+.registry-option-group :deep(.registry-option-notice:empty) { margin-top: 0; }
 </style>

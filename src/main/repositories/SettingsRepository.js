@@ -1,9 +1,5 @@
-import {
-  CONTROL_CARD_OPTION_LABELS, DEFAULT_SETTINGS, REGISTRY_OPTION_LABELS,
-  validateOffice, validateRegistryOption, validateTheme, validateTypography,
-} from '../../shared/constants/settings.js';
+import { DEFAULT_SETTINGS, validateTheme, validateTypography } from '../../shared/constants/settings.js';
 import { ValidationError } from '../../shared/errors.js';
-import { validateEnum, validateRecord, validateText } from '../../shared/validation.js';
 
 const registryOptionKey = field => `registryOptions.${field}`;
 const EXECUTOR_CONTACTS_KEY = 'executorContacts';
@@ -39,25 +35,6 @@ function readRegistryOptions(value, defaults) {
   return options;
 }
 
-function findMatchingRegistryOptionIndex(options, value, excludedIndex = -1) {
-  const normalized = value.toLowerCase();
-  return options.findIndex((option, index) => index !== excludedIndex && option.toLowerCase() === normalized);
-}
-
-function assertUniqueRegistryOption(field, options, value, currentIndex = -1) {
-  if (findMatchingRegistryOptionIndex(options, value, currentIndex) !== -1) {
-    throw new ValidationError(`В списке «${REGISTRY_OPTION_LABELS[field]}» уже есть такой вариант.`);
-  }
-}
-
-function findRegistryOptionIndex(field, options, value) {
-  const index = options.indexOf(value);
-  if (index === -1) {
-    throw new ValidationError(`В списке «${REGISTRY_OPTION_LABELS[field]}» этот вариант больше не найден.`);
-  }
-  return index;
-}
-
 export class SettingsRepository {
   constructor(database) { this.database = database; }
 
@@ -69,7 +46,8 @@ export class SettingsRepository {
     ]));
     let office = settings.get(OFFICE_KEY) ?? DEFAULT_SETTINGS.office;
     if (office) {
-      const matchingIndex = findMatchingRegistryOptionIndex(registryOptions.office, office);
+      const normalized = office.toLowerCase();
+      const matchingIndex = registryOptions.office.findIndex(value => value.toLowerCase() === normalized);
       if (matchingIndex === -1) registryOptions.office.unshift(office);
       else office = registryOptions.office[matchingIndex];
     }
@@ -81,123 +59,25 @@ export class SettingsRepository {
     };
   }
 
-  setTheme(theme) {
-    validateTheme(theme);
+  saveAppearance({ theme, typography }) {
     return this.database.transaction(() => {
-      this.#set('theme', theme);
+      if (theme !== undefined) this.#set('theme', theme);
+      if (typography !== undefined) this.#set(TYPOGRAPHY_KEY, JSON.stringify(typography));
       return this.get();
     });
   }
 
-  setTypography(value) {
-    const typography = validateTypography(value);
-    return this.database.transaction(() => {
-      this.#set(TYPOGRAPHY_KEY, JSON.stringify(typography));
-      return this.get();
-    });
-  }
-
-  setOffice(value) {
-    const office = validateOffice(value);
-    return this.#changeRegistryOptions('office', (options, settings) => {
-      if (office) findRegistryOptionIndex('office', options, office);
-      this.#saveOffice(settings, office);
-    });
-  }
-
-  addRegistryOption(field, value, contact) {
-    const option = validateRegistryOption(field, value);
-    return this.#changeRegistryOptions(field, (options, settings) => {
-      assertUniqueRegistryOption(field, options, option);
-      options.push(option);
-      this.#applyOptionContact(settings, field, option, contact);
-    });
-  }
-
-  updateRegistryOption(field, previousValue, value, contact) {
-    const option = validateRegistryOption(field, value);
-    return this.#changeRegistryOptions(field, (options, settings) => {
-      const index = findRegistryOptionIndex(field, options, previousValue);
-      assertUniqueRegistryOption(field, options, option, index);
-      options[index] = option;
-      this.#applyOptionContact(settings, field, option, contact, previousValue);
-      this.#replaceOfficeOption(settings, field, previousValue, option);
-    });
-  }
-
-  removeRegistryOption(field, value) {
-    validateEnum(field, REGISTRY_OPTION_LABELS, 'Справочник');
-    return this.#changeRegistryOptions(field, (options, settings) => {
-      options.splice(findRegistryOptionIndex(field, options, value), 1);
-      this.#replaceContactOption(settings, field, value, '');
-      this.#replaceOfficeOption(settings, field, value, '');
-    });
-  }
-
-  setExecutorContact(executor, value) {
+  updateRegistry(change) {
     return this.database.transaction(() => {
       const settings = this.get();
-      findRegistryOptionIndex('executor', settings.registryOptions.executor, executor);
-      this.#saveExecutorContact(settings, executor, value);
-      return settings;
-    });
-  }
-
-  #applyOptionContact(settings, field, option, contact, previousValue) {
-    if (contact === undefined) {
-      if (previousValue !== undefined && previousValue !== option) {
-        this.#replaceContactOption(settings, field, previousValue, option);
+      const changes = change(settings);
+      const { registryOptions = {}, executorContacts, office } = changes;
+      for (const [field, options] of Object.entries(registryOptions)) {
+        this.#set(registryOptionKey(field), JSON.stringify(options));
       }
-      return;
-    }
-    if (field !== 'executor') throw new ValidationError('Контакты можно указать только для исполнителя.');
-    this.#saveExecutorContact(settings, option, contact, previousValue);
-  }
-
-  #saveExecutorContact(settings, executor, value, previousExecutor = executor) {
-    const fields = validateRecord(value, 'Контакты исполнителя');
-    const contact = { executor };
-    for (const [field, label] of Object.entries(CONTROL_CARD_OPTION_LABELS)) {
-      const option = validateText(fields[field], label).trim();
-      if (option) findRegistryOptionIndex(field, settings.registryOptions[field], option);
-      contact[field] = option;
-    }
-    const contacts = settings.executorContacts.filter(item => item.executor !== previousExecutor && item.executor !== executor);
-    if (contact.department || contact.executorPhone) contacts.push(contact);
-    this.#saveExecutorContacts(settings, contacts);
-  }
-
-  #replaceContactOption(settings, field, previousValue, nextValue) {
-    if (!settings.executorContacts.some(contact => contact[field] === previousValue)) return;
-    const contacts = settings.executorContacts
-      .map(contact => contact[field] === previousValue ? { ...contact, [field]: nextValue } : contact)
-      .filter(contact => contact.executor && (contact.department || contact.executorPhone));
-    this.#saveExecutorContacts(settings, contacts);
-  }
-
-  #saveExecutorContacts(settings, contacts) {
-    this.#set(EXECUTOR_CONTACTS_KEY, JSON.stringify(contacts));
-    settings.executorContacts = contacts;
-  }
-
-  #replaceOfficeOption(settings, field, previousValue, nextValue) {
-    if (field === 'office' && settings.office === previousValue && previousValue !== nextValue) {
-      this.#saveOffice(settings, nextValue);
-    }
-  }
-
-  #saveOffice(settings, office) {
-    this.#set(OFFICE_KEY, office);
-    settings.office = office;
-  }
-
-  #changeRegistryOptions(field, change) {
-    return this.database.transaction(() => {
-      const settings = this.get();
-      const options = settings.registryOptions[field];
-      change(options, settings);
-      this.#set(registryOptionKey(field), JSON.stringify(options));
-      return settings;
+      if (executorContacts !== undefined) this.#set(EXECUTOR_CONTACTS_KEY, JSON.stringify(executorContacts));
+      if (office !== undefined) this.#set(OFFICE_KEY, office);
+      return { ...settings, ...changes, registryOptions: { ...settings.registryOptions, ...registryOptions } };
     });
   }
 

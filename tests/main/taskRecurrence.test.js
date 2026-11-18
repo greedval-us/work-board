@@ -147,7 +147,12 @@ test('editing the schedule preserves valid moves, removes obsolete ones and reje
   assert.equal(tasks.get(series.id).title, 'Проверка');
   assert.equal(tasks.get(series.id, targetDate).originalDate, originalDate);
 
-  tasks.update(series.id, { recurrence: { frequency: 'weekly', dayOfWeek: 3 } });
+  // The Wednesday becomes a new scheduled occurrence in place of the old moved Monday.
+  const newSchedule = { recurrence: { frequency: 'weekly', dayOfWeek: 3 } };
+  assert.throws(() => tasks.update(series.id, newSchedule, { date: targetDate, completed: true }), { code: 'VALIDATION' });
+  assert.equal(tasks.get(series.id, targetDate).originalDate, originalDate);
+  tasks.update(series.id, newSchedule);
   assert.deepEqual(tasks.occurrenceMoves(), []);
   assert.equal(tasks.get(series.id, targetDate).originalDate, undefined);
+  assert.equal(tasks.get(series.id, targetDate).completed, false);
 });

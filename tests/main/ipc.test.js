@@ -7,6 +7,7 @@ import { DatabaseService } from '../../src/main/database/DatabaseService.js';
 import { SettingsRepository } from '../../src/main/repositories/SettingsRepository.js';
 import { SettingsService } from '../../src/main/services/SettingsService.js';
 import { ValidationError } from '../../src/shared/registry.js';
+import { IPC_CHANNELS } from '../../src/shared/constants/ipcChannels.js';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -41,7 +42,13 @@ function fixture(t) {
   t.after(() => { database.close(); rmSync(directory, { recursive: true, force: true }); });
   database.open();
   const manager = new IPCManager({
-    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler), removeHandler: (channel) => handlers.delete(channel) },
+    ipcMain: {
+      handle(channel, handler) {
+        assert.ok(!handlers.has(channel), `Duplicate handler for ${channel}`);
+        handlers.set(channel, handler);
+      },
+      removeHandler: channel => handlers.delete(channel),
+    },
     appService: { getInfo: () => ({ name: 'Work Board' }) },
     database,
     settingsService: new SettingsService(new SettingsRepository(database)),
@@ -127,7 +134,6 @@ test('setting executor contacts over IPC is scoped to the trusted sender and act
 test('setting the Ф‑21 office over IPC requires a trusted sender and the active database', async (t) => {
   const { handlers, event, generation } = fixture(t);
   const setOffice = handlers.get('settings:set-office');
-  assert.equal(typeof setOffice, 'function');
   const input = { office: '  Приёмная  ', generation };
   assert.equal((await setOffice({ ...event, senderFrame: {} }, input)).error.code, 'PERMISSION_DENIED');
   assert.equal((await setOffice(event, { ...input, generation: generation - 1 })).error.code, 'DATABASE_CHANGED');
@@ -144,11 +150,15 @@ test('setting the Ф‑21 office over IPC requires a trusted sender and the acti
 
 test('IPC setup and shutdown are idempotent and release all channels', (t) => {
   const { manager, handlers } = fixture(t);
+  const expected = new Set([IPC_CHANNELS.app.getInfo, IPC_CHANNELS.database.getStatus, ...Object.values(IPC_CHANNELS.settings)]);
   manager.init();
-  assert.equal(handlers.size, 10);
+  assert.deepEqual(new Set(handlers.keys()), expected);
   manager.shutdown();
   manager.shutdown();
   assert.equal(handlers.size, 0);
+  manager.init();
+  assert.deepEqual(new Set(handlers.keys()), expected);
+  manager.shutdown();
 });
 
 test('IPC returns safe structured failures and logs the original cause with operation context', async () => {

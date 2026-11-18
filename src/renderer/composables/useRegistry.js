@@ -1,6 +1,6 @@
 import { storeToRefs } from 'pinia';
 import { onScopeDispose, shallowRef, watch } from 'vue';
-import { localDate } from '../../shared/registry.js';
+import { INSTRUCTION_FIELDS, localDate } from '../../shared/registry.js';
 import { createRegistryStore, useClosedRegistryStore, useRegistryStore } from '../stores/registryStore.js';
 import { useAppStore } from '../stores/appStore.js';
 
@@ -30,8 +30,8 @@ export function useRegistry(suppliedApp, service, { closed = false } = {}) {
     if (closed || !store.canMutate) return false;
     closeRecord();
     selectedGeneration = app.database.generation;
-    selected.value = { id: null, controlDate: localDate(), incomingNumber: '', instructionNumber: '', documentType: '', source: '',
-      title: '', summary: '', deadline: '', extendedUntil: '', executor: '', executionMark: '' };
+    const fields = Object.fromEntries(INSTRUCTION_FIELDS.map(field => [field, '']));
+    selected.value = { ...fields, id: null, controlDate: localDate() };
     return true;
   }
 

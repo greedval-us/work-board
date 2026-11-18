@@ -4,8 +4,7 @@ import { errorMessage } from '../infrastructure/errorMessage.js';
 import { createRequestChannel } from '../infrastructure/requestScope.js';
 import { notificationService } from '../services/NotificationService.js';
 import { useAppStore } from './appStore.js';
-
-const identity = item => JSON.stringify([item.id, item.occurrence]);
+import { notificationKey, notificationReference } from '../../shared/notificationReference.js';
 
 export function createNotificationsStore({
   id = 'notifications', getApp = useAppStore, service = notificationService,
@@ -42,10 +41,10 @@ export function createNotificationsStore({
       if (delivery.value.mode === 'system') popup.value = null;
       today.value = value.today;
       items.value = value.items;
-      const active = new Map(value.items.map(item => [identity(item), item]));
+      const active = new Map(value.items.map(item => [notificationKey(item), item]));
       for (const key of shown) if (!active.has(key)) shown.delete(key);
       if (popup.value) {
-        const remaining = popup.value.items.map(item => active.get(identity(item))).filter(Boolean);
+        const remaining = popup.value.items.map(item => active.get(notificationKey(item))).filter(Boolean);
         popup.value = remaining.length ? { items: remaining } : null;
       }
     }
@@ -55,7 +54,7 @@ export function createNotificationsStore({
     function acknowledge(selected, flags) {
       if (!ready.value || disposed || !selected.length) return Promise.resolve(false);
       const source = generation.value;
-      const requested = selected.map(({ id: key, occurrence }) => ({ id: key, occurrence }));
+      const requested = selected.map(notificationReference);
       pendingWrites.value++;
       const operation = queue.then(async () => {
         if (disposed || !ready.value || generation.value !== source) return false;
@@ -81,13 +80,13 @@ export function createNotificationsStore({
     function offerPopup() {
       if (delivery.value.mode === 'system' || !canShowPopup()) return;
       const pending = items.value.filter(item => item.popupPending);
-      const fresh = pending.filter(item => !shown.has(identity(item)));
+      const fresh = pending.filter(item => !shown.has(notificationKey(item)));
       if (fresh.length) {
-        for (const item of fresh) shown.add(identity(item));
+        for (const item of fresh) shown.add(notificationKey(item));
         popup.value = { items: [...(popup.value?.items ?? []), ...fresh] };
       }
       // Retry a failed receipt on the next refresh without presenting it again.
-      const announced = pending.filter(item => shown.has(identity(item)));
+      const announced = pending.filter(item => shown.has(notificationKey(item)));
       if (announced.length && !popupWrite) {
         popupWrite = true;
         void acknowledge(announced, { popup: true }).finally(() => { popupWrite = false; });

@@ -14,7 +14,6 @@ function bridge(t, value) {
 }
 
 test('renderer decodes success values once and preserves named method payloads', async (t) => {
-  assert.equal(typeof gateway.requestDesktop, 'function');
   const calls = [];
   bridge(t, createPreloadApis({ invoke: async (...args) => {
     calls.push(args);
@@ -41,7 +40,6 @@ test('desktop service mappings expose declared aliases and preserve positional a
 });
 
 test('a main-process sqlite failure reaches the UI with a safe message and a stable code', async (t) => {
-  assert.equal(typeof gateway.requestDesktop, 'function');
   const handlers = new Map();
   registerIpcHandlers({
     ipcMain: { handle: (channel, fn) => handlers.set(channel, fn), removeHandler() {} },
@@ -59,7 +57,6 @@ test('a main-process sqlite failure reaches the UI with a safe message and a sta
 });
 
 test('transport rejection and absent named methods become safe availability errors', async (t) => {
-  assert.equal(typeof gateway.requestDesktop, 'function');
   bridge(t, { tasks: { list: async () => { throw new Error("Error invoking remote method 'tasks:list': SELECT * FROM C:\\secret\\data.sqlite"); } } });
   for (const call of [() => gateway.requestDesktop('tasks', 'list', {}), () => gateway.requestDesktop('tasks', 'remove', {}), () => gateway.requestDesktop('missing', 'invoke', {})]) {
     await assert.rejects(call(), (error) => {
@@ -73,7 +70,6 @@ test('transport rejection and absent named methods become safe availability erro
 });
 
 test('malformed and legacy unwrapped IPC replies are rejected instead of used as data', async (t) => {
-  assert.equal(typeof gateway.requestDesktop, 'function');
   let response;
   bridge(t, { tasks: { list: async () => response } });
   for (response of [

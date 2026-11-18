@@ -17,6 +17,16 @@ async function fixture(t) {
   return { directory, filePath };
 }
 
+function mockResolvedAlias(t, alias, target) {
+  const realpath = filesystemSync.realpathSync;
+  const resolver = t.mock.method(filesystemSync, 'realpathSync', filePath => filePath === alias ? target : realpath(filePath));
+  syncBuiltinESMExports();
+  t.after(() => {
+    resolver.mock.restore();
+    syncBuiltinESMExports();
+  });
+}
+
 test('atomic writes replace a complete file and leave no temporary file', async t => {
   const { directory, filePath } = await fixture(t);
   assert.equal(await writeAtomicFile(filePath, 'complete report'), filePath);
@@ -77,21 +87,14 @@ test('exclusive temporary creation failure never removes an unowned path', async
 test('database filename aliases protect companions of both the alias and resolved database', async t => {
   const alias = path.join(process.cwd(), 'alias.sqlite');
   const actual = path.join(process.cwd(), 'actual.sqlite');
-  const realpath = filesystemSync.realpathSync;
-  const resolver = t.mock.method(filesystemSync, 'realpathSync', filePath => filePath === alias ? actual : realpath(filePath));
+  mockResolvedAlias(t, alias, actual);
   const opened = t.mock.method(filesystem, 'open', async () => { throw new Error('must not write a database companion'); });
-  syncBuiltinESMExports();
-  try {
-    for (const databasePath of [alias, actual]) {
-      for (const suffix of ['', '-wal', '-shm']) {
-        await assert.rejects(writeAtomicFile(`${databasePath}${suffix}`, 'report', { getDatabasePaths: () => [alias] }), { code: 'VALIDATION' });
-      }
+  for (const databasePath of [alias, actual]) {
+    for (const suffix of ['', '-wal', '-shm']) {
+      await assert.rejects(writeAtomicFile(`${databasePath}${suffix}`, 'report', { getDatabasePaths: () => [alias] }), { code: 'VALIDATION' });
     }
-    assert.equal(opened.mock.callCount(), 0);
-  } finally {
-    resolver.mock.restore();
-    syncBuiltinESMExports();
   }
+  assert.equal(opened.mock.callCount(), 0);
 });
 
 test('database files, WAL, SHM and attachment destinations are protected through directory aliases', async t => {
@@ -101,7 +104,13 @@ test('database files, WAL, SHM and attachment destinations are protected through
   const storage = `${databasePath}.files`;
   await mkdir(storage);
   const alias = path.join(directory, 'alias');
-  await symlink(storage, alias, 'junction');
+  try {
+    await symlink(storage, alias, process.platform === 'win32' ? 'junction' : 'dir');
+  } catch (error) {
+    if (process.platform !== 'win32' || error.code !== 'EPERM') throw error;
+    t.diagnostic('Windows denied junction creation. Simulating only directory resolution for this assertion.');
+    mockResolvedAlias(t, alias, storage);
+  }
   for (const destination of [databasePath, `${databasePath}-wal`, `${databasePath}-shm`, storage, path.join(alias, 'report.txt')]) {
     await assert.rejects(writeAtomicFile(destination, 'report', { getDatabasePaths: () => [databasePath] }), { code: 'VALIDATION' });
   }

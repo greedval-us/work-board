@@ -19,16 +19,6 @@ function bridge(t, overrides = {}) {
   return useAppStore();
 }
 
-test('bootstrap loads real bridge results and clears loading state', async (t) => {
-  const store = bridge(t);
-  await store.initialize();
-  assert.equal(store.info.name, 'Work Board');
-  assert.equal(store.database.ready, true);
-  assert.equal(store.theme, 'light');
-  assert.equal(store.loading, false);
-  assert.equal(store.error, '');
-});
-
 test('theme changes only after persistence succeeds', async (t) => {
   const store = bridge(t, { settings: {
     get: async () => ({ theme: 'light' }),
@@ -178,7 +168,10 @@ test('concurrent bootstrap callers share pending work and await initialized stat
   let calls = 0;
   let finish;
   const result = new Promise(resolve => { finish = resolve; });
-  const store = bridge(t, { app: { getInfo: () => { calls++; return result; } } });
+  const store = bridge(t, {
+    app: { getInfo: () => { calls++; return result; } },
+    settings: { get: async () => ({ theme: 'dark' }) },
+  });
   const first = store.initialize();
   const second = store.initialize();
   assert.equal(store.initialized, false);
@@ -186,6 +179,11 @@ test('concurrent bootstrap callers share pending work and await initialized stat
   await Promise.all([first, second]);
   assert.equal(calls, 1);
   assert.equal(store.initialized, true);
+  assert.equal(store.info.name, 'Work Board');
+  assert.equal(store.database.ready, true);
+  assert.equal(store.theme, 'dark');
+  assert.equal(store.loading, false);
+  assert.equal(store.error, '');
 });
 
 test('failed mutations release pending operation guards', async (t) => {

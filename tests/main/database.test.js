@@ -13,6 +13,10 @@ const emptyRegistryOptions = { documentType: [], source: [], executor: [], depar
 const defaultTypography = { fontFamily: 'inter', fontSize: 14 };
 const defaultSettings = { theme: 'light', typography: defaultTypography, registryOptions: emptyRegistryOptions, executorContacts: [], office: '' };
 
+function settingsFor(database) {
+  return new SettingsService(new SettingsRepository(database));
+}
+
 function fixture(t) {
   const directory = mkdtempSync(path.join(tmpdir(), 'work-board-test-'));
   const filePath = path.join(directory, 'data', 'work-board.sqlite');
@@ -38,7 +42,7 @@ test('initializes a nested SQLite file with registry schema and settings', (t) =
 test('reopening preserves settings and does not reapply migrations', (t) => {
   const { database } = fixture(t);
   database.open();
-  const settings = new SettingsRepository(database);
+  const settings = settingsFor(database);
   assert.deepEqual(settings.get(), defaultSettings);
   settings.setTheme('dark');
   database.open();
@@ -51,7 +55,7 @@ test('reopening preserves settings and does not reapply migrations', (t) => {
 test('invalid settings cannot modify persisted data', (t) => {
   const { database } = fixture(t);
   database.open();
-  const settings = new SettingsRepository(database);
+  const settings = settingsFor(database);
   for (const theme of [null, '', 'system', {}, "dark'); DROP TABLE app_settings; --"]) {
     assert.throws(() => settings.setTheme(theme), /тема/i);
   }
@@ -61,7 +65,7 @@ test('invalid settings cannot modify persisted data', (t) => {
 test('typography is bounded, supports both font families and persists per database', (t) => {
   const { database, filePath } = fixture(t);
   database.open();
-  const settings = new SettingsRepository(database);
+  const settings = settingsFor(database);
   assert.deepEqual(settings.get().typography, defaultTypography);
   const chosen = { fontFamily: 'system', fontSize: 16 };
   assert.deepEqual(settings.setTypography({ fontFamily: 'inter', fontSize: 12 }).typography, { fontFamily: 'inter', fontSize: 12 });
@@ -82,7 +86,7 @@ test('typography is bounded, supports both font families and persists per databa
 test('unrecognized or damaged typography settings fall back to the default', (t) => {
   const { database } = fixture(t);
   database.open();
-  const settings = new SettingsRepository(database);
+  const settings = settingsFor(database);
   const write = database.connection.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)');
   for (const value of ['{', '{"fontFamily":"unknown","fontSize":20}']) {
     write.run('typography', value);
@@ -93,7 +97,7 @@ test('unrecognized or damaged typography settings fall back to the default', (t)
 test('the Ф‑21 office is stored per database and preserves executor contacts', (t) => {
   const { database, filePath } = fixture(t);
   database.open();
-  const settings = new SettingsRepository(database);
+  const settings = settingsFor(database);
   assert.equal(settings.get().office, '');
   const executor = 'Иванов';
   const department = 'Отдел контроля';
@@ -144,7 +148,7 @@ test('the Ф‑21 office is stored per database and preserves executor contacts'
 test('the legacy Ф‑21 office remains available when clearing or changing its selection', (t) => {
   const { database } = fixture(t);
   database.open();
-  const settings = new SettingsRepository(database);
+  const settings = settingsFor(database);
   const write = database.connection.prepare('INSERT INTO app_settings (key, value) VALUES (?, ?)');
   write.run('office', 'Приёмная');
   assert.equal(settings.get().office, 'Приёмная');
@@ -160,11 +164,11 @@ test('the legacy Ф‑21 office remains available when clearing or changing its 
 test('registry options stay in insertion order across database connections and reopening', (t) => {
   const { database, filePath } = fixture(t);
   database.open();
-  const settings = new SettingsService(new SettingsRepository(database));
+  const settings = settingsFor(database);
   const otherDatabase = new DatabaseService({ filePath });
   otherDatabase.open();
   try {
-    const otherSettings = new SettingsService(new SettingsRepository(otherDatabase));
+    const otherSettings = settingsFor(otherDatabase);
     settings.addRegistryOption('source', '  Канцелярия  ');
     otherSettings.addRegistryOption('source', 'Архив');
     settings.addRegistryOption('executor', 'Канцелярия');
@@ -185,7 +189,7 @@ test('registry options stay in insertion order across database connections and r
 test('invalid and case-insensitive duplicate registry options leave settings intact', (t) => {
   const { database } = fixture(t);
   database.open();
-  const settings = new SettingsService(new SettingsRepository(database));
+  const settings = settingsFor(database);
   const existing = {
     ...defaultSettings, registryOptions: { ...emptyRegistryOptions, executor: ['Отдел кадров'] },
   };
@@ -202,7 +206,7 @@ test('invalid and case-insensitive duplicate registry options leave settings int
 test('renaming and removing registry options preserves their order and saved instructions after reopening', (t) => {
   const { database } = fixture(t);
   database.open();
-  const settings = new SettingsService(new SettingsRepository(database));
+  const settings = settingsFor(database);
   const instructions = new InstructionRepository(database);
   for (const [field, values] of Object.entries({
     documentType: ['Письмо', 'Распоряжение'],
@@ -250,7 +254,7 @@ test('renaming and removing registry options preserves their order and saved ins
 test('invalid, duplicate, or stale registry option changes leave settings intact', (t) => {
   const { database } = fixture(t);
   database.open();
-  const settings = new SettingsService(new SettingsRepository(database));
+  const settings = settingsFor(database);
   settings.addRegistryOption('source', 'Канцелярия');
   const existing = settings.addRegistryOption('source', 'Архив');
 
@@ -274,7 +278,7 @@ test('legacy control type options remain stored and are excluded from active set
   const key = 'registryOptions.controlType';
   const legacyOptions = JSON.stringify(['Плановый']);
   database.connection.prepare('INSERT INTO app_settings (key, value) VALUES (?, ?)').run(key, legacyOptions);
-  const settings = new SettingsRepository(database);
+  const settings = settingsFor(database);
   assert.deepEqual(settings.get().registryOptions, emptyRegistryOptions);
   assert.throws(() => settings.addRegistryOption('controlType', 'Внеплановый'), { code: 'VALIDATION' });
   assert.throws(() => settings.updateRegistryOption('controlType', 'Плановый', 'Внеплановый'), { code: 'VALIDATION' });
@@ -286,7 +290,7 @@ test('legacy control type options remain stored and are excluded from active set
 test('executor contacts persist after reopening and follow edits and deletions in the option lists', (t) => {
   const { database } = fixture(t);
   database.open();
-  const settings = new SettingsRepository(database);
+  const settings = settingsFor(database);
   const executor = 'Иванов И. И.';
   const department = 'Отдел контроля';
   const executorPhone = '+7 900 555-01-23';
@@ -317,7 +321,7 @@ test('executor contacts persist after reopening and follow edits and deletions i
 test('adding or editing an executor saves the name and optional contacts in one transaction', (t) => {
   const { database } = fixture(t);
   database.open();
-  const settings = new SettingsRepository(database);
+  const settings = settingsFor(database);
   const executor = 'Иванов И. И.';
   const renamed = 'Иванов И. П.';
   const contact = { department: 'Отдел контроля', executorPhone: '103' };
@@ -339,6 +343,19 @@ test('adding or editing an executor saves the name and optional contacts in one 
   assert.deepEqual(updated.registryOptions.executor, [renamed]);
   assert.deepEqual(updated.executorContacts, [{ executor: renamed, department: '', executorPhone: contact.executorPhone }]);
   assert.deepEqual(settings.updateRegistryOption('executor', renamed, renamed, { department: '', executorPhone: '' }).executorContacts, []);
+});
+
+test('a failed contact write rolls back the associated executor rename', (t) => {
+  const { database } = fixture(t);
+  database.open();
+  const settings = settingsFor(database);
+  settings.addRegistryOption('department', 'Канцелярия');
+  const before = settings.addRegistryOption('executor', 'Иванов', { department: 'Канцелярия' });
+  database.connection.exec(`CREATE TRIGGER fail_contact_update BEFORE UPDATE ON app_settings
+    WHEN OLD.key = 'executorContacts' BEGIN SELECT RAISE(ABORT, 'contact write failed'); END`);
+
+  assert.throws(() => settings.updateRegistryOption('executor', 'Иванов', 'Петров'), /contact write failed/);
+  assert.deepEqual(settings.get(), before);
 });
 
 test('checkpoint schedules persist after reopening and survive partial instruction updates', (t) => {

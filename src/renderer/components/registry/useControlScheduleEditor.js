@@ -1,31 +1,28 @@
-import { computed, nextTick, shallowRef, watch, watchEffect } from 'vue';
-import { CONTROL_WEEKDAY_LABELS, getControlWeekday, moveControlCheckpoint,
-  supportsControlDayOfMonth } from '../../../shared/controlSchedule.js';
+import { computed, nextTick, shallowRef, watch } from 'vue';
+import { moveControlCheckpoint } from '../../../shared/controlSchedule.js';
 import { localDate } from '../../../shared/dates.js';
 import { errorMessage } from '../../infrastructure/errorMessage.js';
-import { controlScheduleRows, effectiveCustomDates, firstScheduledMonth, inControlPeriod as isInControlPeriod, isDate, startingMonth as initialMonth } from './controlScheduleView.js';
+import { controlScheduleRows, inControlPeriod as isInControlPeriod, isDate, startingMonth } from './controlScheduleView.js';
+import { useControlScheduleSettings } from './useControlScheduleSettings.js';
 
 // Own transient editor state; only accepted schedule edits update the parent model.
 export function useControlScheduleEditor(schedule, props, { section, customDateInput }) {
-  const customDate = shallowRef('');
   const openDate = shallowRef(isDate(props.selectedDate) ? props.selectedDate : '');
   const plannedDate = shallowRef(openDate.value);
   const moveError = shallowRef('');
   const actualDateDrafts = shallowRef({});
   const editedHistoryDate = shallowRef('');
-  const month = shallowRef(openDate.value ? openDate.value.slice(0, 7) : startingMonth(schedule.value));
-  const recurring = computed(() => schedule.value.frequency && schedule.value.frequency !== 'custom');
-  const weekly = computed(() => schedule.value.frequency === 'weekly');
-  const yearly = computed(() => schedule.value.frequency === 'yearly');
-  const dayOfMonthSupported = computed(() => supportsControlDayOfMonth(schedule.value.frequency));
-  const custom = computed(() => schedule.value.frequency === 'custom');
-  const configuredDates = computed(() => new Set(custom.value ? effectiveCustomDates(schedule.value) : []));
-  const invalidCustomDate = computed(() => [...configuredDates.value].find(date => !inControlPeriod(date)));
-  const invalidCheckpointDate = computed(() => invalidCustomDate.value || schedule.value.moves?.find(move => !inControlPeriod(move.to))?.to);
-  const duplicateDate = computed(() => configuredDates.value.has(customDate.value) || schedule.value.customDates.includes(customDate.value));
-  const canAddDate = computed(() => !props.disabled && inControlPeriod(customDate.value) && !duplicateDate.value);
-  const showPreview = computed(() => Boolean(recurring.value || configuredDates.value.size || schedule.value.marks.length || editedHistoryDate.value));
+  const month = shallowRef(openDate.value ? openDate.value.slice(0, 7) : startingMonth(schedule.value, props));
   const marksByDate = computed(() => new Map(schedule.value.marks.map(mark => [mark.date, mark])));
+  const settings = useControlScheduleSettings(schedule, props, {
+    customDateInput,
+    showMonth,
+    onRemoveDate(date) {
+      if (openDate.value === date && !marksByDate.value.get(date)?.text.trim()) toggleMark(date);
+    },
+  });
+  const showPreview = computed(() => Boolean(settings.recurring.value || settings.configuredDates.value.size
+    || schedule.value.marks.length || editedHistoryDate.value));
 
   const rows = computed(() => controlScheduleRows(schedule.value, {
     month: month.value, controlDate: props.controlDate, deadline: props.deadline, editedHistoryDate: editedHistoryDate.value, closed: props.closed,
@@ -33,92 +30,6 @@ export function useControlScheduleEditor(schedule, props, { section, customDateI
 
   function inControlPeriod(date) {
     return isInControlPeriod(date, props);
-  }
-
-  function startingMonth(value) {
-    return initialMonth(value, props);
-  }
-
-  function showFirstScheduledMonth(value) {
-    if (isDate(value.firstDate)) showMonth(firstScheduledMonth(value, props.deadline));
-  }
-
-  function selectFrequency(frequency) {
-    if (props.disabled || frequency === schedule.value.frequency) return;
-    const fixed = frequency && frequency !== 'custom';
-    const firstDate = fixed ? schedule.value.firstDate || (inControlPeriod(props.controlDate) ? props.controlDate : '') : '';
-    const updated = { ...schedule.value, frequency, firstDate, customDates: [] };
-    delete updated.moves;
-    if (!supportsControlDayOfMonth(frequency)) delete updated.dayOfMonth;
-    if (frequency !== 'weekly') delete updated.dayOfWeek;
-    if (frequency !== 'yearly') delete updated.monthOfYear;
-    schedule.value = updated;
-    customDate.value = '';
-    if (updated.dayOfMonth === undefined && updated.dayOfWeek === undefined && updated.monthOfYear === undefined) showMonth(startingMonth(updated));
-    else showFirstScheduledMonth(updated);
-  }
-
-  function selectFirstDate(date) {
-    if (props.disabled || date === schedule.value.firstDate) return;
-    const updated = { ...schedule.value, firstDate: date };
-    delete updated.moves;
-    schedule.value = updated;
-    showFirstScheduledMonth(updated);
-  }
-
-  function selectDayOfMonth(input) {
-    if (props.disabled || !dayOfMonthSupported.value || input.validity?.badInput) return;
-    const day = input.value === '' ? undefined : Number(input.value);
-    if (day !== undefined && (!Number.isInteger(day) || day < 1 || day > 31)) return;
-    setRecurrenceOverride('dayOfMonth', day, Number(schedule.value.firstDate.slice(-2)));
-  }
-
-  function selectMonthOfYear(value) {
-    if (props.disabled || !yearly.value) return;
-    const monthNumber = value === '' ? undefined : Number(value);
-    if (monthNumber !== undefined && (!Number.isInteger(monthNumber) || monthNumber < 1 || monthNumber > 12)) return;
-    setRecurrenceOverride('monthOfYear', monthNumber, Number(schedule.value.firstDate.slice(5, 7)));
-  }
-
-  function selectDayOfWeek(value) {
-    if (props.disabled || !weekly.value) return;
-    const day = value === '' ? undefined : Number(value);
-    if (day !== undefined && !Object.hasOwn(CONTROL_WEEKDAY_LABELS, day)) return;
-    setRecurrenceOverride('dayOfWeek', day, getControlWeekday(schedule.value.firstDate));
-  }
-
-  function setRecurrenceOverride(field, value, automaticValue) {
-    const previous = schedule.value;
-    if (value === previous[field]) return;
-    const anchorChanged = (value ?? automaticValue) !== (previous[field] ?? automaticValue);
-    const updated = { ...previous };
-    if (value === undefined) delete updated[field];
-    else updated[field] = value;
-    if (anchorChanged) delete updated.moves;
-    schedule.value = updated;
-    if (anchorChanged) showFirstScheduledMonth(updated);
-  }
-
-  function addCustomDate() {
-    if (!canAddDate.value) return;
-    const date = customDate.value;
-    schedule.value = { ...schedule.value, customDates: [...schedule.value.customDates, date].sort() };
-    customDate.value = '';
-    showMonth(date.slice(0, 7));
-    customDateInput.value?.focus();
-  }
-
-  function removeCustomDate(date) {
-    if (props.disabled) return;
-    const originalDate = schedule.value.moves?.find(move => move.to === date)?.from ?? date;
-    const updated = { ...schedule.value, customDates: schedule.value.customDates.filter(value => value !== originalDate) };
-    if (updated.moves) {
-      updated.moves = updated.moves.filter(move => move.from !== originalDate);
-      if (!updated.moves.length) delete updated.moves;
-    }
-    schedule.value = updated;
-    if (openDate.value === date && !marksByDate.value.get(date)?.text.trim()) toggleMark(date);
-    customDateInput.value?.focus();
   }
 
   function showMonth(value) {
@@ -227,17 +138,9 @@ export function useControlScheduleEditor(schedule, props, { section, customDateI
   }
 
   watch(() => props.selectedDate, focusSelectedDate);
-  watchEffect(() => {
-    let message = '';
-    if (custom.value && !configuredDates.value.size) message = 'Добавьте хотя бы одну дату промежуточного контроля.';
-    if (invalidCustomDate.value) message = 'Удалите даты вне периода контроля.';
-    customDateInput.value?.setCustomValidity(message);
-  });
 
   return {
-    customDate, openDate, plannedDate, moveError, month, recurring, weekly, yearly, dayOfMonthSupported, custom, configuredDates,
-    invalidCheckpointDate, duplicateDate, canAddDate, showPreview, marksByDate, rows,
-    inControlPeriod, selectFrequency, selectFirstDate, selectDayOfMonth, selectMonthOfYear, selectDayOfWeek, addCustomDate, removeCustomDate,
+    ...settings, openDate, plannedDate, moveError, month, showPreview, marksByDate, rows, inControlPeriod,
     showMonth, selectMonth, toggleMark, actualDateDraft, updateActualDate, updateMark,
     updatePlannedDate, moveCheckpoint, cancelMove, focusSelectedDate,
   };

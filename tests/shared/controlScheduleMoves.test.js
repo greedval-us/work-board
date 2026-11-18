@@ -53,7 +53,6 @@ test('weekly override moves follow actual weekday occurrences without shifting l
 });
 
 test('moving an effective date twice retains one original anchor and can restore that anchor', () => {
-  assert.equal(typeof control.moveControlCheckpoint, 'function');
   const moved = control.moveControlCheckpoint(monthly, '2026-02-28', '2026-03-02', bounds);
   const again = control.moveControlCheckpoint(moved, '2026-03-02', '2026-03-03', bounds);
   assert.deepEqual(again, { ...monthly, moves: [{ from: '2026-02-28', to: '2026-03-03' }] });
@@ -63,7 +62,6 @@ test('moving an effective date twice retains one original anchor and can restore
 });
 
 test('moving a marked checkpoint preserves its factual date including legacy fallback dates', () => {
-  assert.equal(typeof control.moveControlCheckpoint, 'function');
   const schedule = { ...monthly, marks: [{ date: '2026-02-28', text: 'Отчёт получен' }] };
   const moved = control.moveControlCheckpoint(schedule, '2026-02-28', '2026-03-02', bounds);
   assert.deepEqual(moved.marks, [{ date: '2026-03-02', text: 'Отчёт получен', actualDate: '2026-02-28' }]);
@@ -102,7 +100,6 @@ test('invalid factual dates and malformed or colliding move schedules are reject
 });
 
 test('moving rejects missing sources, destination collisions and dates outside the control period', () => {
-  assert.equal(typeof control.moveControlCheckpoint, 'function');
   const schedule = { ...monthly, marks: [{ date: '2026-02-02', text: 'История' }] };
   for (const [from, to] of [
     ['2026-01-30', '2026-02-01'], ['2026-01-31', '2026-02-28'], ['2026-01-31', '2026-02-02'],
@@ -129,7 +126,6 @@ test('shortening a deadline retains moved marked history but cannot revive an in
 });
 
 test('custom moves preserve the configured source and use the effective date for completion', () => {
-  assert.equal(typeof control.moveControlCheckpoint, 'function');
   const moved = control.moveControlCheckpoint({ frequency: 'custom', customDates: ['2026-02-01', '2026-02-02'] }, '2026-02-01', '2026-01-31', bounds);
   assert.deepEqual(moved.customDates, ['2026-02-01', '2026-02-02']);
   assert.equal(control.getNextControlCheckpoint(moved, bounds.deadline), '2026-01-31');

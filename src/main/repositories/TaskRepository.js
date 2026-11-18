@@ -1,7 +1,11 @@
 import { validateDate, validateId, validateTask, ValidationError } from '../../shared/registry.js';
-import { firstTaskOccurrence, isTaskOccurrence, taskOccurrenceDates } from '../../shared/taskRecurrence.js';
+import { firstTaskOccurrence } from '../../shared/taskRecurrence.js';
+import { validateDateRange } from '../../shared/validation.js';
+import {
+  listTaskOccurrences, occurrenceCompletion, occurrenceView, originalDateForMove, originalOccurrenceDate, planOccurrenceUpdate,
+  validateOccurrenceCompletion,
+} from '../domain/taskOccurrences.js';
 import { AppError } from '../utils/AppError.js';
-import { validateDateRange, validateRecord } from '../../shared/validation.js';
 
 const COLUMNS = 'id, title, date, description, priority, completed, recurrence, created_at AS createdAt, updated_at AS updatedAt';
 const MOVE_COLUMNS = 'task_id AS taskId, original_date AS originalDate, target_date AS date';
@@ -10,22 +14,6 @@ function fromRow(row) {
   if (!row) return null;
   const { recurrence, ...task } = row;
   return { ...task, completed: Boolean(task.completed), ...(recurrence ? { recurrence: JSON.parse(recurrence) } : {}) };
-}
-
-function occurrenceView(task, date, completed, originalDate = date) {
-  return { ...task, date, seriesDate: task.date, completed, ...(date === originalDate ? {} : { originalDate }) };
-}
-
-function validateCompletion(value) {
-  const { date, completed } = validateRecord(value, 'Отметка повторения задачи');
-  validateDate(date, 'Дата повторения задачи');
-  if (typeof completed !== 'boolean') throw new ValidationError('Выполнение задачи: укажите да или нет.');
-  return { date, completed };
-}
-
-function requireOccurrence(originalDate) {
-  if (!originalDate) throw new ValidationError('На эту дату повторение задачи не запланировано.');
-  return originalDate;
 }
 
 function taskValues({ title, date, description, priority, completed, recurrence }) {
@@ -57,37 +45,15 @@ export class TaskRepository {
       WHERE (date <= ? AND (date >= ? OR recurrence <> ''))
         OR id IN (SELECT task_id FROM calendar_task_moves WHERE target_date BETWEEN ? AND ?)`)
       .all(to, from, from, to).map(fromRow);
-    const moveRows = connection.prepare(`SELECT ${MOVE_COLUMNS} FROM calendar_task_moves
+    const moves = connection.prepare(`SELECT ${MOVE_COLUMNS} FROM calendar_task_moves
       WHERE original_date BETWEEN ? AND ? OR target_date BETWEEN ? AND ?`).all(from, to, from, to);
-    const moves = new Map();
-    for (const move of moveRows) {
-      if (!moves.has(move.taskId)) moves.set(move.taskId, []);
-      moves.get(move.taskId).push(move);
-    }
-    const completions = new Set(connection.prepare(`SELECT task_id AS id, date FROM calendar_task_completions
+    const completions = connection.prepare(`SELECT task_id AS taskId, date FROM calendar_task_completions
       WHERE date BETWEEN ? AND ?
       UNION ALL
-      SELECT c.task_id AS id, c.date FROM calendar_task_moves AS m
+      SELECT c.task_id AS taskId, c.date FROM calendar_task_moves AS m
       JOIN calendar_task_completions AS c ON c.task_id = m.task_id AND c.date = m.original_date
-      WHERE m.target_date BETWEEN ? AND ?`).all(from, to, from, to).map(({ id, date }) => `${id}:${date}`));
-    const occurrences = [];
-    for (const task of tasks) {
-      if (!task.recurrence) {
-        occurrences.push(task);
-        continue;
-      }
-      const taskMoves = moves.get(task.id) ?? [];
-      const movedOriginals = new Set(taskMoves.map(move => move.originalDate));
-      for (const date of taskOccurrenceDates(task, { from, to })) {
-        if (!movedOriginals.has(date)) occurrences.push(occurrenceView(task, date, completions.has(`${task.id}:${date}`)));
-      }
-      for (const { date, originalDate } of taskMoves) {
-        if (date >= from && date <= to) {
-          occurrences.push(occurrenceView(task, date, completions.has(`${task.id}:${originalDate}`), originalDate));
-        }
-      }
-    }
-    return occurrences.sort((left, right) => left.date.localeCompare(right.date) || left.id - right.id);
+      WHERE m.target_date BETWEEN ? AND ?`).all(from, to, from, to);
+    return listTaskOccurrences(tasks, moves, completions, { from, to });
   }
 
   get(id, date) {
@@ -96,7 +62,7 @@ export class TaskRepository {
     const connection = this.database.connection;
     const task = fromRow(connection.prepare(`SELECT ${COLUMNS} FROM calendar_tasks WHERE id = ?`).get(id));
     if (!task?.recurrence || date === undefined) return task;
-    const originalDate = this.#findOriginalDate(task, date);
+    const originalDate = originalOccurrenceDate(task, date, this.#movesAt(id, date));
     if (!originalDate) return null;
     const completed = connection.prepare('SELECT 1 FROM calendar_task_completions WHERE task_id = ? AND date = ?').get(id, originalDate);
     return occurrenceView(task, date, Boolean(completed), originalDate);
@@ -125,41 +91,22 @@ export class TaskRepository {
     const data = validateTask({ ...existing, ...changes });
     const connection = this.database.connection;
     const moves = existing.recurrence ? connection.prepare(`SELECT ${MOVE_COLUMNS} FROM calendar_task_moves WHERE task_id = ?`).all(id) : [];
-    const keptMoves = data.recurrence ? moves.filter(move => isTaskOccurrence(data, move.originalDate)) : [];
-    const keptOriginals = new Set(keptMoves.map(move => move.originalDate));
-    if (keptMoves.some(move => !keptOriginals.has(move.date) && isTaskOccurrence(data, move.date))) {
-      throw new ValidationError('Новый график добавляет повторение на дату переноса этой задачи. Сначала выберите другую дату переноса.');
-    }
-    let completion;
-    let occurrenceDate;
-    if (occurrence !== undefined) {
-      const { date, completed } = validateCompletion(occurrence);
-      const keptMove = keptMoves.find(move => move.date === date);
-      const hadMove = moves.some(move => move.date === date);
-      const isUnmovedDate = data.recurrence && !hadMove && !keptOriginals.has(date) && isTaskOccurrence(data, date);
-      const scheduledDate = isUnmovedDate ? date : undefined;
-      completion = { date: requireOccurrence(keptMove?.originalDate ?? scheduledDate), completed };
-      occurrenceDate = date;
-    } else if (data.recurrence && !existing.recurrence && data.completed && isTaskOccurrence(data, existing.date)) {
-      completion = { date: existing.date, completed: true };
-    }
+    const { removedMoves, completion } = planOccurrenceUpdate(existing, data, moves, occurrence);
     connection.prepare(`UPDATE calendar_tasks SET title = ?, date = ?, description = ?,
       priority = ?, completed = ?, recurrence = ?, updated_at = ? WHERE id = ?`)
       .run(...taskValues(data), new Date().toISOString(), id);
-    for (const { originalDate } of moves) {
-      if (!keptOriginals.has(originalDate)) this.#removeMove(id, originalDate);
-    }
+    for (const { originalDate } of removedMoves) this.#removeMove(id, originalDate);
     if (completion) this.#writeCompletion(id, completion);
-    return this.get(id, occurrenceDate);
+    return this.get(id, occurrence?.date);
   }
 
   updateOccurrence(id, date, completed) {
     const existing = this.get(id);
     if (!existing) throw new AppError('Задача не найдена.', 'NOT_FOUND');
-    validateCompletion({ date, completed });
-    const originalDate = requireOccurrence(this.#findOriginalDate(existing, date));
-    this.#writeCompletion(id, { date: originalDate, completed });
-    return occurrenceView(existing, date, completed, originalDate);
+    const requested = validateOccurrenceCompletion({ date, completed });
+    const completion = occurrenceCompletion(existing, this.#movesAt(id, date), requested);
+    this.#writeCompletion(id, completion);
+    return occurrenceView(existing, date, completed, completion.date);
   }
 
   moveOccurrence(id, from, to) {
@@ -167,12 +114,8 @@ export class TaskRepository {
     validateDate(to, 'Новая дата повторения');
     const task = this.get(id);
     if (!task) throw new AppError('Задача не найдена.', 'NOT_FOUND');
-    if (!task.recurrence) throw new ValidationError('Перенос доступен для повторяющейся задачи.');
-    const originalDate = requireOccurrence(this.#findOriginalDate(task, from));
+    const originalDate = originalDateForMove(task, this.#movesAt(id, from, to), from, to);
     if (from === to) return this.get(id, to);
-    if (this.#findOriginalDate(task, to)) {
-      throw new ValidationError('На выбранную дату уже запланировано другое повторение этой задачи.');
-    }
     if (to === originalDate) {
       this.#removeMove(id, originalDate);
     } else {
@@ -182,15 +125,9 @@ export class TaskRepository {
     return this.get(id, to);
   }
 
-  #findOriginalDate(task, date) {
-    if (!task.recurrence) return undefined;
-    const connection = this.database.connection;
-    const move = connection.prepare('SELECT original_date AS originalDate FROM calendar_task_moves WHERE task_id = ? AND target_date = ?')
-      .get(task.id, date);
-    if (move) return move.originalDate;
-    const movedAway = connection.prepare('SELECT 1 FROM calendar_task_moves WHERE task_id = ? AND original_date = ?').get(task.id, date);
-    if (!movedAway && isTaskOccurrence(task, date)) return date;
-    return undefined;
+  #movesAt(id, from, to = from) {
+    return this.database.connection.prepare(`SELECT ${MOVE_COLUMNS} FROM calendar_task_moves WHERE task_id = ? AND original_date IN (?, ?)
+      UNION SELECT ${MOVE_COLUMNS} FROM calendar_task_moves WHERE task_id = ? AND target_date IN (?, ?)`).all(id, from, to, id, from, to);
   }
 
   #removeMove(id, originalDate) {

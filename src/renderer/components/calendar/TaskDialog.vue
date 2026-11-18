@@ -2,11 +2,9 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, shallowRef } from 'vue';
 import { Trash2, X } from 'lucide-vue-next';
 import { TASK_PRIORITIES } from '../../../shared/registry.js';
-import { CONTROL_WEEKDAY_LABELS, supportsControlDayOfMonth } from '../../../shared/controlSchedule.js';
-import { TASK_RECURRENCE_FREQUENCIES } from '../../../shared/taskRecurrence.js';
 import { DATE_LIMITS } from '../../../shared/constants/dates.js';
 import { formatDate } from '../../../shared/dates.js';
-import { CALENDAR_MONTHS } from '../../constants/calendar.js';
+import TaskRecurrenceEditor from './TaskRecurrenceEditor.vue';
 import { useTaskEditor } from './useTaskEditor.js';
 import { createDialogMotion } from '../../infrastructure/dialogMotion.js';
 
@@ -16,12 +14,9 @@ const props = defineProps({
   moveTaskOccurrence: { type: Function, required: true },
 });
 const emit = defineEmits(['close']);
-const { draft, recurring, occurrenceDate, occurrenceCompleted, occurrenceAvailable, firstOccurrence,
+const { draft, recurring, occurrenceDate, occurrenceCompleted, occurrenceAvailable,
   movableOccurrence, dirty, busy, error, save, remove, moveOccurrence } = useTaskEditor(props);
-const customDate = shallowRef('');
 const moveDate = shallowRef(occurrenceDate);
-const canAddCustomDate = computed(() => Boolean(draft.date && customDate.value > draft.date
-  && !draft.recurrence.customDates.includes(customDate.value)));
 const dialog = shallowRef(null);
 const confirmation = shallowRef(null);
 const form = shallowRef(null);
@@ -41,16 +36,6 @@ let resolveClose;
 let finishingClose;
 let confirmationIntent = 0;
 let disposed = false;
-
-function addCustomDate() {
-  if (!canAddCustomDate.value || fieldsDisabled.value) return;
-  draft.recurrence.customDates = [...draft.recurrence.customDates, customDate.value].sort();
-  customDate.value = '';
-}
-
-function removeCustomDate(date) {
-  draft.recurrence.customDates = draft.recurrence.customDates.filter(candidate => candidate !== date);
-}
 
 function settleClose(value) {
   resolveClose?.(value);
@@ -198,52 +183,8 @@ defineExpose({ requestClose });
           <label class="calendar-field">Срочность<select v-model="draft.priority" name="task-priority"><option v-for="(label, value) in TASK_PRIORITIES" :key="value" :value="value">{{ label }}</option></select></label>
         </div>
         <label class="calendar-field">Описание<textarea v-model="draft.description" name="task-description" rows="5" placeholder="Подробности и заметки" /></label>
-        <div class="calendar-task-recurrence">
-          <div class="calendar-recurrence-fields">
-            <label class="calendar-field">Повторение
-              <select v-model="draft.recurrence.frequency" name="task-recurrence">
-                <option v-for="(label, value) in TASK_RECURRENCE_FREQUENCIES" :key="value" :value="value">{{ label }}</option>
-              </select>
-            </label>
-            <label v-if="draft.recurrence.frequency === 'weekly'" class="calendar-field">День недели
-              <select v-model.number="draft.recurrence.dayOfWeek" name="task-day-of-week">
-                <option value="">Как в дате начала</option>
-                <option v-for="(label, day) in CONTROL_WEEKDAY_LABELS" :key="day" :value="day">{{ label }}</option>
-              </select>
-            </label>
-            <label v-if="supportsControlDayOfMonth(draft.recurrence.frequency)" class="calendar-field">День месяца
-              <input v-model.number="draft.recurrence.dayOfMonth" name="task-day-of-month" type="number"
-                min="1" max="31" step="1" inputmode="numeric" placeholder="Как в дате начала" />
-            </label>
-            <label v-if="draft.recurrence.frequency === 'yearly'" class="calendar-field">Месяц
-              <select v-model.number="draft.recurrence.monthOfYear" name="task-month-of-year">
-                <option value="">Как в дате начала</option>
-                <option v-for="(label, index) in CALENDAR_MONTHS" :key="label" :value="index + 1">{{ label }}</option>
-              </select>
-            </label>
-          </div>
-          <p v-if="firstOccurrence && firstOccurrence !== draft.date" class="calendar-recurrence-help">
-            Первая задача по графику — {{ formatDate(firstOccurrence) }}.
-          </p>
-          <div v-if="draft.recurrence.frequency === 'custom'" class="calendar-recurrence-custom">
-            <p class="calendar-recurrence-help">Дата начала уже входит в график. Можно добавить следующие даты.</p>
-            <div class="calendar-custom-date">
-              <label class="calendar-field">Дополнительная дата
-                <input v-model="customDate" name="task-custom-date" type="date" :min="draft.date || DATE_LIMITS.MIN"
-                  :max="DATE_LIMITS.MAX" @keydown.enter.prevent="addCustomDate" />
-              </label>
-              <button type="button" class="calendar-button" :disabled="!canAddCustomDate" @click="addCustomDate">Добавить дату</button>
-            </div>
-            <ul v-if="draft.recurrence.customDates.length" class="calendar-recurrence-dates">
-              <li v-for="date in draft.recurrence.customDates" :key="date">
-                <time :datetime="date">{{ formatDate(date) }}</time>
-                <button type="button" class="calendar-remove-recurrence-date" :aria-label="`Убрать дату ${formatDate(date)}`" @click="removeCustomDate(date)">
-                  <X :size="13" aria-hidden="true" />
-                </button>
-              </li>
-            </ul>
-          </div>
-        </div>
+        <TaskRecurrenceEditor :model-value="draft.recurrence" :start-date="draft.date" :disabled="fieldsDisabled"
+          @update:model-value="Object.assign(draft.recurrence, $event)" />
         <label v-if="!recurring" class="calendar-completion-field"><input v-model="draft.completed" name="task-completed" type="checkbox" />Задача выполнена</label>
         <label v-else-if="occurrenceAvailable" class="calendar-completion-field">
           <input v-model="occurrenceCompleted" name="task-completed" type="checkbox" />Выполнено за {{ formatDate(occurrenceDate) }}
