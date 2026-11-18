@@ -46,7 +46,7 @@ export function createControlCardStore({ app: suppliedApp, service = registrySer
       } finally { exporting.value = false; }
     }
 
-    watch(() => [app.database?.ready, app.database?.generation], reset, { flush: 'sync' });
+    watch([() => app.database?.ready, () => app.database?.generation], reset, { flush: 'sync' });
     onScopeDispose(() => { active = false; reset(); });
 
     return { exporting, error, notice, unopenedExportPath, exportCard, reset };

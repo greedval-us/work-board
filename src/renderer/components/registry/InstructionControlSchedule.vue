@@ -21,7 +21,7 @@ const customDateInput = useTemplateRef('customDateInput');
 const sectionId = useId();
 const dayHelpId = useId();
 const {
-  customDate, openDate, plannedDate, moveError, month, recurring, weekly, yearly, dayOfMonthSupported, custom, configuredDates,
+  customDate, openDate, plannedDate, plannedDateBounds, moveError, month, recurring, weekly, yearly, dayOfMonthSupported, custom, configuredDates,
   invalidCheckpointDate, duplicateDate, canAddDate, showPreview, marksByDate, rows,
   inControlPeriod, selectFrequency, selectFirstDate, selectDayOfMonth, selectMonthOfYear, selectDayOfWeek, addCustomDate, removeCustomDate,
   showMonth, selectMonth, toggleMark, actualDateDraft, updateActualDate, updateMark,
@@ -128,7 +128,7 @@ defineExpose({ focusSelectedDate });
                 <label class="registry-field">
                   <span>Плановая дата контроля</span>
                   <input name="control-planned-date" type="date" :value="plannedDate" :readonly="props.disabled"
-                    :min="props.controlDate || DATE_LIMITS.MIN" :max="props.deadline || DATE_LIMITS.MAX"
+                    v-bind="plannedDateBounds"
                     @input="updatePlannedDate($event.target.value)" @keydown.enter.prevent="moveCheckpoint(row)" />
                 </label>
                 <button type="button" class="registry-button control-schedule-move" :disabled="props.disabled || !plannedDate || plannedDate === row.date"

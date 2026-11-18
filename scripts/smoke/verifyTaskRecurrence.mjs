@@ -36,22 +36,25 @@ export async function verifyTaskRecurrence(driver, { today }, generation) {
   await fill('[name=task-title]', { 0: title });
   const frequencies = await js(`[...document.querySelector('${recurrence}').options].map(option => option.value)`);
   for (const value of ['', 'weekly', 'monthly', 'quarterly', 'yearly', 'custom']) assert.ok(frequencies.includes(value));
+  await js(`document.querySelector('${card} [name=task-completed]').click()`);
   await fill(recurrence, { 0: 'weekly' });
   const weekday = getControlWeekday(today);
   await fill('[name=task-day-of-week]', { 0: String(weekday) });
+  assert.equal(await js(`document.querySelector('${card} [name=task-completed]').checked`), true);
   await submit();
 
   const { id } = (await api('calendar', 'day', { date: today, generation })).tasks.find(task => task.title === title);
   try {
     const series = await api('tasks', 'get', { id, generation });
     assert.deepEqual(series.recurrence, { frequency: 'weekly', dayOfWeek: weekday });
+    assert.equal((await occurrence(id, today)).completed, true);
     assert.equal((await occurrence(id, future)).completed, false);
 
     const checkbox = `.calendar-task-card:has(strong[title="${title}"]) .calendar-task-checkbox`;
     await wait(`document.querySelector(${JSON.stringify(checkbox)})?.matches(':enabled')`);
     await js(`document.querySelector(${JSON.stringify(checkbox)}).click()`);
-    await wait(`document.querySelector(${JSON.stringify(checkbox)})?.checked === true`);
-    assert.equal((await occurrence(id, today)).completed, true);
+    await wait(`document.querySelector(${JSON.stringify(checkbox)})?.checked === false`);
+    assert.equal((await occurrence(id, today)).completed, false);
     assert.equal((await occurrence(id, future)).completed, false);
 
     await openDayTask(id, future);
@@ -69,7 +72,7 @@ export async function verifyTaskRecurrence(driver, { today }, generation) {
     assert.equal((await occurrence(id, movedDate)).originalDate, future);
     assert.equal((await occurrence(id, movedDate)).completed, true);
     assert.equal((await occurrence(id, following)).completed, false);
-    assert.equal((await occurrence(id, today)).completed, true);
+    assert.equal((await occurrence(id, today)).completed, false);
     assert.deepEqual((await api('tasks', 'get', { id, generation })).recurrence, series.recurrence);
 
     await openDayTask(id, movedDate);
@@ -80,6 +83,9 @@ export async function verifyTaskRecurrence(driver, { today }, generation) {
 
     await openDayTask(id, today);
     await fill(recurrence, { 0: 'custom' });
+    await fill('[name=task-custom-date]', { 0: '99999-01-01' });
+    assert.equal(await js(`document.querySelector('${card} .calendar-recurrence-custom button').disabled`), true,
+      'a five-digit year cannot be appended to the schedule');
     await fill('[name=task-custom-date]', { 0: extra });
     await click('Добавить дату', `${card} button`);
     await submit();

@@ -44,7 +44,7 @@ export function createCalendarStore({ id = 'calendar', getApp = useAppStore, ser
         const source = generation.value;
         error.value = '';
         if (!ready.value) { clear(); loading.value = false; return; }
-        if (!force && last?.key === key) {
+        if (!force && last?.key === key && !requests.hasPending(key)) {
           apply(last.value);
           loading.value = false;
           return last.value;
@@ -54,11 +54,11 @@ export function createCalendarStore({ id = 'calendar', getApp = useAppStore, ser
         const matchesSelection = () => ready.value && key === keyFor(selection.value);
         const current = () => ticket.isCurrent() && matchesSelection();
         try {
-          return await requests.run(key, async () => {
+          return await requests.run(key, async accepts => {
             const value = await read(selected, source);
             // Publish before the pending entry is released, including when a
             // newer caller returned to this same still-pending selection.
-            if (requests.accepts(key) && matchesSelection()) { last = { key, value }; apply(value); }
+            if (accepts() && matchesSelection()) { last = { key, value }; apply(value); }
             return value;
           });
         } catch (cause) {

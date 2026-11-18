@@ -9,8 +9,8 @@ const FAILURE_RULES = Object.freeze([
   { codes: ['ENOENT', 'SQLITE_CANTOPEN'], sqlite: [SQLITE_RESULT.CANNOT_OPEN], publicCode: ERROR_CODES.DATABASE_UNAVAILABLE },
 ]);
 
-export function publicError(error) {
-  if (error instanceof CleanupError) return publicError(error.cause);
+export function publicError(error, fallbackCode = ERROR_CODES.UNEXPECTED) {
+  if (error instanceof CleanupError) return publicError(error.cause, fallbackCode);
   if (error instanceof AppError && isErrorCode(error.code)) {
     return { code: error.code, message: error.publicMessage };
   }
@@ -21,6 +21,6 @@ export function publicError(error) {
   // node:sqlite uses ERR_SQLITE_ERROR and a numeric (possibly extended) errcode.
   const sqliteCode = Number.isInteger(error?.errcode) ? error.errcode & SQLITE_PRIMARY_CODE_MASK : null;
   const matched = FAILURE_RULES.find(rule => rule.codes.includes(error?.code) || rule.sqlite.includes(sqliteCode));
-  const code = matched?.publicCode ?? ERROR_CODES.UNEXPECTED;
+  const code = matched?.publicCode ?? fallbackCode;
   return { code, message: defaultErrorMessage(code) };
 }

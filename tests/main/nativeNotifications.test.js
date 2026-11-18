@@ -252,6 +252,24 @@ test('delivery errors from an old database are cleared when selecting an empty d
   assert.equal(f.scheduler.getStatus().error, '');
 });
 
+test('switching databases closes the old reminder even while the new database cannot be read', t => {
+  const f = fixture(t);
+  f.task(); f.scheduler.start();
+  const old = f.shown[0];
+  old.emit('show');
+  f.database.replace({ filePath: path.join(f.directory, 'next.sqlite'), create: true });
+  f.task({ title: 'Срок в новой базе' });
+  const unavailable = t.mock.method(f.database.connection, 'prepare', () => { throw new Error('temporarily busy'); });
+  f.scheduler.check();
+  assert.equal(old.closeCount, 1);
+  assert.equal(old.listenerCount('click'), 0);
+  assert.match(f.scheduler.getStatus().error, /проверить/i);
+  unavailable.mock.restore();
+  f.scheduler.check();
+  assert.equal(f.shown.length, 2);
+  assert.match(f.shown[1].options.body, /Срок в новой базе/);
+});
+
 test('a displayed toast is not shown again when revalidating its delivery temporarily fails', t => {
   const f = fixture(t);
   f.task(); f.scheduler.start();

@@ -112,6 +112,24 @@ for (const kind of ['missing', 'foreign']) {
   });
 }
 
+test('a locked candidate reports a retryable error and opens normally after the lock is released', async t => {
+  let selectedPath;
+  const state = fixture(t, { showOpenDialog: async () => ({ filePaths: [selectedPath] }) });
+  selectedPath = path.join(state.directory, 'temporarily-locked.sqlite');
+  const candidate = new DatabaseService({ filePath: selectedPath });
+  candidate.open();
+  candidate.close();
+
+  const before = snapshot(state);
+  const locker = new DatabaseSync(selectedPath);
+  try {
+    locker.exec('PRAGMA journal_mode = DELETE; BEGIN EXCLUSIVE');
+    await assert.rejects(state.service.open(), { code: 'DATABASE_LOCKED' });
+    assertUnchanged(state, before);
+  } finally { locker.close(); }
+  assert.equal((await state.service.open()).status.filePath, selectedPath);
+});
+
 for (const mode of ['create', 'open']) {
   test(`a successful ${mode} selection persists the exact path and restores its data in a fresh service`, async (t) => {
     let selectedPath;

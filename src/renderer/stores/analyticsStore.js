@@ -24,24 +24,31 @@ export function createAnalyticsStore({ getApp = useAppStore, service = analytics
     async function refresh({ force = false, keepData = false } = {}) {
       if (!ready.value) { requests.invalidate(); data.value = null; loading.value = false; return Promise.resolve(false); }
       const key = keyFor();
+      const pending = requests.hasPending(key);
+      const cached = loadedKey === key && data.value !== null;
       const ticket = requests.issue(key);
       error.value = '';
-      if (!force && loadedKey === key && data.value) { loading.value = false; return true; }
+      if (!force && !pending && cached) { loading.value = false; return true; }
       const request = { filters: { ...appliedFilters.value }, generation: app.database.generation, page };
-      const current = () => ticket.isCurrent() && ready.value && keyFor() === key;
-      const accepts = () => requests.accepts(key) && ready.value && keyFor() === key;
+      const matchesSelection = () => ready.value && keyFor() === key;
       loading.value = true;
-      if (!keepData) data.value = null;
+      if (!keepData && !(pending && cached)) data.value = null;
       try {
-        const result = await requests.run(key, () => accepts() ? service.summary(request) : null);
-        if (!result || !current()) return false;
-        if (result.instructions) page = result.instructions.page;
-        loadedKey = keyFor();
-        executorOptions.value = result.executorOptions ?? executorOptions.value;
-        data.value = result;
-        return true;
-      } catch (cause) { if (current()) error.value = errorMessage(cause, 'Не удалось загрузить аналитику.'); return false; }
-      finally {
+        const published = await requests.run(key, async accepts => {
+          if (!accepts() || !matchesSelection()) return false;
+          const result = await service.summary(request);
+          if (!result || !accepts() || !matchesSelection()) return false;
+          if (result.instructions) page = result.instructions.page;
+          loadedKey = keyFor();
+          executorOptions.value = result.executorOptions ?? executorOptions.value;
+          data.value = result;
+          return true;
+        });
+        return published && ticket.isCurrent();
+      } catch (cause) {
+        if (ticket.isCurrent() && matchesSelection()) error.value = errorMessage(cause, 'Не удалось загрузить аналитику.');
+        return false;
+      } finally {
         // The accepted response can clamp the requested page and change the key.
         if (ticket.isCurrent()) loading.value = false;
       }

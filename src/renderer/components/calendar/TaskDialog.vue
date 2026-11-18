@@ -14,7 +14,7 @@ const props = defineProps({
   moveTaskOccurrence: { type: Function, required: true },
 });
 const emit = defineEmits(['close']);
-const { draft, recurring, occurrenceDate, occurrenceCompleted, occurrenceAvailable,
+const { draft, recurring, occurrenceDate, completionDate, occurrenceCompleted, occurrenceAvailable,
   movableOccurrence, dirty, busy, error, save, remove, moveOccurrence } = useTaskEditor(props);
 const moveDate = shallowRef(occurrenceDate);
 const dialog = shallowRef(null);
@@ -187,7 +187,7 @@ defineExpose({ requestClose });
           @update:model-value="Object.assign(draft.recurrence, $event)" />
         <label v-if="!recurring" class="calendar-completion-field"><input v-model="draft.completed" name="task-completed" type="checkbox" />Задача выполнена</label>
         <label v-else-if="occurrenceAvailable" class="calendar-completion-field">
-          <input v-model="occurrenceCompleted" name="task-completed" type="checkbox" />Выполнено за {{ formatDate(occurrenceDate) }}
+          <input v-model="occurrenceCompleted" name="task-completed" type="checkbox" />Выполнено за {{ formatDate(completionDate) }}
         </label>
         <section v-if="movableOccurrence" class="calendar-occurrence-move" aria-labelledby="calendar-occurrence-move-title">
           <h3 id="calendar-occurrence-move-title">Перенос одного повторения</h3>

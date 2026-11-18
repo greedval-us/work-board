@@ -53,12 +53,13 @@ export class NativeNotificationScheduler {
     if (!this.#running || this.#checking) return;
     this.#checking = true;
     try {
-      const { ready, generation } = this.database.getStatus();
+      const { ready, generation } = this.database.connectionState;
       if (!ready) { this.#clearScope(); return; }
+      if (this.#scope && this.#scope.generation !== generation) this.#clearScope();
       const snapshot = this.notifications.list();
       if (this.#errorKind === 'check') this.#errorKind = null;
       this.database.assertGeneration(generation);
-      if (this.#scope?.generation !== generation || this.#scope?.today !== snapshot.today) {
+      if (this.#scope?.today !== snapshot.today) {
         this.#clearScope();
         this.#scope = { generation, today: snapshot.today };
       }
@@ -97,7 +98,7 @@ export class NativeNotificationScheduler {
 
   #currentItems(delivery) {
     if (!this.#running || !this.#deliveries.has(delivery)) return [];
-    const status = this.database.getStatus();
+    const status = this.database.connectionState;
     if (!status.ready || status.generation !== delivery.generation) return [];
     const snapshot = this.notifications.list();
     this.database.assertGeneration(delivery.generation);

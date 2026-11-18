@@ -42,6 +42,28 @@ test('first run has no database until the user selects one', (t) => {
   assert.equal(database.getStatus().filePath, null);
 });
 
+test('an interrupted migration of an original unbranded database can resume without losing settings', t => {
+  const { database, directory } = fixture(t);
+  const filePath = path.join(directory, 'original-installation.sqlite');
+  const original = new DatabaseSync(filePath);
+  try {
+    original.exec(migrations[0].sql);
+    original.exec("PRAGMA user_version = 1; INSERT INTO app_settings VALUES ('theme', 'dark')");
+  } finally { original.close(); }
+
+  const exec = DatabaseSync.prototype.exec;
+  const interruption = new Error('temporary write failure');
+  const failure = t.mock.method(DatabaseSync.prototype, 'exec', function (sql) {
+    if (sql === migrations[2].sql) throw interruption;
+    return exec.call(this, sql);
+  });
+  try { assert.throws(() => database.replace({ filePath }), error => error === interruption); }
+  finally { failure.mock.restore(); }
+
+  assert.equal(database.replace({ filePath }).schemaVersion, 10);
+  assert.equal(database.connection.prepare("SELECT value FROM app_settings WHERE key = 'theme'").get().value, 'dark');
+});
+
 test('create and reopen persist the chosen location and guard stale writes', (t) => {
   const { database, directory, location } = fixture(t);
   const filePath = path.join(directory, 'chosen.sqlite');

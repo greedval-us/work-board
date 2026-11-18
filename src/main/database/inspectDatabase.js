@@ -3,6 +3,8 @@ import { DatabaseSync } from './sqlite.js';
 import { migrations } from './migrations.js';
 import { DATABASE_CONFIG, REQUIRED_DATABASE_COLUMNS } from './databaseConfig.js';
 import { AppError } from '../utils/AppError.js';
+import { publicError } from '../utils/publicError.js';
+import { ERROR_CODES } from '../../shared/errors.js';
 
 function hasSettingsSchema(connection, tables) {
   const columns = tables.includes('app_settings') ? connection.prepare('PRAGMA table_info(app_settings)').all() : [];
@@ -35,6 +37,7 @@ export function inspectDatabase(filePath) {
     if (connection.prepare('PRAGMA quick_check').get().quick_check !== 'ok') throw new AppError('Файл базы данных повреждён.', 'DATABASE_INVALID');
   } catch (error) {
     if (error instanceof AppError) throw error;
-    throw new AppError('Не удалось открыть выбранный файл как базу Work Board.', 'DATABASE_INVALID', { cause: error });
+    const { code, message } = publicError(error, ERROR_CODES.DATABASE_INVALID);
+    throw new AppError(message, code, { cause: error });
   } finally { connection?.close(); }
 }

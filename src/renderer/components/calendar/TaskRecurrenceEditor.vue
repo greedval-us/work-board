@@ -3,7 +3,7 @@ import { computed, shallowRef } from 'vue';
 import { X } from 'lucide-vue-next';
 import { DATE_LIMITS } from '../../../shared/constants/dates.js';
 import { CONTROL_WEEKDAY_LABELS, supportsControlDayOfMonth } from '../../../shared/controlSchedule.js';
-import { formatDate } from '../../../shared/dates.js';
+import { formatDate, isDate } from '../../../shared/dates.js';
 import { firstTaskOccurrence, TASK_RECURRENCE_FREQUENCIES } from '../../../shared/taskRecurrence.js';
 import { CALENDAR_MONTHS } from '../../constants/calendar.js';
 
@@ -13,7 +13,7 @@ const props = defineProps({
 });
 const recurrence = defineModel({ type: Object, required: true });
 const customDate = shallowRef('');
-const canAddCustomDate = computed(() => !props.disabled && props.startDate && customDate.value > props.startDate
+const canAddCustomDate = computed(() => !props.disabled && isDate(props.startDate) && isDate(customDate.value) && customDate.value > props.startDate
   && !recurrence.value.customDates.includes(customDate.value));
 const firstOccurrence = computed(() => recurrence.value.frequency
   ? firstTaskOccurrence({ date: props.startDate, recurrence: recurrence.value }) : '');

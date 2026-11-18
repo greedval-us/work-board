@@ -1,8 +1,8 @@
 import { DATE_LIMITS } from './constants/dates.js';
 import {
-  isDate, isValidControlDayOfMonth, isValidControlDayOfWeek, isValidControlMonthOfYear, scheduledDates, supportsControlDayOfMonth,
+  isValidControlDayOfMonth, isValidControlDayOfWeek, isValidControlMonthOfYear, scheduledDates, supportsControlDayOfMonth,
 } from './controlSchedule/recurrence.js';
-import { validateDate } from './dates.js';
+import { isDate, validateDate } from './dates.js';
 import { ValidationError } from './errors.js';
 import { validateEnum, validateRecord } from './validation.js';
 

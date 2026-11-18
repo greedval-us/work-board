@@ -53,8 +53,8 @@ export function planOccurrenceUpdate(existing, updated, moves, occurrence) {
   let completion;
   if (occurrence !== undefined) {
     completion = occurrenceCompletion(updated, keptMoves, validateOccurrenceCompletion(occurrence), removedMoves);
-  } else if (updated.recurrence && !existing.recurrence && updated.completed && isTaskOccurrence(updated, existing.date)) {
-    completion = { date: existing.date, completed: true };
+  } else if (updated.recurrence && !existing.recurrence && isTaskOccurrence(updated, existing.date)) {
+    completion = { date: existing.date, completed: updated.completed };
   }
   return { removedMoves, completion };
 }

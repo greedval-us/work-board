@@ -47,10 +47,13 @@ export class DatabaseService {
     return runTransaction(this.connection, operation);
   }
 
+  get connectionState() {
+    return { ready: this.#connection !== null, generation: this.#generation };
+  }
+
   getStatus() {
     return {
-      ready: this.#connection !== null, engine: 'SQLite', filePath: this.filePath,
-      generation: this.#generation, message: this.message,
+      ...this.connectionState, engine: 'SQLite', filePath: this.filePath, message: this.message,
       sqliteVersion: this.#connection?.prepare('SELECT sqlite_version() AS version').get().version ?? null,
       schemaVersion: this.#connection?.prepare('PRAGMA user_version').get().user_version ?? null,
     };

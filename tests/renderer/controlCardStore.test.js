@@ -166,6 +166,16 @@ test('changing databases discards late export feedback while releasing the pendi
   assert.equal(app.pendingOperations, 0);
 });
 
+test('refreshing the status of the same database preserves the result of an ongoing export', async t => {
+  const result = deferred();
+  const { app, store } = setup(t, () => result.promise);
+  const saving = store.exportCard(draft());
+  app.database = { ...app.database };
+  result.resolve({ cancelled: false, opened: false, filePath: 'C:/cards/report.docx' });
+  assert.equal(await saving, true);
+  assert.equal(store.unopenedExportPath, 'C:/cards/report.docx');
+});
+
 test('a fresh dialog clears old feedback without allowing a second export or accepting late errors', async t => {
   const result = deferred();
   let pending = false;

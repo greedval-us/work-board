@@ -86,13 +86,16 @@ test('Ф‑21 exports defaults for the chosen executor and respects an explicitl
 
 test('Ф‑21 cancellation and a database switch during destination selection leave no report', async (t) => {
   const { database, directory, dialog, selected, service, openedPaths } = await fixture(t);
-  dialog.showSaveDialog = async () => ({ canceled: true });
-  assert.deepEqual(await service.export({ id: 3, generation: 1 }), { cancelled: true });
   dialog.showSaveDialog = async () => {
     database.generation = 2;
+    return { canceled: true };
+  };
+  assert.deepEqual(await service.export({ id: 3, generation: 1 }), { cancelled: true });
+  dialog.showSaveDialog = async () => {
+    database.generation = 3;
     return { filePath: selected };
   };
-  await assert.rejects(service.export({ id: 3, generation: 1 }), { code: 'DATABASE_CHANGED' });
+  await assert.rejects(service.export({ id: 3, generation: 2 }), { code: 'DATABASE_CHANGED' });
   assert.deepEqual(await readdir(directory), ['work.docx']);
   assert.deepEqual(openedPaths, []);
 });

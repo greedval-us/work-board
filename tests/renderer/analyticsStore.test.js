@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createPinia, setActivePinia } from 'pinia';
-import { reactive } from 'vue';
+import { nextTick, reactive } from 'vue';
 import { createAnalyticsStore } from '../../src/renderer/stores/analyticsStore.js';
 
 test('analytics clears the executor and ignores replies from the previous database', async () => {
@@ -201,4 +201,70 @@ test('concurrent forced analytics reads share work while only the latest caller 
   assert.equal(store.loading, false);
   await store.refresh();
   assert.equal(calls, 2);
+});
+
+test('returning to analytics during a manual refresh receives the updated summary', async t => {
+  setActivePinia(createPinia());
+  const app = reactive({ database: { ready: true, generation: 1 }, revision: 0 });
+  const update = Promise.withResolvers();
+  let calls = 0;
+  const store = createAnalyticsStore({ getApp: () => app, service: {
+    summary: () => ++calls === 1 ? { totals: { total: 1 } } : update.promise,
+  } })();
+  t.after(() => store.$dispose());
+  await store.refresh();
+  const manual = store.refresh({ force: true, keepData: true });
+  const release = store.acquire();
+  t.after(release);
+  const returned = store.refresh();
+  assert.equal(store.loading, true);
+  assert.equal(store.data.totals.total, 1);
+  update.resolve({ totals: { total: 4 } });
+  await Promise.all([manual, returned]);
+  assert.equal(store.data.totals.total, 4);
+  assert.equal(store.loading, false);
+  assert.equal(calls, 2);
+});
+
+test('a view returning as the analytics IPC settles sees the newly published snapshot', async t => {
+  setActivePinia(createPinia());
+  const app = reactive({ database: { ready: true, generation: 1 }, revision: 0 });
+  const update = Promise.withResolvers();
+  let calls = 0;
+  const store = createAnalyticsStore({ getApp: () => app, service: {
+    summary: () => ++calls === 1 ? { totals: { total: 1 } } : update.promise,
+  } })();
+  t.after(() => store.$dispose());
+  await store.refresh();
+  const manual = store.refresh({ force: true, keepData: true });
+  await nextTick();
+  const returned = update.promise.then(() => nextTick()).then(() => store.refresh());
+  update.resolve({ totals: { total: 4 } });
+  await Promise.all([manual, returned]);
+  assert.equal(store.data.totals.total, 4);
+  assert.equal(calls, 2);
+});
+
+test('returning to a pending executor hides the other executor’s displayed summary', async t => {
+  setActivePinia(createPinia());
+  const app = reactive({ database: { ready: true, generation: 1 }, revision: 0 });
+  const update = Promise.withResolvers();
+  let firstReads = 0;
+  const store = createAnalyticsStore({ getApp: () => app, service: {
+    summary: ({ filters }) => {
+      if (filters.executor === 'петров') return { totals: { total: 8 } };
+      return ++firstReads === 1 ? { totals: { total: 1 } } : update.promise;
+    },
+  } })();
+  t.after(() => store.$dispose());
+  await store.selectExecutor('иванов');
+  const manual = store.refresh({ force: true, keepData: true });
+  await nextTick();
+  await store.selectExecutor('петров');
+  assert.equal(store.data.totals.total, 8);
+  const returned = store.selectExecutor('иванов');
+  assert.equal(store.data, null);
+  update.resolve({ totals: { total: 4 } });
+  await Promise.all([manual, returned]);
+  assert.equal(store.data.totals.total, 4);
 });

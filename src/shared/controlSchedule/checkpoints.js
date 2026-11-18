@@ -1,4 +1,6 @@
-import { isDate, isScheduledDate, scheduledDates } from './recurrence.js';
+import { DATE_LIMITS } from '../constants/dates.js';
+import { isDate } from '../dates.js';
+import { isScheduledDate, scheduledDates } from './recurrence.js';
 
 function scheduleMoves(schedule) {
   return new Map((schedule.moves ?? []).filter(move => isDate(move.from) && isDate(move.to))
@@ -45,7 +47,7 @@ export function getNextControlCheckpoint(schedule, deadline) {
     if (date <= deadline && !markedDates.has(date) && isScheduledDate(schedule, originalDate, deadline)
       && (!next || date < next)) next = date;
   }
-  for (const date of scheduledDates(schedule, '0001-01-01', deadline)) {
+  for (const date of scheduledDates(schedule, DATE_LIMITS.MIN, deadline)) {
     if (markedDates.has(date) || moves.has(date)) continue;
     if (schedule.frequency !== 'custom') return next && next < date ? next : date;
     if (!next || date < next) next = date;

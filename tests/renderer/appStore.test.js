@@ -192,6 +192,67 @@ test('failed mutations release pending operation guards', async (t) => {
   assert.equal(store.pendingOperations, 0);
 });
 
+test('an operation started during the unsaved-changes dialog still blocks closing', async t => {
+  const store = bridge(t);
+  const choice = Promise.withResolvers();
+  const write = Promise.withResolvers();
+  store.registerUnsavedGuard(() => choice.promise);
+  const closing = store.prepareToClose();
+  const saving = store.withOperation(() => write.promise);
+  choice.resolve(true);
+  assert.equal(await closing, false);
+  assert.match(store.error, /завершения текущей операции/);
+  write.resolve();
+  await saving;
+  assert.equal(await store.prepareToClose(), true);
+});
+
+test('a bootstrap retry during database selection cannot restore the previous database', async t => {
+  const pickerOpened = Promise.withResolvers();
+  const selection = Promise.withResolvers();
+  const oldSettings = Promise.withResolvers();
+  let selecting = false;
+  const store = bridge(t, {
+    database: {
+      getStatus: async () => ({ ready: true, generation: 1 }),
+      open: () => { selecting = true; pickerOpened.resolve(); return selection.promise; },
+    },
+    settings: { get: async generation => {
+      if (generation === 2) return { theme: 'dark', office: 'Новое отделение' };
+      return selecting ? oldSettings.promise : { theme: 'light', office: 'Старое отделение' };
+    } },
+  });
+  await store.initialize();
+  const switching = store.selectDatabase('open');
+  await pickerOpened.promise;
+  const retry = store.initialize();
+  selection.resolve({ cancelled: false, status: { ready: true, generation: 2 } });
+  assert.equal(await switching, true);
+  oldSettings.resolve({ theme: 'light', office: 'Старое отделение' });
+  await retry;
+  assert.equal(store.database.generation, 2);
+  assert.equal(store.theme, 'dark');
+  assert.equal(store.office, 'Новое отделение');
+});
+
+test('a bootstrap retry during a settings save cannot overwrite the persisted theme', async t => {
+  const write = Promise.withResolvers();
+  const oldSettings = Promise.withResolvers();
+  let saving = false;
+  const store = bridge(t, { settings: {
+    get: () => saving ? oldSettings.promise : { theme: 'light' },
+    setTheme: () => { saving = true; return write.promise; },
+  } });
+  await store.initialize();
+  const change = store.setTheme('dark');
+  const retry = store.initialize();
+  write.resolve({ theme: 'dark' });
+  assert.equal(await change, true);
+  oldSettings.resolve({ theme: 'light' });
+  await retry;
+  assert.equal(store.theme, 'dark');
+});
+
 test('missing desktop bridge reports an error instead of fake success', async (t) => {
   const store = bridge(t);
   delete globalThis.window.desktopAPI;

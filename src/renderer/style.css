@@ -141,8 +141,6 @@ button, a { transition: background-color 160ms ease, color 160ms ease, box-shado
 .page-heading { margin-bottom: 20px; }
 .page-heading h1 { font-size: calc(24px + var(--app-font-offset)); line-height: 1.2; font-weight: 650; letter-spacing: -.04em; }
 .page-heading p { max-width: 60ch; margin-top: 10px; color: var(--muted); font-size: calc(13px + var(--app-font-offset)); letter-spacing: -.01em; }
-.workspace-page { display: flex; flex-direction: column; }
-.workspace-empty { display: flex; flex: 1; min-height: 300px; flex-direction: column; align-items: center; justify-content: center; padding: 38px 20px 100px; text-align: center; }
 .empty-icon {
   display: inline-flex;
   justify-content: center;
@@ -156,8 +154,6 @@ button, a { transition: background-color 160ms ease, color 160ms ease, box-shado
   color: var(--accent);
   box-shadow: 0 10px 25px rgb(24 35 55 / .04), inset 0 1px 0 rgb(255 255 255 / .15);
 }
-.workspace-empty h2 { font-size: calc(21px + var(--app-font-offset)); font-weight: 600; letter-spacing: -.035em; }
-.workspace-empty p { max-width: 37ch; margin-top: 9px; color: var(--muted); font-size: calc(13px + var(--app-font-offset)); }
 .settings-page { max-width: 960px; }
 .settings-section { padding: 20px; margin-bottom: 14px; border: 1px solid var(--border); border-radius: 16px; background: var(--grouped); }
 .section-heading { margin-bottom: 18px; }
@@ -229,7 +225,6 @@ button, a { transition: background-color 160ms ease, color 160ms ease, box-shado
   .theme-option { width: 100%; }
   .appearance-preview { height: 112px; }
   .details-list > div { grid-template-columns: 1fr; gap: 5px; }
-  .workspace-empty { padding-inline: 5px; }
   .error-banner { margin-inline: 14px; flex-direction: column; align-items: flex-start; }
   .about-card { padding: 22px; }
 }

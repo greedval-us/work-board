@@ -1,5 +1,4 @@
 import { emptyAnalyticsFilters } from '../../shared/analytics.js';
-import { DATE_LIMITS } from '../../shared/constants/dates.js';
 import { addCalendarDays, localDate } from '../../shared/dates.js';
 import { normalizeSearch } from '../../shared/registry.js';
 
@@ -15,10 +14,7 @@ export function analyticsExecutorOptions(recorded, configured, selected) {
 
 export function applyAnalyticsPeriod(filters, period, today = localDate()) {
   let from = '';
-  if (period === ANALYTICS_PERIODS.WEEK) {
-    const weekStart = addCalendarDays(today, -7);
-    from = weekStart < DATE_LIMITS.MIN ? DATE_LIMITS.MIN : weekStart;
-  }
+  if (period === ANALYTICS_PERIODS.WEEK) from = addCalendarDays(today, -7);
   if (period === ANALYTICS_PERIODS.MONTH) from = `${today.slice(0, 7)}-01`;
   if (period === ANALYTICS_PERIODS.YEAR) from = `${today.slice(0, 4)}-01-01`;
   return { ...filters, from, to: period === ANALYTICS_PERIODS.ALL ? '' : today };

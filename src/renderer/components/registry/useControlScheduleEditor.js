@@ -1,8 +1,9 @@
 import { computed, nextTick, shallowRef, watch } from 'vue';
 import { moveControlCheckpoint } from '../../../shared/controlSchedule.js';
-import { localDate } from '../../../shared/dates.js';
+import { DATE_LIMITS } from '../../../shared/constants/dates.js';
+import { isDate, localDate } from '../../../shared/dates.js';
 import { errorMessage } from '../../infrastructure/errorMessage.js';
-import { controlScheduleRows, inControlPeriod as isInControlPeriod, isDate, startingMonth } from './controlScheduleView.js';
+import { controlScheduleRows, inControlPeriod as isInControlPeriod, startingMonth } from './controlScheduleView.js';
 import { useControlScheduleSettings } from './useControlScheduleSettings.js';
 
 // Own transient editor state; only accepted schedule edits update the parent model.
@@ -14,6 +15,13 @@ export function useControlScheduleEditor(schedule, props, { section, customDateI
   const editedHistoryDate = shallowRef('');
   const month = shallowRef(openDate.value ? openDate.value.slice(0, 7) : startingMonth(schedule.value, props));
   const marksByDate = computed(() => new Map(schedule.value.marks.map(mark => [mark.date, mark])));
+  const plannedDateBounds = computed(() => {
+    const min = props.controlDate || DATE_LIMITS.MIN;
+    const max = props.deadline || DATE_LIMITS.MAX;
+    if (plannedDate.value !== openDate.value || !marksByDate.value.get(openDate.value)?.text.trim()) return { min, max };
+    // Showing a completed move's saved date must not invalidate the instruction form.
+    return { min: openDate.value < min ? openDate.value : min, max: openDate.value > max ? openDate.value : max };
+  });
   const settings = useControlScheduleSettings(schedule, props, {
     customDateInput,
     showMonth,
@@ -140,7 +148,7 @@ export function useControlScheduleEditor(schedule, props, { section, customDateI
   watch(() => props.selectedDate, focusSelectedDate);
 
   return {
-    ...settings, openDate, plannedDate, moveError, month, showPreview, marksByDate, rows, inControlPeriod,
+    ...settings, openDate, plannedDate, plannedDateBounds, moveError, month, showPreview, marksByDate, rows, inControlPeriod,
     showMonth, selectMonth, toggleMark, actualDateDraft, updateActualDate, updateMark,
     updatePlannedDate, moveCheckpoint, cancelMove, focusSelectedDate,
   };

@@ -27,8 +27,8 @@ export class ControlCardExportService {
       filters: [{ name: 'Документ Word', extensions: ['docx'] }],
       properties: ['createDirectory', 'showOverwriteConfirmation'],
     });
-    this.database.assertGeneration(generation);
     if (result.canceled || !result.filePath) return { cancelled: true };
+    this.database.assertGeneration(generation);
     const selected = result.filePath.toLowerCase().endsWith('.docx') ? result.filePath : `${result.filePath}.docx`;
     const contents = await createControlCardDocument({ fields: values, marks, recordId: record.id });
     const filePath = await writeAtomicFile(selected, contents, {

@@ -1,6 +1,6 @@
 // Public schedule API shared by the main process and renderer.
 export {
-  CONTROL_FREQUENCIES, CONTROL_MARK_LIMIT, CONTROL_WEEKDAY_LABELS, emptyControlSchedule, validateControlSchedule,
+  CONTROL_FREQUENCIES, CONTROL_MARK_LIMIT, CONTROL_WEEKDAY_LABELS, controlDatesRequiringBounds, emptyControlSchedule, validateControlSchedule,
 } from './controlSchedule/validation.js';
 export {
   getControlWeekday, isValidControlDayOfMonth, isValidControlDayOfWeek, isValidControlMonthOfYear, supportsControlDayOfMonth,

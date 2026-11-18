@@ -1,8 +1,9 @@
 import { computed, shallowRef, watchEffect } from 'vue';
 import {
-  getControlWeekday, isValidControlDayOfMonth, isValidControlDayOfWeek, isValidControlMonthOfYear, supportsControlDayOfMonth,
+  controlDatesRequiringBounds, getControlWeekday, isValidControlDayOfMonth, isValidControlDayOfWeek, isValidControlMonthOfYear, supportsControlDayOfMonth,
 } from '../../../shared/controlSchedule.js';
-import { effectiveCustomDates, firstScheduledMonth, inControlPeriod, isDate, startingMonth } from './controlScheduleView.js';
+import { isDate } from '../../../shared/dates.js';
+import { effectiveCustomDates, firstScheduledMonth, inControlPeriod, startingMonth } from './controlScheduleView.js';
 
 export function useControlScheduleSettings(schedule, props, { customDateInput, showMonth, onRemoveDate }) {
   const customDate = shallowRef('');
@@ -12,8 +13,7 @@ export function useControlScheduleSettings(schedule, props, { customDateInput, s
   const dayOfMonthSupported = computed(() => supportsControlDayOfMonth(schedule.value.frequency));
   const custom = computed(() => schedule.value.frequency === 'custom');
   const configuredDates = computed(() => new Set(custom.value ? effectiveCustomDates(schedule.value) : []));
-  const invalidCustomDate = computed(() => [...configuredDates.value].find(date => !inControlPeriod(date, props)));
-  const invalidCheckpointDate = computed(() => invalidCustomDate.value || schedule.value.moves?.find(move => !inControlPeriod(move.to, props))?.to);
+  const invalidCheckpointDate = computed(() => controlDatesRequiringBounds(schedule.value).find(date => !inControlPeriod(date, props)));
   const duplicateDate = computed(() => configuredDates.value.has(customDate.value) || schedule.value.customDates.includes(customDate.value));
   const canAddDate = computed(() => !props.disabled && inControlPeriod(customDate.value, props) && !duplicateDate.value);
 
@@ -102,7 +102,7 @@ export function useControlScheduleSettings(schedule, props, { customDateInput, s
   watchEffect(() => {
     let message = '';
     if (custom.value && !configuredDates.value.size) message = 'Добавьте хотя бы одну дату промежуточного контроля.';
-    if (invalidCustomDate.value) message = 'Удалите даты вне периода контроля.';
+    if (custom.value && invalidCheckpointDate.value) message = 'Удалите даты вне периода контроля.';
     customDateInput.value?.setCustomValidity(message);
   });
 

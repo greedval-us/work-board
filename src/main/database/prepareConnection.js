@@ -29,7 +29,6 @@ export function prepareConnection(filePath, create) {
     connection = new DatabaseSync(filePath);
     connection.exec(`PRAGMA busy_timeout = ${DATABASE_CONFIG.BUSY_TIMEOUT_MS}; PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;`);
     migrate(connection);
-    connection.exec(`PRAGMA application_id = ${DATABASE_CONFIG.APPLICATION_ID}`);
     return { connection, created };
   } catch (error) {
     rethrowAfterCleanup(error, [() => discardConnection({ connection, created }, filePath)]);

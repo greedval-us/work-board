@@ -1,4 +1,4 @@
-import { daysInMonth, validateDate } from '../dates.js';
+import { daysInMonth, isDate } from '../dates.js';
 
 const DAYS_IN_WEEK = 7;
 const MONTHS_IN_YEAR = 12;
@@ -20,11 +20,6 @@ export function isValidControlDayOfWeek(value) {
 
 export function isValidControlMonthOfYear(value) {
   return Number.isInteger(value) && value >= 1 && value <= MONTHS_IN_YEAR;
-}
-
-export function isDate(value) {
-  try { return Boolean(validateDate(value)); }
-  catch { return false; }
 }
 
 export function getControlWeekday(date) {

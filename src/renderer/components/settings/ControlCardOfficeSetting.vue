@@ -17,8 +17,8 @@ const officeErrorId = useId();
 const officeChanged = computed(() => officeDraft.value !== props.office);
 const officeErrorVisible = computed(() => showOfficeError.value && Boolean(props.error));
 
-watch(() => props.office, (value) => {
-  officeDraft.value = value;
+watch(() => props.office, (value, previous) => {
+  if (officeDraft.value === previous) officeDraft.value = value;
   clearOfficeFeedback();
 });
 

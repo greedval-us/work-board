@@ -1,5 +1,4 @@
 import { addCalendarDays, validateDate } from './dates.js';
-import { DATE_LIMITS } from './constants/dates.js';
 import { instructionDeadline } from './registry.js';
 import { INSTRUCTION_STATUS, URGENCY_WINDOW_DAYS } from './constants/registry.js';
 import { listControlCheckpoints } from './controlSchedule.js';
@@ -14,8 +13,7 @@ function notification(kind, record, date, today, scheduledDate = '') {
 }
 
 export function deadlineNotificationHorizon(today) {
-  const horizon = addCalendarDays(today, URGENCY_WINDOW_DAYS);
-  return horizon.length === DATE_LIMITS.MAX.length ? horizon : DATE_LIMITS.MAX;
+  return addCalendarDays(today, URGENCY_WINDOW_DAYS);
 }
 
 function firstCheckpointDate(schedule, fallback) {

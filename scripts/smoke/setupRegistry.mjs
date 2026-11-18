@@ -47,10 +47,12 @@ export async function setupRegistry(driver, fixture) {
   await addRegistryOption('office', alternateOffice);
   assert.equal(await js(`document.querySelector('${officeSelect}').value`), '');
   await selectOffice(alternateOffice);
+  await fill(officeSelect, { 0: controlCardOffice });
   const alternateRow = JSON.stringify(optionRow('office', alternateOffice));
   await js(`document.querySelector(${alternateRow}).querySelector('[data-option-action=remove]').click()`);
-  await wait(`!document.querySelector(${alternateRow}) && document.querySelector('${officeSelect}')?.value === ''`);
+  await wait(`!document.querySelector(${alternateRow}) && document.querySelector('${officeSelect}')?.matches(':enabled')`);
   assert.equal((await api('settings', 'get', generation)).office, '');
+  assert.equal(await js(`document.querySelector('${officeSelect}').value`), controlCardOffice, 'the pending office selection is preserved');
   await addRegistryOption('office', alternateOffice);
   await selectOffice(controlCardOffice);
   for (const [field, option] of Object.entries({ documentType: registrySelections.documentType, source: registrySelections.source, ...reportSelections })) {

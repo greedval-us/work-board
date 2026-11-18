@@ -17,6 +17,7 @@ export function createRequestScope() {
 export function createSingleFlight() {
   const pending = new Map();
   return {
+    getPending(key) { return pending.get(key); },
     run(key, operation) {
       if (pending.has(key)) return pending.get(key);
       const promise = Promise.resolve().then(operation).finally(() => {
@@ -35,12 +36,19 @@ export function createRequestChannel() {
   const scope = createRequestScope();
   const flight = createSingleFlight();
   let latest;
+  const accepts = key => latest?.key === key && latest.isCurrent();
   return {
     issue(key) { latest = scope.issue(key); return latest; },
     // A shared operation may publish for a later caller of the same key, while
     // each caller's own ticket still controls its error/loading cleanup.
-    accepts(key) { return latest?.key === key && latest.isCurrent(); },
-    run: flight.run,
+    accepts,
+    hasPending(key) { return Boolean(flight.getPending(key)); },
+    run(key, operation) {
+      // Invalidation may start a replacement request with the very same key.
+      const canPublish = () => accepts(key) && flight.getPending(key) === promise;
+      const promise = flight.run(key, () => operation(canPublish));
+      return promise;
+    },
     invalidate() { scope.invalidate(); flight.clear(); },
     dispose() { scope.dispose(); flight.clear(); },
   };

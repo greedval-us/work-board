@@ -45,6 +45,7 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function loadApplication() {
+    if (databaseSwitching.value || saving.value) return;
     loading.value = true;
     error.value = '';
     try {
@@ -123,12 +124,16 @@ export const useAppStore = defineStore('app', () => {
     return true;
   }
 
-  async function prepareToClose() {
+  function canClose() {
     if (pendingOperations.value > 0 || databaseSwitching.value) {
       error.value = 'Дождитесь завершения текущей операции перед закрытием приложения.';
       return false;
     }
-    return resolveUnsavedChanges();
+    return true;
+  }
+
+  async function prepareToClose() {
+    return canClose() && await resolveUnsavedChanges() && canClose();
   }
 
   async function selectDatabase(mode) {

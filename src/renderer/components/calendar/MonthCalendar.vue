@@ -1,8 +1,9 @@
 <script setup>
 import { computed, nextTick } from 'vue';
 import { Check, ChevronLeft, ChevronRight, FileText, Flag, ListTodo } from 'lucide-vue-next';
-import { getUrgency, INSTRUCTION_STATUS, localDate } from '../../../shared/registry.js';
-import { calendarDate, monthLabel, moveMonth } from '../../domain/calendarDates.js';
+import { addCalendarDays, getUrgency, INSTRUCTION_STATUS } from '../../../shared/registry.js';
+import { DATE_LIMITS } from '../../../shared/constants/dates.js';
+import { monthLabel, moveMonth } from '../../domain/calendarDates.js';
 import { CALENDAR_LAYOUT, CALENDAR_WEEKDAYS } from '../../constants/calendar.js';
 
 const props = defineProps({
@@ -16,7 +17,7 @@ const visibleDays = computed(() => {
   const finalDay = props.days.findLastIndex((day) => day.inMonth);
   return props.days.slice(0, Math.max(CALENDAR_LAYOUT.MIN_VISIBLE_WEEKS, Math.ceil((finalDay + 1) / CALENDAR_LAYOUT.DAYS_PER_WEEK)) * CALENDAR_LAYOUT.DAYS_PER_WEEK);
 });
-const weekCount = computed(() => visibleDays.value.length / CALENDAR_LAYOUT.DAYS_PER_WEEK);
+const weekCount = computed(() => Math.ceil(visibleDays.value.length / CALENDAR_LAYOUT.DAYS_PER_WEEK));
 const days = computed(() => visibleDays.value.map((day) => {
   const urgency = day.controls || day.checkpoints
     ? getUrgency({ deadline: day.date, status: INSTRUCTION_STATUS.PENDING }, props.today)
@@ -44,11 +45,11 @@ async function navigate(event, day, index) {
   const delta = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -weekLength, ArrowDown: weekLength, Home: -(index % weekLength), End: weekLength - 1 - (index % weekLength) }[event.key];
   let date;
   if (delta !== undefined) {
-    const target = calendarDate(day.date);
-    target.setDate(target.getDate() + delta);
-    date = localDate(target);
+    date = addCalendarDays(day.date, delta);
   } else if (event.key === 'PageUp' || event.key === 'PageDown') {
-    date = `${moveMonth(day.date.slice(0, 7), event.key === 'PageUp' ? -1 : 1)}-01`;
+    const month = day.date.slice(0, 7);
+    const next = moveMonth(month, event.key === 'PageUp' ? -1 : 1);
+    date = next === month ? day.date : `${next}-01`;
   } else return;
   event.preventDefault();
   emit('selectDate', date);
@@ -68,8 +69,8 @@ function registerButton(date, element) {
       <h2 aria-live="polite">{{ title }}</h2>
       <div class="calendar-month-navigation">
         <button class="calendar-button calendar-today-button" @click="emit('today')">Сегодня</button>
-        <button class="calendar-icon-button" aria-label="Предыдущий месяц" @click="emit('changeMonth', -1)"><ChevronLeft :size="18" aria-hidden="true" /></button>
-        <button class="calendar-icon-button" aria-label="Следующий месяц" @click="emit('changeMonth', 1)"><ChevronRight :size="18" aria-hidden="true" /></button>
+        <button class="calendar-icon-button" aria-label="Предыдущий месяц" :disabled="month === DATE_LIMITS.MIN.slice(0, 7)" @click="emit('changeMonth', -1)"><ChevronLeft :size="18" aria-hidden="true" /></button>
+        <button class="calendar-icon-button" aria-label="Следующий месяц" :disabled="month === DATE_LIMITS.MAX.slice(0, 7)" @click="emit('changeMonth', 1)"><ChevronRight :size="18" aria-hidden="true" /></button>
       </div>
     </div>
     <div class="calendar-weekdays" aria-hidden="true"><span v-for="name in CALENDAR_WEEKDAYS" :key="name">{{ name }}</span></div>

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { addCalendarDays } from '../../src/shared/dates.js';
 import {
   ValidationError, emptyFilters, formatDate, getUrgency, localDate,
   normalizeFilters, normalizeListRequest, validateInstruction, validateTask,
@@ -10,6 +11,12 @@ const instruction = (changes = {}) => ({
   title: 'Проверить отчёт', summary: '  Первая строка\nВторая строка  ',
   deadline: '2026-10-26', executor: 'Иванов И. И.', status: 'pending', executionMark: '',
   ...changes,
+});
+
+test('calendar navigation and deadline urgency stay inside the supported date range', () => {
+  assert.equal(getUrgency(instruction({ deadline: '9999-12-31' }), '9999-12-30').tone, 'warning');
+  assert.equal(addCalendarDays('9999-12-31', 1), '9999-12-31');
+  assert.equal(addCalendarDays('0001-01-01', -7), '0001-01-01');
 });
 
 test('instruction validation preserves identifiers and optional multiline text', () => {

@@ -462,6 +462,26 @@ test('out-of-period custom dates remain removable and update browser validity', 
   assert.equal(customDate.validationMessage, 'Добавьте хотя бы одну дату промежуточного контроля.');
 });
 
+test('a completed custom move stays valid when its destination falls outside the new deadline', async t => {
+  const destination = '2026-03-02';
+  const { editor, schedule, root, deadline, field, textarea, input } = await mountEditor(t, {
+    frequency: 'custom', firstDate: '', customDates: ['2026-02-28'],
+    moves: [{ from: '2026-02-28', to: destination }], marks: [{ date: destination, text: 'Принято' }],
+  }, { selectedDate: destination });
+  await editor.focusSelectedDate();
+  deadline.value = '2026-02-28';
+  await nextTick();
+  const customDate = find(root, node => node.props?.name === 'control-custom-date');
+  assert.equal(customDate.validationMessage, '');
+  const planned = field(destination, 'control-planned-date');
+  assert.ok(planned.props.value <= planned.props.max, 'opening saved history must not invalidate the parent form');
+  assert.equal(find(root, node => node.props?.class?.includes('control-schedule-warning')), undefined);
+  assert.equal(schedule.value.marks[0].text, 'Принято');
+  await input(textarea(destination), '');
+  assert.equal(customDate.validationMessage, 'Удалите даты вне периода контроля.');
+  assert.ok(find(root, node => node.props?.class?.includes('control-schedule-warning')));
+});
+
 test('navigation and rejected move drafts do not dirty the persisted schedule', async t => {
   const value = { frequency: 'monthly', firstDate: '2026-01-15', customDates: [], marks: [] };
   const { editor, schedule, root, row, field, moveButton, input } = await mountEditor(t, value);

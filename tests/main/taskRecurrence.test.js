@@ -69,6 +69,8 @@ test('converting a completed one-time task preserves its completed date only', (
   const cleared = tasks.update(original.id, { recurrence: { frequency: '' }, completed: false });
   assert.equal(cleared.recurrence, undefined);
   assert.equal(cleared.completed, false);
+  tasks.update(original.id, { recurrence: { frequency: 'weekly' } });
+  assert.equal(tasks.get(original.id, date).completed, false);
 });
 
 test('moving an occurrence keeps its completion and leaves the rest of the series scheduled', (t) => {

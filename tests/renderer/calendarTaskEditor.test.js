@@ -108,6 +108,51 @@ test('changing repeat rules discards unrelated selectors and clearing repeat is 
   assert.deepEqual(writes[1].data.recurrence, { frequency: '' });
 });
 
+test('switching a single task to a recurring rule keeps the open checkbox edit for its first occurrence', async () => {
+  const date = '2026-11-17';
+  let occurrence;
+  const editor = useTaskEditor({
+    task: { id: 10, title: 'Задача', date, completed: false }, date, generation: 6,
+    saveTask: async (_id, _data, _generation, change) => { occurrence = change; },
+  });
+  editor.draft.completed = true;
+  editor.draft.recurrence.frequency = 'weekly';
+  assert.equal(editor.occurrenceAvailable.value, true);
+  assert.equal(editor.occurrenceCompleted.value, true);
+  assert.equal(await editor.save(), true);
+  assert.deepEqual(occurrence, { date, completed: true });
+  editor.occurrenceCompleted.value = false;
+  editor.draft.recurrence.frequency = '';
+  assert.equal(editor.draft.completed, false);
+  assert.equal(editor.dirty.value, false);
+});
+
+test('a new series keeps completion on the selected first date and clears it when the rule selects another day', async () => {
+  const writes = [];
+  const editor = useTaskEditor({ task: null, date: '2026-11-16', generation: 6,
+    saveTask: async (id, data, generation, occurrence) => { writes.push({ id, data, generation, occurrence }); },
+  });
+  editor.draft.title = 'Отчёт';
+  editor.draft.date = '2026-11-17';
+  editor.draft.completed = true;
+  editor.draft.recurrence.frequency = 'weekly';
+  assert.equal(editor.occurrenceAvailable.value, true);
+  assert.equal(editor.completionDate.value, '2026-11-17');
+  assert.equal(editor.occurrenceCompleted.value, true);
+  assert.equal(await editor.save(), true);
+  assert.equal(writes[0].data.completed, true);
+  assert.equal(writes[0].occurrence, undefined);
+
+  editor.draft.recurrence.dayOfWeek = 3;
+  assert.equal(editor.completionDate.value, '2026-11-18');
+  assert.equal(editor.occurrenceCompleted.value, false);
+  assert.equal(await editor.save(), true);
+  assert.equal(writes[1].data.completed, false);
+  editor.occurrenceCompleted.value = true;
+  assert.equal(await editor.save(), true);
+  assert.equal(writes[2].data.completed, true);
+});
+
 test('moving a previously moved occurrence binds its effective date and blocks unsaved edits', async () => {
   const calls = [];
   let fail = true;

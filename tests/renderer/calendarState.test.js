@@ -447,3 +447,46 @@ test('a failed forced calendar refresh keeps its successful cache available for 
   assert.equal(store.monthError, '');
   assert.equal(store.dayError, '');
 });
+
+test('returning to the calendar waits for an ongoing refresh before restoring the cached day', async t => {
+  const month = deferred();
+  const day = deferred();
+  let monthCalls = 0;
+  let dayCalls = 0;
+  const { store, scope, mount } = setup(t, {
+    month: () => ++monthCalls === 1 ? { days: [{ tasks: 1 }] } : month.promise,
+    day: () => ++dayCalls === 1 ? { tasks: [{ id: 1 }] } : day.promise,
+  });
+  await store.refresh();
+  const manual = [store.fetchMonth({ force: true }), store.fetchDay({ force: true })];
+  scope.stop();
+  const returned = mount().calendar.refresh();
+  assert.equal(store.monthLoading, true);
+  assert.equal(store.dayLoading, true);
+  assert.equal(store.monthDays[0].tasks, 1);
+  assert.deepEqual(store.tasks, []);
+  month.resolve({ days: [{ tasks: 2 }] });
+  day.resolve({ tasks: [{ id: 2 }] });
+  await Promise.all([...manual, returned]);
+  assert.equal(store.monthDays[0].tasks, 2);
+  assert.equal(store.tasks[0].id, 2);
+  assert.equal(monthCalls, 2);
+  assert.equal(dayCalls, 2);
+});
+
+test('restoring database readiness cannot revive a calendar read invalidated for the same date', async t => {
+  const oldDay = deferred();
+  let calls = 0;
+  const { app, store } = setup(t, {
+    month: async () => ({ days: [] }),
+    day: () => ++calls === 1 ? oldDay.promise : { tasks: [{ id: 2 }] },
+  });
+  const old = store.fetchDay();
+  await nextTick();
+  app.database.ready = false;
+  app.database.ready = true;
+  await store.refresh();
+  oldDay.resolve({ tasks: [{ id: 1 }] });
+  await old;
+  assert.equal(store.tasks[0].id, 2);
+});

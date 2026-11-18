@@ -1,4 +1,5 @@
 import { runTransaction } from './transaction.js';
+import { DATABASE_CONFIG } from './databaseConfig.js';
 import { EFFECTIVE_INSTRUCTION_DEADLINE_SQL } from './instructionDeadline.js';
 
 // Add sequential versions here. Each migration runs once in its own transaction.
@@ -116,7 +117,8 @@ export function migrate(database) {
     if (migration.version <= current) continue;
     runTransaction(database, () => {
       database.exec(migration.sql);
-      database.exec(`PRAGMA user_version = ${migration.version}`);
+      // A legacy file must still be identifiable if the next migration is interrupted.
+      database.exec(`PRAGMA application_id = ${DATABASE_CONFIG.APPLICATION_ID}; PRAGMA user_version = ${migration.version}`);
     });
   }
 }

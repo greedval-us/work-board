@@ -1,4 +1,4 @@
-import { localDate } from '../../shared/dates.js';
+import { boundedLocalDate, isDate, localDate } from '../../shared/dates.js';
 import { LOCAL_MIDDAY_HOUR } from '../../shared/constants/dates.js';
 import { CALENDAR_LAYOUT } from '../constants/calendar.js';
 
@@ -25,13 +25,13 @@ export function buildMonthGrid(month) {
     date.setDate(index - offset + 1);
     const value = localDate(date);
     return { date: value, day: date.getDate(), inMonth: value.slice(0, 7) === month };
-  });
+  }).filter(day => isDate(day.date));
 }
 
 export function moveMonth(month, delta) {
   const date = calendarDate(month);
   date.setMonth(date.getMonth() + delta);
-  return localDate(date).slice(0, 7);
+  return boundedLocalDate(date).slice(0, 7);
 }
 
 export function millisecondsUntilTomorrow(now = new Date()) {

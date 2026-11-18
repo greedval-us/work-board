@@ -1,12 +1,7 @@
 import { getNextControlCheckpoint, listControlCheckpoints } from '../../../shared/controlSchedule.js';
 import { DATE_LIMITS } from '../../../shared/constants/dates.js';
-import { daysInMonth, localDate, validateDate } from '../../../shared/dates.js';
+import { daysInMonth, isDate, localDate } from '../../../shared/dates.js';
 import { getUrgency, INSTRUCTION_STATUS } from '../../../shared/registry.js';
-
-export function isDate(date) {
-  try { return Boolean(validateDate(date)); }
-  catch { return false; }
-}
 
 export function inControlPeriod(date, { controlDate, deadline }) {
   return isDate(date) && (!controlDate || date >= controlDate) && (!deadline || date <= deadline);

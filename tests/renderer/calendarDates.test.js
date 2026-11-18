@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildMonthGrid, moveMonth, millisecondsUntilTomorrow } from '../../src/renderer/components/calendar/calendarDates.js';
+import { buildMonthGrid, moveMonth, millisecondsUntilTomorrow } from '../../src/renderer/domain/calendarDates.js';
 
 test('March grid starts on Monday and contains the adjacent month days', () => {
   const days = buildMonthGrid('2026-03');
@@ -22,6 +22,8 @@ test('leap February keeps its final day and has no UTC date conversion', () => {
 test('month navigation crosses year boundaries without retaining the day', () => {
   assert.equal(moveMonth('2026-12', 1), '2027-01');
   assert.equal(moveMonth('2026-01', -1), '2025-12');
+  assert.equal(moveMonth('0001-01', -1), '0001-01');
+  assert.equal(moveMonth('9999-12', 1), '9999-12');
 });
 
 test('dates in the supported early years keep four-digit ISO years', () => {
@@ -29,6 +31,12 @@ test('dates in the supported early years keep four-digit ISO years', () => {
   assert.equal(days[0].date, '0001-01-01');
   assert.equal(days[41].date, '0001-02-11');
   assert.equal(moveMonth('0099-12', 1), '0100-01');
+});
+
+test('the last calendar month ends at the last selectable date', () => {
+  const days = buildMonthGrid('9999-12');
+  assert.equal(days.at(-1).date, '9999-12-31');
+  assert.equal(days.filter(day => day.inMonth).length, 31);
 });
 
 test('midnight refresh uses the next local day and a small scheduling margin', () => {
