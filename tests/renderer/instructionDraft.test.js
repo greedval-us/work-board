@@ -70,3 +70,14 @@ test('an annual month and day survive opening a saved draft and snapshotting it 
   const draft = reactive(createInstructionDraft({ controlSchedule }));
   assert.deepEqual(structuredClone(snapshotInstruction(draft)).controlSchedule, controlSchedule);
 });
+
+test('dates assigned to periods are independent in the record, draft and IPC snapshot', () => {
+  const controlSchedule = { frequency: 'monthly', firstDate: '', customDates: [], marks: [],
+    periodDates: { '2026-11-01': '2026-11-20', '2026-12-01': '' } };
+  const draft = reactive(createInstructionDraft({ controlSchedule }));
+  const saved = structuredClone(snapshotInstruction(draft)).controlSchedule;
+  assert.deepEqual(saved, controlSchedule);
+  draft.controlSchedule.periodDates['2026-11-01'] = '2026-11-21';
+  assert.equal(controlSchedule.periodDates['2026-11-01'], '2026-11-20');
+  assert.equal(saved.periodDates['2026-11-01'], '2026-11-20');
+});

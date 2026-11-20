@@ -21,7 +21,7 @@ export const useAppStore = defineStore('app', () => {
   const unsavedGuards = new Set();
   const initialization = createSingleFlight();
   const { applySettings, ...settings } = useApplicationSettings({
-    database, withOperation, error,
+    database, withOperation, touchData, error,
     canWrite: () => initialized.value && !loading.value && !databaseSwitching.value,
   });
 

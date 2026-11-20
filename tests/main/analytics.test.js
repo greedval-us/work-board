@@ -26,12 +26,76 @@ function fixture(t, seed) {
   return new AnalyticsService({ repository: new AnalyticsRepository(database), today: () => '2026-10-26' });
 }
 const filters = { from: '2026-10-01', to: '2026-10-26' };
-test('analytics counts only instructions in totals and monthly control', t => {
+test('analytics excludes personal tasks from totals and monthly control', t => {
   const result = fixture(t).summary({ filters: { ...filters, entityType: 'tasks', priority: 'urgent' } });
   assert.deepEqual(result.totals, { total: 4, closed: 0, active: 4, overdue: 3, closedRate: 0 });
   assert.deepEqual(result.timeline, [{ month: '2026-10', total: 4, closed: 0, active: 4 }]);
   assert.deepEqual(result.filters, { ...filters, executor: '' });
   assert.equal(result.instructions, null);
+});
+
+test('analytics counts scheduled, moved and marked checkpoints by their own dates and executor', t => {
+  let instruction;
+  const service = fixture(t, instructions => {
+    instruction = instructions.create({ controlDate: '2026-09-01', instructionNumber: '2', title: 'График контроля',
+      deadline: '2026-10-26', extendedUntil: '2026-11-02', executor: 'Контролёр', controlSchedule: {
+        frequency: 'custom', customDates: ['2026-10-03', '2026-10-10', '2026-10-25', '2026-10-26', '2026-11-01'],
+        moves: [{ from: '2026-10-10', to: '2026-10-15' }],
+        marks: [{ date: '2026-10-15', text: 'Готово', actualDate: '2026-11-01' }, { date: '2026-10-22', text: 'Выполнено' }],
+      } });
+    instructions.create({ controlDate: '2026-09-01', instructionNumber: '3', title: 'Другой исполнитель', deadline: '2026-11-02',
+      executor: 'Контролёр 2', controlSchedule: { frequency: 'custom', customDates: ['2026-10-17'] } });
+  });
+  const current = service.summary({ filters: { ...filters, executor: 'контролёр' } });
+  assert.deepEqual(current.totals, { total: 5, closed: 2, active: 3, overdue: 2, closedRate: 40 });
+  assert.deepEqual(current.timeline, [{ month: '2026-10', total: 5, closed: 2, active: 3 }]);
+  assert.deepEqual(current.executors, [{ key: 'контролёр', label: 'Контролёр', total: 5, closed: 2, active: 3, overdue: 2 }]);
+  assert.deepEqual(current.instructions.items.map(({ id, checkpointDate, checkpointClosed }) => [id, checkpointDate, checkpointClosed]), [
+    [instruction.id, '2026-10-03', false], [instruction.id, '2026-10-15', true], [instruction.id, '2026-10-22', true],
+    [instruction.id, '2026-10-25', false], [instruction.id, '2026-10-26', false],
+  ]);
+  const november = service.summary({ filters: { from: '2026-11-01', to: '2026-11-02', executor: 'контролёр' } });
+  assert.deepEqual(november.instructions.items.map(item => item.checkpointDate ?? item.extendedUntil), ['2026-11-01', '2026-11-02']);
+});
+
+test('analytics counts marked history from closed instructions and omits canceled checkpoints', t => {
+  const closedAt = '2026-10-26T12:00:00.000Z';
+  const service = fixture(t, (instructions, connection) => {
+    const item = instructions.create({ controlDate: '2026-09-01', instructionNumber: '2', title: 'Закрытый график',
+      deadline: '2026-11-02', executor: 'Контролёр', controlSchedule: { frequency: 'daily', firstDate: '2026-10-24',
+        marks: [{ date: '2026-10-25', text: '  Выполнено  ' }] } });
+    connection.prepare('UPDATE instructions SET closed_at = ? WHERE id = ?').run(closedAt, item.id);
+  });
+  const result = service.summary({ filters: { ...filters, executor: 'контролёр' } });
+  assert.deepEqual(result.totals, { total: 1, closed: 1, active: 0, overdue: 0, closedRate: 100 });
+  assert.deepEqual(result.instructions.items.map(({ checkpointDate, checkpointClosed, closedAt: timestamp }) => [checkpointDate, checkpointClosed, timestamp]),
+    [['2026-10-25', true, closedAt]]);
+});
+
+test('analytics expands dates by period and paginates controls by date and instruction', t => {
+  let daily;
+  let monthly;
+  const service = fixture(t, instructions => {
+    daily = instructions.create({ controlDate: '2026-09-01', instructionNumber: '2', title: 'Ежедневный график',
+      deadline: '2026-11-01', executor: 'Контролёр', controlSchedule: { frequency: 'daily', firstDate: '2026-10-09' } });
+    monthly = instructions.create({ controlDate: '2026-09-01', instructionNumber: '3', title: 'График по периодам',
+      deadline: '2026-11-02', executor: 'КОНТРОЛЁР', controlSchedule: { frequency: 'monthly', periodDates: { '2026-10-01': '2026-10-15' } } });
+  });
+  const request = { filters: { executor: 'контролёр' } };
+  const first = service.summary(request);
+  const second = service.summary({ ...request, page: 100 });
+  assert.deepEqual(first.timeline, [
+    { month: '2026-10', total: 24, closed: 0, active: 24 }, { month: '2026-11', total: 3, closed: 0, active: 3 },
+  ]);
+  assert.equal(first.totals.total, 27);
+  assert.equal(first.instructions.items.length, 25);
+  assert.ok(first.instructions.items.some(item => item.id === monthly.id && item.checkpointDate === '2026-10-15'));
+  assert.equal(first.instructions.items[24].checkpointDate, undefined);
+  assert.equal(first.instructions.items[24].id, daily.id);
+  assert.deepEqual(second.instructions.items.map(({ id, checkpointDate }) => [id, checkpointDate]),
+    [[daily.id, '2026-11-01'], [monthly.id, undefined]]);
+  assert.equal(second.instructions.pageCount, 2);
+  assert.equal(second.instructions.page, 2);
 });
 
 test('analytics groups executor spelling variants and sorts by total then name', t => {

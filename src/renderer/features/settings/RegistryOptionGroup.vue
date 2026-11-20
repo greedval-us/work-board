@@ -126,7 +126,8 @@ function remove(option, event) {
 
 <template>
   <div class="registry-option-group" :class="{ 'registry-office-group': field === 'office', 'registry-executor-group': isExecutor }">
-    <slot />
+    <div v-if="field === 'office'" class="registry-default-office"><slot /></div>
+    <slot v-else />
     <form :data-registry-option="field" @submit.prevent="add">
       <label>
         <span>{{ field === 'office' ? 'Новый участок' : REGISTRY_OPTION_LABELS[field] }}</span>
@@ -165,24 +166,23 @@ function remove(option, event) {
 
 <style scoped>
 .registry-option-group { min-width: 0; }
-.registry-office-group { grid-column: 1 / -1; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
-.registry-executor-group { grid-column: 1 / -1; padding-top: 14px; border-top: 1px solid var(--border); }
-.registry-option-group :deep(.registry-settings-help) { margin-top: 5px; color: var(--muted); font-size: calc(12px + var(--app-font-offset)); }
-.registry-option-group :deep(form) { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
-.registry-option-group :deep(label) { display: grid; flex: 1 1 110px; gap: 5px; min-width: 0; font-size: calc(12px + var(--app-font-offset)); font-weight: 550; }
-.registry-office-group :deep(label) { flex-basis: 190px; max-width: 520px; }
-.registry-office-group ul { max-width: 520px; }
+.registry-office-group { display: grid; align-items: start; gap: 8px 14px; }
+.registry-executor-group { grid-column: 1 / -1; }
+.registry-option-group :deep(.registry-settings-help) { margin-top: 4px; color: var(--muted); font-size: calc(11px + var(--app-font-offset)); line-height: 1.45; }
+.registry-option-group :deep(form) { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px; }
+.registry-option-group :deep(label) { display: grid; flex: 1 1 108px; gap: 4px; min-width: 0; font-size: calc(12px + var(--app-font-offset)); font-weight: 550; }
 .registry-executor-group :deep(label) { flex-basis: 130px; }
-.registry-option-group input, .registry-option-group :deep(select), .registry-option-group :deep(button) { min-height: 36px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); color: var(--text); font-size: calc(12px + var(--app-font-offset)); }
+.registry-option-group input, .registry-option-group :deep(select), .registry-option-group :deep(button) { min-height: 32px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--grouped); color: var(--text); font-size: calc(12px + var(--app-font-offset)); }
 .registry-option-group input, .registry-option-group :deep(select) { width: 100%; min-width: 0; font-weight: 400; }
 .registry-option-group input::placeholder { color: var(--muted); }
-.registry-option-group :deep(button) { font-weight: 550; }
+.registry-option-group :deep(button) { background: var(--panel); font-weight: 550; }
 .registry-option-group :deep(button:enabled:hover) { background: var(--raised); }
-.registry-option-group ul { display: grid; gap: 4px; margin: 8px 0 0; padding: 0; list-style: none; }
-.registry-option-group li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; padding: 4px 6px 4px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); font-size: calc(12px + var(--app-font-offset)); }
+.registry-option-group ul { display: grid; margin: 6px 0 0; padding: 0 5px; border-radius: 8px; background: var(--grouped); list-style: none; }
+.registry-option-group li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; padding: 2px 0 2px 4px; font-size: calc(12px + var(--app-font-offset)); }
+.registry-option-group li + li { border-top: 1px solid var(--border); }
 .registry-option-value { display: flex; flex: 1; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; min-width: 0; overflow-wrap: anywhere; }
 .registry-option-contact { color: var(--muted); font-size: calc(11px + var(--app-font-offset)); }
-.registry-option-group .registry-option-action { display: grid; flex: 0 0 28px; min-height: 28px; place-items: center; padding: 0; border-color: transparent; border-radius: 8px; color: var(--muted); }
+.registry-option-group .registry-option-action { display: grid; flex: 0 0 28px; min-height: 28px; place-items: center; padding: 0; border-color: transparent; border-radius: 7px; color: var(--muted); background: transparent; }
 .registry-option-group .registry-option-remove:enabled:hover { background: var(--error-surface); color: var(--error); }
 .registry-option-group .registry-option-edit { flex: 1; min-width: 0; }
 .registry-option-edit input { flex: 1 1 150px; }
@@ -191,4 +191,16 @@ function remove(option, event) {
 .registry-option-group :deep(.registry-option-notice) { margin-top: 4px; color: var(--accent); font-size: calc(12px + var(--app-font-offset)); }
 .registry-option-group :deep(.registry-option-notice:empty) { margin-top: 0; }
 
+@container dictionaries (min-width: 425px) {
+  .registry-office-group { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .registry-default-office { grid-column: 1; grid-row: 1 / span 2; }
+  .registry-office-group > form, .registry-office-group > p, .registry-office-group > ul { grid-column: 2; }
+  .registry-office-group ul { margin-top: 0; }
+}
+
+.registry-option-group :focus-visible { outline-offset: 0; }
+@media (prefers-reduced-motion: no-preference) {
+  .registry-option-group { animation: directory-appear 160ms var(--motion-ease-out); }
+  @keyframes directory-appear { from { opacity: .4; transform: translateY(2px); } to { opacity: 1; transform: none; } }
+}
 </style>

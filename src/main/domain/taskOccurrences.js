@@ -1,7 +1,11 @@
-import { validateDate } from '../../shared/dates.js';
+import { DATE_LIMITS } from '../../shared/constants/dates.js';
+import { addCalendarDays, validateDate } from '../../shared/dates.js';
 import { ValidationError } from '../../shared/errors.js';
 import { isTaskOccurrence, taskOccurrenceDates } from '../../shared/taskRecurrence.js';
 import { validateRecord } from '../../shared/validation.js';
+
+// One window includes 366 calendar dates, enough for the longest repeat interval.
+const TASK_LOOKBACK_OFFSET_DAYS = 365;
 
 export function occurrenceView(task, date, completed, originalDate = date) {
   return { ...task, date, seriesDate: task.date, completed, ...(date === originalDate ? {} : { originalDate }) };
@@ -59,12 +63,66 @@ export function planOccurrenceUpdate(existing, updated, moves, occurrence) {
   return { removedMoves, completion };
 }
 
-export function listTaskOccurrences(tasks, moves, completions, { from, to }) {
+function groupOccurrenceMoves(moves) {
   const movesByTask = new Map();
   for (const move of moves) {
     if (!movesByTask.has(move.taskId)) movesByTask.set(move.taskId, []);
     movesByTask.get(move.taskId).push(move);
   }
+  return movesByTask;
+}
+
+export function latestUnmovedTaskDate(task, through, movedOrigins, previousCandidate) {
+  const earliest = previousCandidate > task.date ? previousCandidate : task.date;
+  let to = through;
+  while (to >= earliest) {
+    const lookback = task.recurrence.frequency === 'custom' ? earliest : addCalendarDays(to, -TASK_LOOKBACK_OFFSET_DAYS);
+    const from = lookback < earliest ? earliest : lookback;
+    let latest;
+    for (const date of taskOccurrenceDates(task, { from, to })) {
+      if (!movedOrigins?.has(date)) latest = date;
+    }
+    if (latest || from === earliest) return latest;
+    to = addCalendarDays(from, -1);
+  }
+  return undefined;
+}
+
+function agendaOccurrence(task, moves, agendaDate) {
+  const movedOrigins = new Set();
+  let upcomingMove;
+  let previousMove;
+  for (const move of moves) {
+    movedOrigins.add(move.originalDate);
+    if (move.date >= agendaDate) {
+      if (!upcomingMove || move.date < upcomingMove.date) upcomingMove = move;
+    } else if (!previousMove || move.date > previousMove.date) previousMove = move;
+  }
+
+  for (const date of taskOccurrenceDates(task, { from: agendaDate, to: upcomingMove?.date ?? DATE_LIMITS.MAX })) {
+    if (!movedOrigins.has(date)) return { date, originalDate: date };
+  }
+  if (upcomingMove) return upcomingMove;
+  if (agendaDate === DATE_LIMITS.MIN) return undefined;
+
+  const previousDate = latestUnmovedTaskDate(task, addCalendarDays(agendaDate, -1), movedOrigins, previousMove?.date);
+  return previousDate && (!previousMove || previousDate > previousMove.date)
+    ? { date: previousDate, originalDate: previousDate } : previousMove;
+}
+
+export function taskAgendaOccurrences(tasks, moves, agendaDate) {
+  const movesByTask = groupOccurrenceMoves(moves);
+  const occurrences = [];
+  for (const task of tasks) {
+    if (!task.recurrence) continue;
+    const occurrence = agendaOccurrence(task, movesByTask.get(task.id) ?? [], agendaDate);
+    if (occurrence) occurrences.push({ task, date: occurrence.date, originalDate: occurrence.originalDate });
+  }
+  return occurrences;
+}
+
+export function listTaskOccurrences(tasks, moves, completions, { from, to }) {
+  const movesByTask = groupOccurrenceMoves(moves);
   const completed = new Set(completions.map(({ taskId, date }) => `${taskId}:${date}`));
   const occurrences = [];
   for (const task of tasks) {

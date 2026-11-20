@@ -1,9 +1,9 @@
-export const THEMES = Object.freeze(['light', 'dark']);
+export const THEMES = Object.freeze(['light', 'dark', 'system']);
 export const APP_FONT_FAMILIES = Object.freeze({ inter: 'Inter', system: 'Системный' });
 export const APP_FONT_SIZE_LIMITS = Object.freeze({ min: 12, max: 16 });
 export const INSTRUCTION_OPTION_LABELS = Object.freeze({
   documentType: 'Вид документа',
-  source: 'Откуда',
+  source: 'Откуда поступил документ',
   executor: 'Исполнитель',
 });
 export const CONTROL_CARD_OPTION_LABELS = Object.freeze({

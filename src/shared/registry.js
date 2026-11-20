@@ -3,6 +3,7 @@ import { validateDate, localDate, addCalendarDays } from './dates.js';
 import { validateRecord as record, validateText as text, validateEnum as enumValue } from './validation.js';
 import { validateControlSchedule } from './controlSchedule.js';
 import { validateTaskRecurrence } from './taskRecurrence.js';
+import { INSTRUCTION_OPTION_LABELS } from './constants/settings.js';
 import {
   INSTRUCTION_STATUSES, INSTRUCTION_STATUS, TASK_PRIORITIES, TASK_PRIORITY, TASK_PRIORITY_TONES, URGENCY_WINDOW_DAYS,
 } from './constants/registry.js';
@@ -22,7 +23,7 @@ export function validateInstruction(value) {
     incomingNumber: text(data.incomingNumber, 'Входящий номер'),
     instructionNumber: text(data.instructionNumber, 'Подписной номер', true),
     documentType: text(data.documentType, 'Вид документа').trim(),
-    source: text(data.source, 'Откуда'),
+    source: text(data.source, INSTRUCTION_OPTION_LABELS.source),
     title: text(data.title, 'Название указания', true),
     summary: text(data.summary, 'Резолюция'),
     deadline: validateDate(data.deadline, 'Срок исполнения'),

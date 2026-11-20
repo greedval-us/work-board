@@ -12,6 +12,8 @@ test('initial months follow effective custom dates, recurring deadlines and reta
     ['no control date', empty, {}, '2026-06'],
     ['history only', { ...empty, marks: [{ date: '2026-03-10', text: 'Принято' }] }, period, '2026-03'],
     ['future recurrence', { ...empty, frequency: 'monthly', firstDate: '2026-08-01' }, period, '2026-08'],
+    ['manual checkpoint before a future recurrence', { ...empty, frequency: 'quarterly', firstDate: '2026-08-01',
+      customDates: ['2026-05-01', '2026-07-15'] }, period, '2026-07'],
     ['first scheduled month of a future annual recurrence', { ...empty, frequency: 'yearly', firstDate: '2026-08-01', monthOfYear: 2 },
       { ...period, deadline: '2027-12-31' }, '2027-02'],
     ['active recurrence', { ...empty, frequency: 'monthly', firstDate: '2026-01-01' }, period, '2026-06'],

@@ -128,25 +128,54 @@ test('disposal suppresses late failures and readiness loss clears displayed noti
   failure.reject(new Error('private')); await request; assert.equal(store.error, '');
 });
 
-test('refresh lifecycle follows midnight, visibility and focus and releases its listeners', () => {
+test('refresh timer pauses while hidden and resumes on visibility and focus', () => {
   const windowTarget = new EventTarget();
-  const documentTarget = new EventTarget(); documentTarget.visibilityState = 'visible';
-  let acquired = 0; let released = 0; let refreshed = 0; let timer;
+  const documentTarget = new EventTarget(); documentTarget.visibilityState = 'hidden';
+  let acquired = 0; let released = 0; let refreshed = 0;
+  const timers = new Set();
   const scope = effectScope();
   scope.run(() => useNotifications({
     store: { acquire: () => { acquired++; return () => released++; }, refresh: () => refreshed++ },
     windowTarget, documentTarget, now: () => new Date(2026, 10, 12, 23, 59, 59),
-    schedule: (callback, delay) => { timer = { callback, delay }; return timer; }, cancel: () => {},
+    schedule: (callback, delay) => {
+      const timer = { callback, delay };
+      timers.add(timer);
+      return timer;
+    },
+    cancel: timer => timers.delete(timer),
   }));
-  assert.equal(acquired, 1); assert.ok(timer.delay < 2000);
-  timer.callback(); assert.equal(refreshed, 1);
-  documentTarget.visibilityState = 'hidden';
-  documentTarget.dispatchEvent(new Event('visibilitychange')); assert.equal(refreshed, 1);
+  assert.equal(acquired, 1);
+  assert.equal(timers.size, 0);
   documentTarget.visibilityState = 'visible';
-  documentTarget.dispatchEvent(new Event('visibilitychange')); assert.equal(refreshed, 2);
-  windowTarget.dispatchEvent(new Event('focus')); assert.equal(refreshed, 3);
-  scope.stop(); assert.equal(released, 1);
-  windowTarget.dispatchEvent(new Event('focus')); assert.equal(refreshed, 3);
+  documentTarget.dispatchEvent(new Event('visibilitychange'));
+  assert.equal(refreshed, 1);
+  assert.equal(timers.size, 1);
+  const [timer] = timers;
+  assert.ok(timer.delay < 2000);
+  timers.delete(timer);
+  timer.callback();
+  assert.equal(refreshed, 2);
+  assert.equal(timers.size, 1);
+  documentTarget.visibilityState = 'hidden';
+  documentTarget.dispatchEvent(new Event('visibilitychange'));
+  assert.equal(timers.size, 0);
+  documentTarget.dispatchEvent(new Event('visibilitychange'));
+  windowTarget.dispatchEvent(new Event('focus'));
+  assert.equal(refreshed, 2);
+  assert.equal(timers.size, 0);
+  documentTarget.visibilityState = 'visible';
+  documentTarget.dispatchEvent(new Event('visibilitychange'));
+  assert.equal(refreshed, 3);
+  assert.equal(timers.size, 1);
+  windowTarget.dispatchEvent(new Event('focus'));
+  assert.equal(refreshed, 4);
+  assert.equal(timers.size, 1);
+  scope.stop();
+  assert.equal(released, 1);
+  windowTarget.dispatchEvent(new Event('focus'));
+  documentTarget.dispatchEvent(new Event('visibilitychange'));
+  assert.equal(refreshed, 4);
+  assert.equal(timers.size, 0);
 });
 
 test('native delivery suppresses renderer popups and surfaces delivery errors without marking unread items', async t => {

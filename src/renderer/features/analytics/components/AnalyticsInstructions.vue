@@ -8,23 +8,32 @@ const emit = defineEmits(['page']);
 const headingId = useId();
 const scroller = useTemplateRef('scroller');
 
+function controlDate(item) { return item.checkpointDate ?? instructionDeadline(item); }
+
+function controlRoute(item) {
+  const query = { instruction: item.id };
+  if (item.checkpointDate) query.checkpoint = item.checkpointDate;
+  return { name: item.closedAt ? 'ClosedControl' : 'Registry', query };
+}
+
 watch(() => props.result.page, () => { if (scroller.value) scroller.value.scrollTop = 0; }, { flush: 'post' });
 </script>
 
 <template>
   <section class="analytics-chart-card analytics-instructions" :aria-labelledby="headingId">
-    <header><h2 :id="headingId">Указания исполнителя</h2></header>
+    <header><h2 :id="headingId">Контроль исполнителя</h2></header>
     <div ref="scroller" class="analytics-table-scroll" role="region" :aria-labelledby="headingId" :aria-busy="loading" tabindex="0">
       <table class="analytics-data-table analytics-instructions-table" :aria-labelledby="headingId">
-        <thead><tr><th scope="col">Подписной номер</th><th scope="col">Название указания</th><th scope="col">Действующий срок</th></tr></thead>
+        <thead><tr><th scope="col">Подписной номер</th><th scope="col">Название указания</th><th scope="col">Дата контроля</th></tr></thead>
         <tbody>
-          <tr v-for="item in result.items" :key="item.id" :data-instruction-id="item.id">
+          <tr v-for="item in result.items" :key="`${item.id}:${item.checkpointDate ?? 'final'}`" :data-instruction-id="item.id" :data-checkpoint-date="item.checkpointDate">
             <td>{{ item.instructionNumber }}</td>
             <th scope="row">
-              <RouterLink class="analytics-instruction-link" :to="{ name: item.closedAt ? 'ClosedControl' : 'Registry', query: { instruction: item.id } }">{{ item.title }}</RouterLink>
-              <small v-if="item.closedAt" class="analytics-control-closed">Контроль закрыт</small>
+              <RouterLink class="analytics-instruction-link" :to="controlRoute(item)">{{ item.title }}</RouterLink>
+              <small v-if="item.checkpointDate" class="analytics-checkpoint-caption">Промежуточный контроль{{ item.checkpointClosed ? ' · Есть отметка' : '' }}</small>
+              <small v-else-if="item.closedAt" class="analytics-control-closed">Контроль закрыт</small>
             </th>
-            <td><time :datetime="instructionDeadline(item)">{{ formatDate(instructionDeadline(item)) }}</time></td>
+            <td><time :datetime="controlDate(item)">{{ formatDate(controlDate(item)) }}</time></td>
           </tr>
         </tbody>
       </table>

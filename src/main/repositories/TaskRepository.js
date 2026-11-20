@@ -1,8 +1,9 @@
-import { validateDate, validateId, validateTask, ValidationError } from '../../shared/registry.js';
+import { daysInMonth, validateDate, validateId, validateTask, ValidationError } from '../../shared/registry.js';
+import { ISO_MONTH_PATTERN } from '../../shared/constants/dates.js';
 import { firstTaskOccurrence } from '../../shared/taskRecurrence.js';
 import { validateDateRange } from '../../shared/validation.js';
 import {
-  listTaskOccurrences, occurrenceCompletion, occurrenceView, originalDateForMove, originalOccurrenceDate, planOccurrenceUpdate,
+  listTaskOccurrences, occurrenceCompletion, occurrenceView, originalDateForMove, originalOccurrenceDate, planOccurrenceUpdate, taskAgendaOccurrences,
   validateOccurrenceCompletion,
 } from '../domain/taskOccurrences.js';
 import { AppError } from '../errors/AppError.js';
@@ -25,7 +26,18 @@ export class TaskRepository {
 
   list(request = {}) {
     if (!request || typeof request !== 'object' || Array.isArray(request)) throw new ValidationError('Некорректный запрос задач.');
-    const { from, to } = request;
+    const { from, to, agendaDate, month } = request;
+    if (agendaDate !== undefined || month !== undefined) {
+      if ((agendaDate !== undefined && month !== undefined) || from !== undefined || to !== undefined) {
+        throw new ValidationError('Выберите один режим просмотра задач.');
+      }
+      if (month !== undefined) {
+        if (typeof month !== 'string' || !ISO_MONTH_PATTERN.test(month)) throw new ValidationError('Выберите корректный месяц.');
+        const [year, number] = month.split('-').map(Number);
+        return this.occurrences({ from: `${month}-01`, to: `${month}-${daysInMonth(year, number)}` });
+      }
+      return this.#agenda(validateDate(agendaDate, 'Дата списка задач'));
+    }
     const clauses = [];
     const values = [];
     if (from !== undefined && from !== '') { clauses.push('date >= ?'); values.push(validateDate(from, 'Дата с')); }
@@ -34,6 +46,22 @@ export class TaskRepository {
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
     return this.database.connection.prepare(`SELECT ${COLUMNS} FROM calendar_tasks ${where} ORDER BY date ASC, id ASC`)
       .all(...values).map(fromRow);
+  }
+
+  #agenda(agendaDate) {
+    const tasks = this.list();
+    if (!tasks.some(task => task.recurrence)) return tasks;
+    const occurrences = taskAgendaOccurrences(tasks, this.occurrenceMoves(), agendaDate);
+    const candidates = occurrences.map(({ task, originalDate }) => [task.id, originalDate]);
+    const completed = this.database.connection.prepare(`SELECT c.task_id AS taskId
+      FROM json_each(?) AS candidate
+      JOIN calendar_task_completions AS c ON c.task_id = json_extract(candidate.value, '$[0]')
+        AND c.date = json_extract(candidate.value, '$[1]')`).all(JSON.stringify(candidates));
+    const completedIds = new Set(completed.map(({ taskId }) => taskId));
+    return [
+      ...tasks.filter(task => !task.recurrence),
+      ...occurrences.map(({ task, date, originalDate }) => occurrenceView(task, date, completedIds.has(task.id), originalDate)),
+    ].sort((left, right) => left.date.localeCompare(right.date) || left.id - right.id);
   }
 
   occurrences({ from, to }) {

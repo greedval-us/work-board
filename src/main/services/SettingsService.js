@@ -80,7 +80,7 @@ export class SettingsService {
       assertUniqueOption(field, options, option, index);
       options[index] = option;
       return { registryOptions: { [field]: options }, ...relatedSettings(settings, field, previousValue, option, contact) };
-    });
+    }, { field, previousValue, value: option });
   }
 
   removeRegistryOption(field, value) {

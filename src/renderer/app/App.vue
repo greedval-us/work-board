@@ -1,7 +1,8 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, shallowRef, useTemplateRef } from 'vue';
 import { useRoute } from 'vue-router';
-import { PanelLeft, Sun, Moon, RefreshCw } from 'lucide-vue-next';
+import { PanelLeftClose, PanelLeftOpen, Sun, Moon, RefreshCw, ChevronRight, HardDrive } from 'lucide-vue-next';
+import { localDate } from '../../shared/dates.js';
 import AppSidebar from './AppSidebar.vue';
 import { useAppStore } from './appStore.js';
 import { useAppearance } from './useAppearance.js';
@@ -11,15 +12,28 @@ import NotificationCenter from '../features/notifications/NotificationCenter.vue
 
 const store = useAppStore();
 const errors = useErrorStore();
-const compactQuery = window.matchMedia('(max-width: 1279px)');
+const compactQuery = window.matchMedia('(max-width: 1079px)');
 const compact = shallowRef(compactQuery.matches);
 const collapsed = shallowRef(compact.value);
 const mainContent = useTemplateRef('mainContent');
 const navigationToggle = useTemplateRef('navigationToggle');
 const sidebarFrame = useTemplateRef('sidebarFrame');
 const route = useRoute();
-const title = computed(() => route.meta.title ?? 'Work Board');
+const databaseName = computed(() => store.database?.ready ? store.database.filePath?.split(/[\\/]/).pop() : '');
+const storageLabel = computed(() => store.database?.ready ? 'Подключена' : 'Не выбрана');
+const navigationLabel = computed(() => collapsed.value ? 'Развернуть меню' : 'Свернуть меню');
+const currentDay = shallowRef(new Date());
+const dayFormatter = new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: 'numeric', month: 'long' });
+let dayTimer;
+function syncDay() {
+  const now = new Date();
+  currentDay.value = now;
+  clearTimeout(dayTimer);
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  dayTimer = setTimeout(syncDay, tomorrow - now + 100);
+}
 const { isDark, toggleAppearance } = useAppearance();
+const appearanceLabel = computed(() => isDark.value ? 'Включить светлую тему' : 'Включить тёмную тему');
 function resizeNavigation(event) {
   compact.value = event.matches;
   collapsed.value = event.matches;
@@ -59,12 +73,16 @@ function beforeUnload(event) {
   }
 }
 onMounted(() => {
+  syncDay();
+  window.addEventListener('focus', syncDay);
   compactQuery.addEventListener('change', resizeNavigation);
   store.initialize();
   window.__workBoardConfirmClose = () => store.prepareToClose();
   window.addEventListener('beforeunload', beforeUnload);
 });
 onBeforeUnmount(() => {
+  clearTimeout(dayTimer);
+  window.removeEventListener('focus', syncDay);
   compactQuery.removeEventListener('change', resizeNavigation);
   window.removeEventListener('beforeunload', beforeUnload);
   delete window.__workBoardConfirmClose;
@@ -77,31 +95,34 @@ onBeforeUnmount(() => {
     <Transition name="navigation-shade">
       <button v-if="compact && !collapsed" class="sidebar-backdrop" type="button" tabindex="-1" aria-label="Закрыть меню" @click="closeNavigation(true)" />
     </Transition>
-    <div ref="sidebarFrame" class="sidebar-frame" :class="{ 'sidebar-frame-collapsed': collapsed, 'sidebar-frame-overlay': compact && !collapsed }">
-      <AppSidebar :collapsed="compact || collapsed" :inert="compact && !collapsed" :aria-hidden="compact && !collapsed || undefined" :ready="store.database?.ready === true" @navigate="closeNavigation()" />
+    <div ref="sidebarFrame" class="sidebar-frame" :class="{ 'sidebar-frame-collapsed': compact || collapsed, 'sidebar-frame-overlay': compact && !collapsed }">
+      <AppSidebar :collapsed="compact || collapsed" :inert="compact && !collapsed" :aria-hidden="compact && !collapsed || undefined" @navigate="closeNavigation()" />
+      <button ref="navigationToggle" type="button" class="icon-button sidebar-toggle" :inert="compact && !collapsed"
+        :aria-expanded="!collapsed" :aria-controls="compact && !collapsed ? 'expanded-navigation' : 'main-navigation'"
+        :aria-label="navigationLabel" :title="navigationLabel" @click="toggleNavigation">
+        <component :is="collapsed ? PanelLeftOpen : PanelLeftClose" :size="17" aria-hidden="true" />
+      </button>
+      <footer class="sidebar-footer" :inert="compact && !collapsed">
+        <RouterLink class="storage-link" to="/settings" :title="store.database?.filePath || 'Настройки хранилища'"
+          :aria-label="databaseName ? `Настройки хранилища, ${databaseName}` : 'Настройки хранилища'">
+          <span class="storage-symbol"><HardDrive :size="18" aria-hidden="true" /><i class="storage-dot" :class="{ 'storage-dot-ready': store.database?.ready }" /></span>
+          <span class="storage-copy"><span class="footer-title">{{ databaseName || 'Локальная база' }}</span><span class="footer-caption">{{ storageLabel }}</span></span>
+          <ChevronRight class="storage-chevron" :size="13" aria-hidden="true" />
+        </RouterLink>
+        <div class="sidebar-tools">
+          <time class="toolbar-date" :datetime="localDate(currentDay)">{{ dayFormatter.format(currentDay) }}</time>
+          <NotificationCenter />
+          <button type="button" class="icon-button theme-toggle" :disabled="!store.database?.ready || store.saving || store.databaseSwitching"
+            :aria-label="appearanceLabel" :title="appearanceLabel" @click="toggleAppearance">
+            <Transition name="theme-symbol" mode="out-in"><component :is="isDark ? Sun : Moon" :size="16" aria-hidden="true" /></Transition>
+          </button>
+        </div>
+      </footer>
       <Transition name="navigation-panel" @before-enter="prepareNavigationEnter" @before-leave="prepareNavigationLeave">
-        <AppSidebar v-if="compact && !collapsed" class="sidebar-floating" navigation-id="expanded-navigation" overlay :ready="store.database?.ready === true" @navigate="closeNavigation()" @close="closeNavigation(true)" />
+        <AppSidebar v-if="compact && !collapsed" class="sidebar-floating" navigation-id="expanded-navigation" overlay @navigate="closeNavigation()" @close="closeNavigation(true)" />
       </Transition>
     </div>
     <div class="app-body" :inert="compact && !collapsed">
-      <header class="toolbar">
-        <div class="toolbar-start">
-          <button ref="navigationToggle" type="button" class="icon-button sidebar-toggle" :aria-expanded="!collapsed"
-            :aria-controls="compact && !collapsed ? 'expanded-navigation' : 'main-navigation'"
-            :aria-label="collapsed ? 'Развернуть меню' : 'Свернуть меню'" @click="toggleNavigation">
-            <PanelLeft :size="18" aria-hidden="true" />
-          </button>
-          <span class="toolbar-title">{{ title }}</span>
-        </div>
-        <div class="toolbar-end">
-          <span class="local-label"><span class="status-dot" :class="{ 'status-dot-ready': store.database?.ready }" />Локально</span>
-          <NotificationCenter />
-          <button type="button" class="icon-button" :disabled="!store.database?.ready || store.saving || store.databaseSwitching"
-            :aria-label="isDark ? 'Включить светлую тему' : 'Включить тёмную тему'" @click="toggleAppearance">
-            <component :is="isDark ? Sun : Moon" :size="18" aria-hidden="true" />
-          </button>
-        </div>
-      </header>
       <div v-if="store.error" class="error-banner" role="alert">
         <span>{{ store.error }}</span>
         <button type="button" class="text-button" :disabled="store.loading || store.saving" @click="store.initialize">

@@ -144,6 +144,25 @@ test('adding and editing an executor send contacts in the same settings request'
   assert.deepEqual(store.executorContacts, [{ executor: 'Иванов', ...updated }]);
 });
 
+test('a saved instruction option rename refreshes data consumers after settings are applied', async (t) => {
+  const initial = { source: ['Канцелярия'] };
+  const store = bridge(t, { settings: {
+    get: async () => ({ theme: 'light', registryOptions: initial }),
+    updateRegistryOption: async (field, _previousValue, value) => {
+      if (value === 'Ошибка') throw new Error('Не удалось сохранить вариант');
+      return { theme: 'light', registryOptions: { ...initial, [field]: [value.trim()] } };
+    },
+  } });
+  await store.initialize();
+  const revision = store.revision;
+  assert.equal(await store.updateRegistryOption('source', 'Канцелярия', 'Ошибка'), false);
+  assert.equal(await store.updateRegistryOption('source', 'Канцелярия', ' Канцелярия '), true);
+  assert.equal(store.revision, revision);
+  assert.equal(await store.updateRegistryOption('source', 'Канцелярия', 'Секретариат'), true);
+  assert.deepEqual(store.registryOptions.source, ['Секретариат']);
+  assert.equal(store.revision, revision + 1);
+});
+
 test('the Ф‑21 office loads per database and updates only after a successful save', async (t) => {
   const first = 'Канцелярия, 101';
   const saved = 'Приёмная, 456';

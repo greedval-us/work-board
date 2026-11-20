@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue';
-import { ArrowUpRight, Check, Plus } from 'lucide-vue-next';
-import { dayLabel } from '../../../ui/calendarDates.js';
+import { ArrowUpRight, Check, FileText, Flag, ListTodo, Plus } from 'lucide-vue-next';
+import { calendarDate, dayLabel } from '../../../ui/calendarDates.js';
 import { presentCalendarCheckpoints, presentCalendarRecords } from '../calendarRecords.js';
 
 const props = defineProps({
@@ -11,7 +11,10 @@ const props = defineProps({
   taskError: { type: String, default: '' }, busyTaskId: { default: null }, disabled: Boolean,
 });
 const emit = defineEmits(['newTask', 'openTask', 'toggleTask', 'retry']);
-const title = computed(() => dayLabel(props.date));
+const dayFormatter = new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
+const dayParts = computed(() => Object.fromEntries(
+  dayFormatter.formatToParts(calendarDate(props.date)).map(({ type, value }) => [type, value])
+));
 const records = computed(() => presentCalendarRecords(props.instructions, props.tasks, props.today));
 const instructionRows = computed(() => records.value.instructions);
 const taskRows = computed(() => records.value.tasks);
@@ -27,12 +30,22 @@ function toggleTask(event, item) {
 
 <template>
   <section class="calendar-day-panel" :aria-busy="loading" aria-labelledby="calendar-day-heading">
-    <header class="calendar-day-heading"><h2 id="calendar-day-heading">{{ title }}</h2></header>
+    <header class="calendar-day-heading">
+      <h2 id="calendar-day-heading" :aria-label="dayLabel(date)">
+        <time :key="date" :datetime="date" class="calendar-day-stamp">
+          <span class="calendar-day-numeral">{{ dayParts.day }}</span>
+          <span class="calendar-day-context">
+            <span>{{ dayParts.month }}</span>
+            <span class="calendar-day-weekday">{{ dayParts.weekday }}</span>
+          </span>
+        </time>
+      </h2>
+    </header>
     <p v-if="loading" class="calendar-day-placeholder" role="status">Загружаем записи…</p>
     <div v-else-if="error" class="calendar-alert" role="alert"><p>{{ error }}</p><button class="calendar-button" @click="emit('retry')">Повторить</button></div>
     <template v-else>
       <section class="calendar-day-section" aria-labelledby="calendar-controls-heading">
-        <div class="calendar-list-heading"><h3 id="calendar-controls-heading">Указания</h3><span class="calendar-list-count" :aria-label="`На контроле: ${counts.activeControls}`">{{ counts.activeControls }}</span><span v-if="counts.completedControls" class="calendar-completed-count" :aria-label="`Исполнено: ${counts.completedControls}`" :title="`Исполнено: ${counts.completedControls}`"><Check :size="12" aria-hidden="true" />{{ counts.completedControls }}</span></div>
+        <div class="calendar-list-heading"><FileText :size="15" aria-hidden="true" /><h3 id="calendar-controls-heading">Указания</h3><span class="calendar-list-count" :aria-label="`На контроле: ${counts.activeControls}`">{{ counts.activeControls }}</span><span v-if="counts.completedControls" class="calendar-completed-count" :aria-label="`Исполнено: ${counts.completedControls}`" :title="`Исполнено: ${counts.completedControls}`"><Check :size="12" aria-hidden="true" />{{ counts.completedControls }}</span></div>
         <div class="calendar-list-body" tabindex="0" role="region" aria-label="Указания на выбранный день">
         <p v-if="!instructionRows.length" class="calendar-empty-list">Указаний к этому сроку нет.</p>
         <ul v-else class="calendar-record-list">
@@ -48,6 +61,7 @@ function toggleTask(event, item) {
       </section>
       <section class="calendar-day-section" aria-labelledby="calendar-checkpoints-heading">
         <div class="calendar-list-heading">
+          <Flag :size="15" aria-hidden="true" />
           <h3 id="calendar-checkpoints-heading">Промежуточный контроль</h3>
           <span class="calendar-list-count" :aria-label="`Без отметки: ${checkpointList.open}`">{{ checkpointList.open }}</span>
           <span v-if="checkpointList.marked" class="calendar-completed-count" :aria-label="`С отметкой: ${checkpointList.marked}`" :title="`С отметкой: ${checkpointList.marked}`">
@@ -73,7 +87,7 @@ function toggleTask(event, item) {
         </div>
       </section>
       <section class="calendar-day-section" aria-labelledby="calendar-tasks-heading">
-        <div class="calendar-list-heading"><h3 id="calendar-tasks-heading">Мои задачи</h3><span class="calendar-list-count" :aria-label="`Невыполненных задач: ${counts.activeTasks}`">{{ counts.activeTasks }}</span><span v-if="counts.completedTasks" class="calendar-completed-count" :aria-label="`Выполнено: ${counts.completedTasks}`" :title="`Выполнено: ${counts.completedTasks}`"><Check :size="12" aria-hidden="true" />{{ counts.completedTasks }}</span><button class="calendar-add-task" :disabled="disabled" aria-label="Добавить задачу на выбранный день" @click="emit('newTask')"><Plus :size="17" aria-hidden="true" /></button></div>
+        <div class="calendar-list-heading"><ListTodo :size="15" aria-hidden="true" /><h3 id="calendar-tasks-heading">Мои задачи</h3><span class="calendar-list-count" :aria-label="`Невыполненных задач: ${counts.activeTasks}`">{{ counts.activeTasks }}</span><span v-if="counts.completedTasks" class="calendar-completed-count" :aria-label="`Выполнено: ${counts.completedTasks}`" :title="`Выполнено: ${counts.completedTasks}`"><Check :size="12" aria-hidden="true" />{{ counts.completedTasks }}</span><button class="calendar-add-task" :disabled="disabled" aria-label="Добавить задачу на выбранный день" @click="emit('newTask')"><Plus :size="17" aria-hidden="true" /></button></div>
         <div class="calendar-list-body" tabindex="0" role="region" aria-label="Задачи на выбранный день">
         <p v-if="taskError" class="calendar-task-error" role="alert">{{ taskError }}</p>
         <p v-if="!taskRows.length" class="calendar-empty-list">Пока свободно. Добавьте задачу на этот день.</p>

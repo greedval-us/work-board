@@ -11,16 +11,16 @@ export function useNotifications({
   const release = store.acquire();
   const unsubscribe = subscribeNotificationOpen(payload => { void store.openFromSystem(payload); });
   let timer;
-  function tick() {
+  function syncPolling(refresh = false) {
     cancel(timer);
-    if (documentTarget?.visibilityState !== 'hidden') void store.refresh();
+    timer = undefined;
+    if (documentTarget?.visibilityState === 'hidden') return;
+    if (refresh) void store.refresh();
     // Check external database edits as well as the midnight transition.
-    scheduleNextCheck();
-  }
-  function scheduleNextCheck() {
     timer = schedule(tick, Math.min(NOTIFICATION_CHECK_INTERVAL_MS, millisecondsUntilTomorrow(now())));
   }
-  scheduleNextCheck();
+  const tick = () => syncPolling(true);
+  syncPolling();
   windowTarget?.addEventListener('focus', tick);
   documentTarget?.addEventListener('visibilitychange', tick);
   onScopeDispose(() => {

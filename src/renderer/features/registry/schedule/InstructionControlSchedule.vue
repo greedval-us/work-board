@@ -21,7 +21,9 @@ const customDateInput = useTemplateRef('customDateInput');
 const sectionId = useId();
 const dayHelpId = useId();
 const {
-  customDate, openDate, plannedDate, plannedDateBounds, moveError, month, recurring, weekly, yearly, dayOfMonthSupported, custom, configuredDates,
+  customDate, openDate, plannedDate, plannedDateBounds, moveError, month, recurring, legacyRecurrence, invalidFirstDate,
+  weekly, yearly, dayOfMonthSupported, custom, configuredDates,
+  visiblePeriods, canShowEarlierPeriods, canShowLaterPeriods, outsidePeriods, changePeriodPage, changePeriodDate, clearOutsidePeriod,
   invalidCheckpointDate, duplicateDate, canAddDate, showPreview, marksByDate, rows,
   inControlPeriod, selectFrequency, selectFirstDate, selectDayOfMonth, selectMonthOfYear, selectDayOfWeek, addCustomDate, removeCustomDate,
   showMonth, selectMonth, toggleMark, actualDateDraft, updateActualDate, updateMark,
@@ -34,47 +36,76 @@ defineExpose({ focusSelectedDate });
 <template>
   <section ref="section" class="control-schedule" :aria-labelledby="sectionId">
     <h3 :id="sectionId">Промежуточный контроль</h3>
-    <fieldset class="control-schedule-fields"
-      :class="{ 'control-schedule-fields-with-day': weekly || dayOfMonthSupported, 'control-schedule-fields-yearly': yearly }"
-      :disabled="props.disabled">
+    <fieldset class="control-schedule-fields" :disabled="props.disabled">
       <label class="registry-field">
         <span>Периодичность</span>
         <select name="control-frequency" :value="schedule.frequency" @change="selectFrequency($event.target.value)">
           <option v-for="(label, value) in CONTROL_FREQUENCIES" :key="value" :value="value">{{ label }}</option>
         </select>
       </label>
-      <label v-if="recurring" class="registry-field">
-        <span>{{ weekly || dayOfMonthSupported ? 'Дата начала графика *' : 'Первая дата контроля *' }}</span>
-        <input name="control-first-date" type="date" required :value="schedule.firstDate"
-          :min="props.controlDate || DATE_LIMITS.MIN" :max="props.deadline || DATE_LIMITS.MAX" @input="selectFirstDate($event.target.value)" />
-      </label>
-      <label v-if="dayOfMonthSupported" class="registry-field control-schedule-day-of-month">
-        <span>День месяца</span>
-        <input name="control-day-of-month" type="number" min="1" max="31" step="1" inputmode="numeric"
-          :value="schedule.dayOfMonth ?? ''" placeholder="Автоматически" :aria-describedby="dayHelpId"
-          @change="selectDayOfMonth($event.currentTarget)" @keydown.enter.esc="selectDayOfMonth($event.currentTarget)" />
-      </label>
-      <label v-if="yearly" class="registry-field">
-        <span>Месяц</span>
-        <select name="control-month-of-year" :value="schedule.monthOfYear ?? ''" :aria-describedby="dayHelpId"
-          @change="selectMonthOfYear($event.target.value)">
-          <option value="">Автоматически</option>
-          <option v-for="(label, index) in CALENDAR_MONTHS" :key="label" :value="index + 1">{{ label }}</option>
-        </select>
-      </label>
-      <label v-if="weekly" class="registry-field">
-        <span>День недели</span>
-        <select name="control-day-of-week" :value="schedule.dayOfWeek ?? ''" :aria-describedby="dayHelpId"
-          @change="selectDayOfWeek($event.target.value)">
-          <option value="">Автоматически</option>
-          <option v-for="(label, day) in CONTROL_WEEKDAY_LABELS" :key="day" :value="day">{{ label }}</option>
-        </select>
-      </label>
-      <p v-if="weekly || dayOfMonthSupported" :id="dayHelpId" class="registry-help control-schedule-day-help">
-        <template v-if="yearly">При автоматическом выборе день и месяц берутся из даты начала. В коротком месяце используется последний день.</template>
-        <template v-else-if="weekly">При автоматическом выборе используется день недели из даты начала.</template>
-        <template v-else>Без числа берётся день из даты начала. В коротком месяце используется последний день месяца.</template>
-      </p>
+      <div v-if="recurring" class="control-schedule-periods">
+        <p v-if="!visiblePeriods.length" class="registry-help">Укажите дату постановки на контроль и срок исполнения.</p>
+        <template v-else>
+          <h4>Даты по периодам</h4>
+          <div class="control-schedule-period-fields">
+            <label v-for="period in visiblePeriods" :key="period.start" class="registry-field">
+              <span>{{ period.label }}</span>
+              <input name="control-period-date" type="date" :data-control-period="period.start" :value="period.date"
+                :min="period.min" :max="period.max" @input="changePeriodDate(period, $event.target)" @keydown.enter.prevent />
+              <span v-if="period.multiple" class="registry-help">Есть несколько дат. Выберите одну для этого периода.</span>
+            </label>
+          </div>
+          <div v-if="canShowEarlierPeriods || canShowLaterPeriods" class="control-schedule-navigation" aria-label="Страницы периодов">
+            <button type="button" class="registry-button" :disabled="!canShowEarlierPeriods" @click="changePeriodPage(-1)">Предыдущие периоды</button>
+            <button type="button" class="registry-button" :disabled="!canShowLaterPeriods" @click="changePeriodPage(1)">Следующие периоды</button>
+          </div>
+        </template>
+        <ul v-if="outsidePeriods.length" class="control-schedule-outside-periods">
+          <li v-for="[start, date] in outsidePeriods" :key="start" class="control-schedule-warning">
+            Дата {{ formatDate(date) }} вне периода контроля.
+            <button type="button" class="registry-inline-action" @click="clearOutsidePeriod(start)">Убрать дату</button>
+          </li>
+        </ul>
+      </div>
+      <details v-if="legacyRecurrence" class="control-schedule-legacy" :open="invalidFirstDate || undefined">
+        <summary>Параметры сохранённого графика</summary>
+        <div class="control-schedule-fields"
+          :class="{ 'control-schedule-fields-with-day': weekly || dayOfMonthSupported, 'control-schedule-fields-yearly': yearly }">
+          <label class="registry-field">
+            <span>{{ weekly || dayOfMonthSupported ? 'Дата начала графика *' : 'Первая дата контроля *' }}</span>
+            <input name="control-first-date" type="date" required :value="schedule.firstDate"
+              :min="props.controlDate || DATE_LIMITS.MIN" :max="props.deadline || DATE_LIMITS.MAX" @input="selectFirstDate($event.target.value)" />
+          </label>
+          <label v-if="dayOfMonthSupported" class="registry-field control-schedule-day-of-month">
+            <span>День месяца</span>
+            <input name="control-day-of-month" type="number" min="1" max="31" step="1" inputmode="numeric"
+              :value="schedule.dayOfMonth ?? ''" placeholder="Автоматически" :aria-describedby="dayHelpId"
+              @change="selectDayOfMonth($event.currentTarget)" @keydown.enter.esc="selectDayOfMonth($event.currentTarget)" />
+          </label>
+          <label v-if="yearly" class="registry-field">
+            <span>Месяц</span>
+            <select name="control-month-of-year" :value="schedule.monthOfYear ?? ''" :aria-describedby="dayHelpId"
+              @change="selectMonthOfYear($event.target.value)">
+              <option value="">Автоматически</option>
+              <option v-for="(label, index) in CALENDAR_MONTHS" :key="label" :value="index + 1">{{ label }}</option>
+            </select>
+          </label>
+          <label v-if="weekly" class="registry-field">
+            <span>День недели</span>
+            <select name="control-day-of-week" :value="schedule.dayOfWeek ?? ''" :aria-describedby="dayHelpId"
+              @change="selectDayOfWeek($event.target.value)">
+              <option value="">Автоматически</option>
+              <option v-for="(label, day) in CONTROL_WEEKDAY_LABELS" :key="day" :value="day">{{ label }}</option>
+            </select>
+          </label>
+          <p v-if="weekly || dayOfMonthSupported" :id="dayHelpId" class="registry-help control-schedule-day-help">
+            <template v-if="yearly">При автоматическом выборе день и месяц берутся из даты начала. В коротком месяце используется последний день.</template>
+            <template v-else-if="weekly">При автоматическом выборе используется день недели из даты начала.</template>
+            <template v-else>Без числа берётся день из даты начала. В коротком месяце используется последний день месяца.</template>
+          </p>
+        </div>
+      </details>
+      <p v-if="invalidFirstDate" class="control-schedule-warning control-schedule-day-help">Укажите дату начала сохранённого графика в пределах периода контроля.</p>
       <div v-if="custom" class="control-schedule-custom">
         <label class="registry-field">
           <span>Дата контроля</span>
@@ -161,10 +192,10 @@ defineExpose({ focusSelectedDate });
 </template>
 
 <style scoped>
-.control-schedule { display: grid; gap: 12px; margin-block: 22px; padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--grouped); }
-.control-schedule h3 { font-size: calc(14px + var(--app-font-offset)); font-weight: 600; }
+.control-schedule { display: grid; min-width: 0; gap: 9px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+.control-schedule h3 { margin: 0; font-size: calc(14px + var(--app-font-offset)); font-weight: 625; letter-spacing: -.025em; }
 .control-schedule h4 { font-size: calc(12px + var(--app-font-offset)); font-weight: 600; }
-.control-schedule-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 215px), 1fr)); gap: 12px; min-width: 0; border: 0; margin: 0; padding: 0; }
+.control-schedule-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 8px 10px; min-width: 0; border: 0; margin: 0; padding: 0; }
 .control-schedule-fields-with-day { grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); }
 .control-schedule-fields-yearly { grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); }
 .control-schedule-day-of-month input { max-width: 10rem; }
@@ -172,11 +203,18 @@ defineExpose({ focusSelectedDate });
 .control-schedule-custom, .control-schedule-month, .control-schedule-navigation, .control-schedule-row, .control-schedule-row-details { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .control-schedule-custom { align-items: end; flex-wrap: wrap; }
 .control-schedule-custom label { flex: 1 1 130px; }
-.control-schedule-custom .registry-button { min-height: 40px; }
+.control-schedule-periods, .control-schedule-legacy { grid-column: 1 / -1; min-width: 0; }
+.control-schedule-periods { display: grid; gap: 8px; }
+.control-schedule-period-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 125px), 1fr)); gap: 6px 8px; }
+.control-schedule-period-fields .registry-help { font-weight: 400; }
+.control-schedule-periods .control-schedule-navigation { flex-wrap: wrap; }
+.control-schedule-outside-periods { margin: 0; padding: 0; list-style: none; }
+.control-schedule-legacy summary { margin-bottom: 8px; cursor: pointer; color: var(--muted); font-size: calc(12px + var(--app-font-offset)); }
+.control-schedule-custom .registry-button { min-height: 33px; }
 .control-schedule-preview { min-width: 0; }
 .control-schedule-month { justify-content: space-between; flex-wrap: wrap; margin-bottom: 8px; }
-.control-schedule-navigation { gap: 5px; }
-.control-schedule-navigation .registry-button, .control-schedule-navigation input { min-height: 34px; padding: 5px 8px; }
+.control-schedule-navigation { gap: 4px; max-width: 100%; }
+.control-schedule-navigation .registry-button, .control-schedule-navigation input { min-height: 29px; padding: 3px 6px; }
 .control-schedule-empty { padding-block: 8px; }
 .control-schedule-warning { color: var(--registry-warning); font-size: calc(12px + var(--app-font-offset)); }
 .control-schedule-list { margin: 0; padding: 0; overflow: hidden; list-style: none; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
@@ -186,13 +224,17 @@ defineExpose({ focusSelectedDate });
 .control-schedule-row-details time { font-variant-numeric: tabular-nums; }
 button.control-schedule-row-details:hover, button.control-schedule-row-details[aria-expanded='true'] { background: var(--raised); }
 button.control-schedule-row-details:focus-visible { outline-offset: -3px; }
-.control-schedule-chevron { margin-left: auto; color: var(--muted); }
+.control-schedule-chevron { margin-left: auto; color: var(--muted); transition: transform var(--motion-fast) var(--motion-ease-out); }
 [aria-expanded='true'] .control-schedule-chevron { transform: rotate(180deg); }
 .control-schedule-row .control-schedule-remove { min-height: 32px; padding: 5px 7px; margin-right: 4px; border-color: transparent; color: var(--muted); }
-.control-schedule-editor { display: grid; gap: 10px; padding: 10px 12px 12px; }
+.control-schedule-editor { display: grid; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid var(--border); background: var(--grouped); animation: checkpoint-editor-enter var(--motion-page-enter) var(--motion-ease-out); }
+@keyframes checkpoint-editor-enter {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: none; }
+}
 .control-schedule-reschedule { display: flex; align-items: end; flex-wrap: wrap; gap: 8px; }
 .control-schedule-reschedule .registry-field { flex: 1 1 190px; }
-.control-schedule-reschedule .registry-button { min-height: 40px; }
+.control-schedule-reschedule .registry-button { min-height: 33px; }
 .control-schedule-actual-date { max-width: 280px; }
 .control-schedule-error { color: var(--error); font-size: calc(12px + var(--app-font-offset)); }
 .control-schedule-mark textarea { min-height: 65px; }

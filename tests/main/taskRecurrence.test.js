@@ -27,6 +27,56 @@ test('weekly tasks project the selected weekday and preserve the series start', 
   assert.deepEqual(tasks.list().map(({ id, date }) => [id, date]), [[series.id, date]]);
 });
 
+test('the task agenda uses one effective occurrence per series and keeps all one-time tasks', (t) => {
+  const { tasks } = fixture(t);
+  const old = tasks.create({ date: '2026-10-01', title: 'Старая задача', completed: true });
+  const future = tasks.create({ date: '2027-01-03', title: 'Будущая задача' });
+  const weekly = tasks.create({ date: '2026-11-16', title: 'Повтор', recurrence: { frequency: 'weekly', dayOfWeek: 3 } });
+  const manual = tasks.create({ date: '2026-11-10', title: 'По датам', recurrence: { frequency: 'custom', customDates: ['2026-11-15'] } });
+  tasks.updateOccurrence(weekly.id, '2026-11-18', true);
+  tasks.moveOccurrence(weekly.id, '2026-11-18', '2026-11-19');
+  tasks.moveOccurrence(manual.id, '2026-11-15', '2026-11-17');
+  tasks.updateOccurrence(manual.id, '2026-11-17', true);
+
+  assert.deepEqual(tasks.list({ agendaDate: '2026-11-19' }), [
+    old, tasks.get(manual.id, '2026-11-17'), tasks.get(weekly.id, '2026-11-19'), future,
+  ]);
+  assert.deepEqual(tasks.list({ agendaDate: '2026-11-20' }), [
+    old, tasks.get(manual.id, '2026-11-17'), tasks.get(weekly.id, '2026-11-25'), future,
+  ]);
+});
+
+test('the task agenda respects date limits and moves before a series start', (t) => {
+  const { tasks } = fixture(t);
+  const first = tasks.create({ date: '0001-01-01', title: 'Начало', recurrence: { frequency: 'custom' } });
+  const last = tasks.create({ date: '9999-12-31', title: 'Конец', recurrence: { frequency: 'weekly' } });
+  tasks.moveOccurrence(last.id, '9999-12-31', '9999-12-30');
+
+  for (const agendaDate of ['0001-01-01', '9999-12-31']) {
+    assert.deepEqual(tasks.list({ agendaDate }), [tasks.get(first.id, '0001-01-01'), tasks.get(last.id, '9999-12-30')]);
+  }
+});
+
+test('a task month returns all effective occurrences and reflects moves across months', (t) => {
+  const { tasks } = fixture(t);
+  const series = tasks.create({ date: '2028-01-31', title: 'Проверка', recurrence: { frequency: 'monthly' } });
+  const oneTime = tasks.create({ date: '2028-02-29', title: 'Отчёт' });
+  tasks.moveOccurrence(series.id, '2028-01-31', '2028-02-02');
+  tasks.updateOccurrence(series.id, '2028-02-02', true);
+  tasks.moveOccurrence(series.id, '2028-02-29', '2028-03-01');
+
+  assert.deepEqual(tasks.list({ month: '2028-02' }), [tasks.get(series.id, '2028-02-02'), oneTime]);
+  assert.deepEqual(tasks.list({ month: '9999-12' }), [tasks.get(series.id, '9999-12-31')]);
+});
+
+test('task agenda and month queries require a valid and unambiguous date selection', (t) => {
+  const { tasks } = fixture(t);
+  for (const request of [
+    { agendaDate: null }, { agendaDate: '2028-02-30' }, { month: '2028-2' }, { month: ['2028-02'] }, { month: '0000-01' },
+    { agendaDate: '2028-02-29', month: '2028-02' }, { month: '2028-02', from: '2028-02-01' }, { agendaDate: '2028-02-29', to: '' },
+  ]) assert.throws(() => tasks.list(request), { code: 'VALIDATION' });
+});
+
 test('recurring task updates save completion only for the selected date', (t) => {
   const { connection, tasks } = fixture(t);
   const series = tasks.create({ date: '2026-01-01', recurrence: { frequency: 'monthly', dayOfMonth: 31 }, title: 'Отчёт' });

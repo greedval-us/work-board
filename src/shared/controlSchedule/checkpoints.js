@@ -1,5 +1,6 @@
 import { DATE_LIMITS } from '../constants/dates.js';
 import { isDate } from '../dates.js';
+import { isControlPeriodOverridden } from './periods.js';
 import { isScheduledDate, scheduledDates } from './recurrence.js';
 
 function scheduleMoves(schedule) {
@@ -13,12 +14,16 @@ export function listControlCheckpoints(schedule, { from, to, deadline }) {
   const moves = scheduleMoves(schedule);
   const planned = new Map();
   for (const date of scheduledDates(schedule, from, lastScheduledDate)) {
-    if (!moves.has(date)) planned.set(date, '');
+    if (!moves.has(date) && !isControlPeriodOverridden(schedule, date)) planned.set(date, '');
   }
   for (const [originalDate, date] of moves) {
-    if (date >= from && date <= lastScheduledDate && isScheduledDate(schedule, originalDate, deadline)) {
+    if (date >= from && date <= lastScheduledDate && !isControlPeriodOverridden(schedule, date)
+      && isScheduledDate(schedule, originalDate, deadline)) {
       planned.set(date, originalDate);
     }
+  }
+  for (const date of Object.values(schedule.periodDates ?? {})) {
+    if (isDate(date) && date >= from && date <= lastScheduledDate) planned.set(date, '');
   }
   const marks = new Map();
   for (const mark of schedule.marks ?? []) {
@@ -43,14 +48,17 @@ export function getNextControlCheckpoint(schedule, deadline) {
 
   const moves = scheduleMoves(schedule);
   let next = '';
+  for (const date of Object.values(schedule.periodDates ?? {})) {
+    if (isDate(date) && date <= deadline && !markedDates.has(date) && (!next || date < next)) next = date;
+  }
   for (const [originalDate, date] of moves) {
-    if (date <= deadline && !markedDates.has(date) && isScheduledDate(schedule, originalDate, deadline)
+    if (date <= deadline && !markedDates.has(date) && !isControlPeriodOverridden(schedule, date)
+      && isScheduledDate(schedule, originalDate, deadline)
       && (!next || date < next)) next = date;
   }
   for (const date of scheduledDates(schedule, DATE_LIMITS.MIN, deadline)) {
-    if (markedDates.has(date) || moves.has(date)) continue;
-    if (schedule.frequency !== 'custom') return next && next < date ? next : date;
-    if (!next || date < next) next = date;
+    if (next && next <= date) return next;
+    if (!markedDates.has(date) && !moves.has(date) && !isControlPeriodOverridden(schedule, date)) return date;
   }
   return next;
 }

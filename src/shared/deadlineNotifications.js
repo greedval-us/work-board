@@ -17,7 +17,7 @@ export function deadlineNotificationHorizon(today) {
 }
 
 function firstCheckpointDate(schedule, fallback) {
-  return [schedule.firstDate, ...schedule.customDates, ...(schedule.moves ?? []).map(move => move.to)]
+  return [schedule.firstDate, ...schedule.customDates, ...Object.values(schedule.periodDates ?? {}), ...(schedule.moves ?? []).map(move => move.to)]
     .filter(Boolean).sort()[0] ?? fallback;
 }
 

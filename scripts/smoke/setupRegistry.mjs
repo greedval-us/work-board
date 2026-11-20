@@ -6,7 +6,7 @@ import { createSmokeForms } from './forms.mjs';
 export async function setupRegistry(driver, fixture) {
   const { window, js, api, wait, click, navigate, fill, verifyEntrance, resize, resizeDefault, screenshot } = driver;
   const { firstFile, today, originalDeadline, nextCheckpointTime, nextCheckpointHeader, controlFrequencyHeader, dailyControl, registrySelections, reportSelections, settingsSelections, controlCardOffice, alternateOffice } = fixture;
-  const { fillInstruction, optionForm, optionRow, addRegistryOption } = createSmokeForms(driver);
+  const { fillInstruction, optionForm, optionRow, selectRegistryDirectory, addRegistryOption } = createSmokeForms(driver);
 
   window.showInactive();
   await wait("document.querySelector('h1')?.textContent === 'Реестр указаний' && !document.querySelector('[aria-busy=true]')");
@@ -18,8 +18,12 @@ export async function setupRegistry(driver, fixture) {
   assert.equal(await js("Object.hasOwn(window.desktopAPI, 'attachments')"), false);
   await screenshot('registry-first-run.png');
 
+  await click('Открыть базу', '.registry-setup button');
+  await wait("document.querySelector('.registry-setup button')?.matches(':enabled')");
+  assert.equal((await api('database', 'getStatus')).ready, false);
+  await click('Создать базу', '.registry-setup button');
+  await wait("Boolean(document.querySelector('.registry-results'))");
   await navigate('/settings', 'Настройки');
-  await click('Создать базу', '.storage-button');
   await wait("document.querySelector('.file-path')?.textContent.includes('selected-controls.sqlite')");
   const initial = await api('database', 'getStatus');
   const generation = initial.generation;
@@ -32,8 +36,20 @@ export async function setupRegistry(driver, fixture) {
   await js("document.querySelector('.registry-options-hint a').click()");
   await wait("Boolean(document.querySelector('#registry-options-title'))");
   await wait("!document.querySelector('.registry-instruction-dialog[open]')");
-  assert.deepEqual(new Set(await js("[...document.querySelectorAll('[data-registry-option]')].map(form => form.dataset.registryOption)")),
+  assert.deepEqual(new Set(await js("[...document.querySelector('select[name=registry-directory]').options].map(option => option.value)")),
     new Set(['documentType', 'source', 'department', 'executorPhone', 'executor', 'office']));
+  await selectRegistryDirectory('source');
+  assert.equal(await js("document.querySelector('[data-registry-option=source] input').labels[0].querySelector('span').textContent.trim()"), 'Откуда поступил документ');
+  assert.deepEqual(await js(`(() => {
+    const group = document.querySelector('select[name=registry-directory] optgroup[label="Исполнители"]');
+    return [...(group?.children ?? [])].map(option => option.value);
+  })()`), ['department', 'executorPhone', 'executor']);
+  const sourceInput = `${optionForm('source')} input`;
+  await fill(sourceInput, { 0: 'Черновик' });
+  await selectRegistryDirectory('office');
+  await selectRegistryDirectory('source');
+  assert.equal(await js(`document.querySelector(${JSON.stringify(sourceInput)}).value`), 'Черновик');
+  await fill(sourceInput, { 0: '' });
   assert.equal(await js("Boolean(document.querySelector('form[data-executor-contacts]'))"), false);
   const officeForm = 'form[data-control-card-office]';
   const officeSelect = `${officeForm} select[name=office]`;
@@ -68,6 +84,7 @@ export async function setupRegistry(driver, fixture) {
   assert.deepEqual(configuredSettings.executorContacts, [executorContact]);
   assert.equal(configuredSettings.office, controlCardOffice);
   const focusSettings = "document.querySelector('#registry-options-title').scrollIntoView({ block: 'start' })";
+  await selectRegistryDirectory('office');
   await js(focusSettings);
   await screenshot('settings-control-card.png');
   await resize(720, 640);
@@ -75,6 +92,7 @@ export async function setupRegistry(driver, fixture) {
   assert.equal(await js('document.querySelector(\'.settings-page\').scrollWidth > document.querySelector(\'.settings-page\').clientWidth'), false);
   await screenshot('settings-control-card-compact.png');
   await resizeDefault();
+  await selectRegistryDirectory('executor');
   for (const field of Object.keys(reportSelections)) {
     assert.equal(await js(`document.querySelector(${JSON.stringify(`${optionForm('executor')} select[name=${field}]`)}).value`), '');
   }
@@ -125,9 +143,12 @@ export async function setupRegistry(driver, fixture) {
   });
   assert.equal(await js("document.querySelector('[name=extendedUntil]').validity.rangeUnderflow"), true);
   assert.equal(await js("document.querySelector('[name=summary]').labels[0].textContent.trim()"), 'Резолюция');
+  assert.equal(await js("document.querySelector('.registry-form-grid select[name=source]').labels[0].querySelector('span').textContent.trim()"), 'Откуда поступил документ');
   await fillInstruction({ extendedUntil: today });
   await fill('[name=control-frequency]', { 0: 'daily' });
-  await fill('[name=control-first-date]', { 0: originalDeadline });
+  for (const date of [originalDeadline, today]) {
+    await fill(`[name=control-period-date][data-control-period="${date}"]`, { 0: date });
+  }
   await js("document.querySelector('.registry-instruction-form').requestSubmit()");
   await wait("!document.querySelector('.registry-instruction-dialog[open]') && document.querySelector('.registry-count')?.textContent === '1'");
   const created = (await api('instructions', 'list', { generation })).items[0];
@@ -137,7 +158,8 @@ export async function setupRegistry(driver, fixture) {
   assert.equal(created.extendedUntil, today);
   assert.equal(created.controlFrequency, 'daily');
   const savedSchedule = (await api('instructions', 'get', { id: created.id, generation })).controlSchedule;
-  assert.deepEqual(savedSchedule, { frequency: 'daily', firstDate: originalDeadline, customDates: [], marks: [] });
+  assert.deepEqual(savedSchedule, { frequency: 'daily', firstDate: '', customDates: [], marks: [],
+    periodDates: { [originalDeadline]: originalDeadline, [today]: today } });
   for (const [field, option] of Object.entries(registrySelections)) assert.equal(created[field], option);
   const columns = await js(`Object.fromEntries([...document.querySelectorAll('.registry-table th')].map(header => [
     header.dataset.column, { index: header.cellIndex, label: header.textContent.trim(), title: header.title },

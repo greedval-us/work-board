@@ -1,4 +1,5 @@
 import { DEFAULT_SETTINGS } from '../../shared/constants/settings.js';
+import { normalizeSearch } from '../../shared/registry.js';
 import { validateTheme, validateTypography } from '../../shared/settings.js';
 import { ValidationError } from '../../shared/errors.js';
 
@@ -6,6 +7,11 @@ const registryOptionKey = field => `registryOptions.${field}`;
 const EXECUTOR_CONTACTS_KEY = 'executorContacts';
 const TYPOGRAPHY_KEY = 'typography';
 const OFFICE_KEY = 'office';
+const INSTRUCTION_OPTION_COLUMNS = Object.freeze({
+  documentType: ['document_type', 'document_type_search'],
+  source: ['source'],
+  executor: ['executor', 'executor_search'],
+});
 
 function readTypography(value) {
   if (value !== undefined) {
@@ -68,7 +74,7 @@ export class SettingsRepository {
     });
   }
 
-  updateRegistry(change) {
+  updateRegistry(change, renamedOption) {
     return this.database.transaction(() => {
       const settings = this.get();
       const changes = change(settings);
@@ -78,8 +84,18 @@ export class SettingsRepository {
       }
       if (executorContacts !== undefined) this.#set(EXECUTOR_CONTACTS_KEY, JSON.stringify(executorContacts));
       if (office !== undefined) this.#set(OFFICE_KEY, office);
+      if (renamedOption) this.#renameInstructionOption(renamedOption);
       return { ...settings, ...changes, registryOptions: { ...settings.registryOptions, ...registryOptions } };
     });
+  }
+
+  #renameInstructionOption({ field, previousValue, value }) {
+    if (previousValue === value || !Object.hasOwn(INSTRUCTION_OPTION_COLUMNS, field)) return;
+    const columns = INSTRUCTION_OPTION_COLUMNS[field];
+    const assignments = columns.map(column => `${column} = ?`).join(', ');
+    const values = columns.length === 2 ? [value, normalizeSearch(value)] : [value];
+    this.database.connection.prepare(`UPDATE instructions SET ${assignments}, updated_at = ? WHERE ${columns[0]} = ?`)
+      .run(...values, new Date().toISOString(), previousValue);
   }
 
   #set(key, value) {

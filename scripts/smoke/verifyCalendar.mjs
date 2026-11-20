@@ -44,8 +44,14 @@ export async function verifyCalendar(driver, fixture, { generation, created }) {
   await wait(`document.activeElement === document.querySelector(${JSON.stringify(checkpointEditor)})`);
   await fill(checkpointEditor, { 0: 'Промежуточный отчёт проверен' });
   await fill('[name=control-frequency]', { 0: 'custom' });
-  await fill('[name=control-custom-date]', { 0: originalDeadline });
-  await click('Добавить дату', '.registry-instruction-dialog button');
+  await js(`(() => {
+    const month = document.querySelector('.control-schedule-preview input[type=month]');
+    month.value = ${JSON.stringify(today.slice(0, 7))};
+    month.dispatchEvent(new Event('change', { bubbles: true }));
+  })()`);
+  const removeToday = `[data-checkpoint-date="${today}"] .control-schedule-remove`;
+  await wait(`Boolean(document.querySelector(${JSON.stringify(removeToday)}))`);
+  await js(`document.querySelector(${JSON.stringify(removeToday)}).click()`);
   await js("document.querySelector('.registry-instruction-form').requestSubmit()");
   await wait("!document.querySelector('.registry-instruction-dialog[open]')");
   const markedDay = await api('calendar', 'day', { date: today, generation });

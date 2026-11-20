@@ -3,6 +3,11 @@ import { notificationKey, notificationReference } from '../../../shared/notifica
 
 const MAX_ATTEMPTS = 3;
 
+function canRetry(item, attempt) {
+  return attempt && attempt.count < MAX_ATTEMPTS
+    && (attempt.state === 'failed' || (attempt.state === 'released' && item.popupPending));
+}
+
 // Tracks delivery separately from persisted receipts for the current database and day.
 export class NotificationDeliveryAttempts {
   #entries = new Map();
@@ -11,9 +16,14 @@ export class NotificationDeliveryAttempts {
     return items.filter(item => {
       const attempt = this.#entries.get(notificationKey(item));
       if (!attempt) return item.popupPending;
-      return (item.popupPending || attempt.state === 'failed')
-        && attempt.state !== 'shown' && attempt.state !== 'pending'
-        && attempt.count < MAX_ATTEMPTS && attempt.nextAt <= now;
+      return canRetry(item, attempt) && attempt.nextAt <= now;
+    });
+  }
+
+  hasPendingWork(items) {
+    return items.some(item => {
+      const attempt = this.#entries.get(notificationKey(item));
+      return canRetry(item, attempt) || (item.popupPending && attempt?.state === 'shown');
     });
   }
 

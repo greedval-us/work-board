@@ -5,6 +5,7 @@ import { isDate, localDate } from '../../../../shared/dates.js';
 import { errorMessage } from '../../../infrastructure/errorMessage.js';
 import { controlScheduleRows, inControlPeriod as isInControlPeriod, startingMonth } from './controlScheduleView.js';
 import { useControlScheduleSettings } from './useControlScheduleSettings.js';
+import { useControlSchedulePeriods } from './useControlSchedulePeriods.js';
 
 // Own transient editor state; only accepted schedule edits update the parent model.
 export function useControlScheduleEditor(schedule, props, { section, customDateInput }) {
@@ -29,8 +30,9 @@ export function useControlScheduleEditor(schedule, props, { section, customDateI
       if (openDate.value === date && !marksByDate.value.get(date)?.text.trim()) toggleMark(date);
     },
   });
-  const showPreview = computed(() => Boolean(settings.recurring.value || settings.configuredDates.value.size
-    || schedule.value.marks.length || editedHistoryDate.value));
+  const periods = useControlSchedulePeriods(schedule, props, { recurring: settings.recurring, showMonth });
+  const showPreview = computed(() => Boolean(settings.legacyRecurrence.value || settings.configuredDates.value.size
+    || Object.values(schedule.value.periodDates ?? {}).some(Boolean) || schedule.value.marks.length || editedHistoryDate.value));
 
   const rows = computed(() => controlScheduleRows(schedule.value, {
     month: month.value, controlDate: props.controlDate, deadline: props.deadline, editedHistoryDate: editedHistoryDate.value, closed: props.closed,
@@ -148,7 +150,7 @@ export function useControlScheduleEditor(schedule, props, { section, customDateI
   watch(() => props.selectedDate, focusSelectedDate);
 
   return {
-    ...settings, openDate, plannedDate, plannedDateBounds, moveError, month, showPreview, marksByDate, rows, inControlPeriod,
+    ...settings, ...periods, openDate, plannedDate, plannedDateBounds, moveError, month, showPreview, marksByDate, rows, inControlPeriod,
     showMonth, selectMonth, toggleMark, actualDateDraft, updateActualDate, updateMark,
     updatePlannedDate, moveCheckpoint, cancelMove, focusSelectedDate,
   };

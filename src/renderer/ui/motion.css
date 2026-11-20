@@ -1,9 +1,9 @@
 :root {
   --motion-fast: 140ms;
-  --motion-page-enter: 280ms;
-  --motion-page-exit: 180ms;
-  --motion-surface-enter: 300ms;
-  --motion-surface-exit: 160ms;
+  --motion-page-enter: 210ms;
+  --motion-page-exit: 75ms;
+  --motion-surface-enter: 260ms;
+  --motion-surface-exit: 145ms;
   --motion-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --motion-ease-in: cubic-bezier(0.4, 0, 1, 1);
 }
@@ -17,18 +17,30 @@
   pointer-events: none;
   will-change: opacity, transform;
 }
-.workspace-enter-from { opacity: 0; transform: translate3d(0, 8px, 0); }
-.workspace-leave-to { opacity: 0; transform: translate3d(0, -4px, 0); }
+.workspace-enter-from { opacity: 0; transform: translate3d(0, 5px, 0); }
+.workspace-leave-to { opacity: 0; transform: translate3d(0, -2px, 0); }
+
+.theme-symbol-enter-active, .theme-symbol-leave-active {
+  transition: opacity var(--motion-fast) ease, transform var(--motion-fast) var(--motion-ease-out);
+}
+.theme-symbol-enter-from { opacity: 0; transform: rotate(-25deg) scale(.8); }
+.theme-symbol-leave-to { opacity: 0; transform: rotate(20deg) scale(.85); }
+.app-body, .nav-symbol, .storage-link, .storage-symbol,
+.registry-results, .calendar-layout, .analytics-summary, .settings-section {
+  transition: background-color var(--motion-fast) ease, border-color var(--motion-fast) ease, color var(--motion-fast) ease;
+}
 
 .sidebar-floating {
   position: absolute;
-  inset: 0 auto 0 0;
+  inset: 6px auto 6px 6px;
   z-index: 31;
-  width: 216px;
-  padding-top: 44px;
-  border-color: var(--border);
-  background: var(--panel);
-  box-shadow: 0 16px 50px rgb(0 0 0 / .12);
+  width: min(232px, calc(100vw - 12px));
+  height: auto;
+  padding: 16px 10px 10px;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: linear-gradient(160deg, var(--sidebar-top), var(--rail) 72%);
+  box-shadow: 0 14px 44px rgb(15 24 42 / .18), var(--surface-shadow);
   transform-origin: 0 24px;
 }
 .navigation-panel-enter-active { transition: opacity var(--motion-surface-enter) var(--motion-ease-out), transform var(--motion-surface-enter) var(--motion-ease-out); }

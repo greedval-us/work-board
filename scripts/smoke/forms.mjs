@@ -18,7 +18,15 @@ export function createSmokeForms({ fill, wait, js }) {
     for (const [field, value] of Object.entries(values)) await fill(instructionField(field), { 0: value });
   }
 
+  async function selectRegistryDirectory(field) {
+    const selector = 'select[name=registry-directory]';
+    await wait(`document.querySelector('${selector}')?.matches(':enabled')`);
+    await fill(selector, { 0: field });
+    await wait(`document.querySelector(${JSON.stringify(optionForm(field))})?.getClientRects().length > 0`);
+  }
+
   async function addRegistryOption(field, value, contacts = {}) {
+    await selectRegistryDirectory(field);
     const form = optionForm(field);
     const input = `${form} input`;
     await wait(`document.querySelector(${JSON.stringify(input)})?.matches(':enabled')`);
@@ -30,5 +38,5 @@ export function createSmokeForms({ fill, wait, js }) {
     await wait(`document.querySelector(${JSON.stringify(input)})?.value === ''`);
   }
 
-  return { instructionField, fillInstruction, optionForm, optionRow, addRegistryOption, controlCardDialog, reportField };
+  return { instructionField, fillInstruction, optionForm, optionRow, selectRegistryDirectory, addRegistryOption, controlCardDialog, reportField };
 }

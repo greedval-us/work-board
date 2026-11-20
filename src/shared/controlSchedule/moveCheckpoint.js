@@ -1,6 +1,7 @@
 import { validateDate } from '../dates.js';
 import { ValidationError } from '../errors.js';
 import { listControlCheckpoints } from './checkpoints.js';
+import { isControlPeriodOverridden } from './periods.js';
 import { checkScheduleBounds, validateControlSchedule } from './validation.js';
 
 export function moveControlCheckpoint(value, from, to, bounds = {}) {
@@ -14,6 +15,9 @@ export function moveControlCheckpoint(value, from, to, bounds = {}) {
     .find(row => row.scheduled);
   if (!checkpoint) throw new ValidationError('Исходная дата отсутствует в действующем графике промежуточного контроля.');
   if (from === to) return schedule;
+  if (isControlPeriodOverridden(schedule, from) || isControlPeriodOverridden(schedule, to)) {
+    throw new ValidationError('Измените дату контроля в списке периодов.');
+  }
   if (listControlCheckpoints(schedule, { from: to, to }).length) {
     throw new ValidationError('На выбранную дату уже назначен промежуточный контроль или сохранена отметка.');
   }

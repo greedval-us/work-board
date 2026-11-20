@@ -13,7 +13,7 @@ export class AnalyticsSummary {
     this.#addCounts(this.#timeline.get(group.month), group);
 
     const { executorKey: key, executorLabel: label } = group;
-    // The repository orders groups by first instruction ID, preserving the earliest matching spelling.
+    // Controls arrive in instruction ID order, preserving the earliest matching spelling.
     if (!this.#executors.has(key)) this.#executors.set(key, { key, label, total: 0, closed: 0, active: 0, overdue: 0 });
     const executor = this.#executors.get(key);
     this.#addCounts(executor, group);

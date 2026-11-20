@@ -148,43 +148,52 @@ defineExpose({ requestClose });
 </script>
 
 <template>
-  <dialog ref="dialog" class="calendar-task-dialog" aria-labelledby="calendar-task-title" aria-describedby="calendar-task-help" @cancel.prevent="requestClose">
+  <dialog ref="dialog" class="calendar-task-dialog" aria-labelledby="calendar-task-title"
+    :aria-describedby="task?.recurrence?.frequency ? 'calendar-task-help' : undefined" @cancel.prevent="requestClose">
     <header class="calendar-dialog-header">
       <div><h2 id="calendar-task-title">{{ task ? 'Карточка задачи' : 'Новая задача' }}</h2>
-        <p id="calendar-task-help">{{ task?.recurrence?.frequency ? 'Изменения расписания применяются ко всей серии.' : 'Задача на одну дату или с повторением.' }}</p>
+        <p v-if="task?.recurrence?.frequency" id="calendar-task-help">Изменения расписания применяются ко всей серии.</p>
       </div>
       <button class="calendar-icon-button" :disabled="interactionBusy" aria-label="Закрыть карточку задачи" @click="requestClose"><X :size="19" aria-hidden="true" /></button>
     </header>
     <form ref="form" class="calendar-task-form" @submit.prevent="saveAndClose">
-      <fieldset :disabled="fieldsDisabled">
-        <label class="calendar-field">Название задачи <span aria-hidden="true">*</span><input v-model="draft.title" name="task-title" required autofocus autocomplete="off" placeholder="Что нужно сделать" /></label>
-        <div class="calendar-form-row">
-          <label class="calendar-field">{{ recurring ? 'Начало графика' : 'Дата' }} <span aria-hidden="true">*</span><input v-model="draft.date" name="task-date" type="date" :min="DATE_LIMITS.MIN" :max="DATE_LIMITS.MAX" required /></label>
-          <label class="calendar-field">Срочность<select v-model="draft.priority" name="task-priority"><option v-for="(label, value) in TASK_PRIORITIES" :key="value" :value="value">{{ label }}</option></select></label>
-        </div>
-        <label class="calendar-field">Описание<textarea v-model="draft.description" name="task-description" rows="5" placeholder="Подробности и заметки" /></label>
-        <TaskRecurrenceEditor :model-value="draft.recurrence" :start-date="draft.date" :disabled="fieldsDisabled"
-          @update:model-value="Object.assign(draft.recurrence, $event)" />
-        <label v-if="!recurring" class="calendar-completion-field"><input v-model="draft.completed" name="task-completed" type="checkbox" />Задача выполнена</label>
-        <label v-else-if="occurrenceAvailable" class="calendar-completion-field">
-          <input v-model="occurrenceCompleted" name="task-completed" type="checkbox" />Выполнено за {{ formatDate(completionDate) }}
-        </label>
-        <section v-if="movableOccurrence" class="calendar-occurrence-move" aria-labelledby="calendar-occurrence-move-title">
-          <h3 id="calendar-occurrence-move-title">Перенос одного повторения</h3>
-          <p class="calendar-recurrence-help">
-            Текущая дата — <time :datetime="occurrenceDate">{{ formatDate(occurrenceDate) }}</time>.
-            <template v-if="task.originalDate"> По графику — <time :datetime="task.originalDate">{{ formatDate(task.originalDate) }}</time>.</template>
-          </p>
-          <div class="calendar-custom-date">
-            <label class="calendar-field">Новая дата повторения
-              <input v-model="moveDate" name="task-move-date" type="date" :min="DATE_LIMITS.MIN" :max="DATE_LIMITS.MAX"
-                :disabled="moveDisabled" :aria-describedby="dirty ? 'calendar-move-dirty-help' : undefined" @keydown.enter.prevent="moveAndClose" />
-            </label>
-            <button type="button" class="calendar-button calendar-move-occurrence-button" :disabled="!canMove" @click="moveAndClose">Перенести</button>
+      <div class="calendar-task-body">
+        <fieldset :disabled="fieldsDisabled">
+          <div class="calendar-task-columns">
+            <div class="calendar-task-details">
+              <label class="calendar-field">Название задачи <span aria-hidden="true">*</span><input v-model="draft.title" name="task-title" required autofocus autocomplete="off" placeholder="Что нужно сделать" /></label>
+              <div class="calendar-form-row">
+                <label class="calendar-field">{{ recurring ? 'Начало графика' : 'Дата' }} <span aria-hidden="true">*</span><input v-model="draft.date" name="task-date" type="date" :min="DATE_LIMITS.MIN" :max="DATE_LIMITS.MAX" required /></label>
+                <label class="calendar-field">Срочность<select v-model="draft.priority" name="task-priority"><option v-for="(label, value) in TASK_PRIORITIES" :key="value" :value="value">{{ label }}</option></select></label>
+              </div>
+              <label class="calendar-field">Описание<textarea v-model="draft.description" name="task-description" rows="3" placeholder="Подробности и заметки" /></label>
+            </div>
+            <div class="calendar-task-schedule">
+              <TaskRecurrenceEditor :model-value="draft.recurrence" :start-date="draft.date" :disabled="fieldsDisabled"
+                @update:model-value="Object.assign(draft.recurrence, $event)" />
+              <label v-if="!recurring" class="calendar-completion-field"><input v-model="draft.completed" name="task-completed" type="checkbox" />Задача выполнена</label>
+              <label v-else-if="occurrenceAvailable" class="calendar-completion-field">
+                <input v-model="occurrenceCompleted" name="task-completed" type="checkbox" />Выполнено за {{ formatDate(completionDate) }}
+              </label>
+            </div>
           </div>
-          <p v-if="dirty" id="calendar-move-dirty-help" class="calendar-recurrence-help">Сохраните изменения карточки, чтобы перенести повторение.</p>
-        </section>
-      </fieldset>
+          <section v-if="movableOccurrence" class="calendar-occurrence-move" aria-labelledby="calendar-occurrence-move-title">
+            <h3 id="calendar-occurrence-move-title">Перенос одного повторения</h3>
+            <p class="calendar-recurrence-help">
+              Текущая дата — <time :datetime="occurrenceDate">{{ formatDate(occurrenceDate) }}</time>.
+              <template v-if="task.originalDate"> По графику — <time :datetime="task.originalDate">{{ formatDate(task.originalDate) }}</time>.</template>
+            </p>
+            <div class="calendar-custom-date">
+              <label class="calendar-field">Новая дата повторения
+                <input v-model="moveDate" name="task-move-date" type="date" :min="DATE_LIMITS.MIN" :max="DATE_LIMITS.MAX"
+                  :disabled="moveDisabled" :aria-describedby="dirty ? 'calendar-move-dirty-help' : undefined" @keydown.enter.prevent="moveAndClose" />
+              </label>
+              <button type="button" class="calendar-button calendar-move-occurrence-button" :disabled="!canMove" @click="moveAndClose">Перенести</button>
+            </div>
+            <p v-if="dirty" id="calendar-move-dirty-help" class="calendar-recurrence-help">Сохраните изменения карточки, чтобы перенести повторение.</p>
+          </section>
+        </fieldset>
+      </div>
       <p v-if="error" ref="errorRegion" class="calendar-task-error" role="alert" tabindex="-1">{{ error }}</p>
       <div class="calendar-dialog-footer">
         <button v-if="task" type="button" class="calendar-button calendar-delete-button" :disabled="interactionBusy" @click="confirmDelete"><Trash2 :size="15" aria-hidden="true" />Удалить</button>

@@ -193,8 +193,10 @@ onBeforeUnmount(() => {
       <header><span class="notification-popup-icon"><Bell :size="19" aria-hidden="true" /></span><h2 :id="popupHeadingId">Напоминания о сроках</h2><button type="button" class="icon-button" aria-label="Закрыть напоминание" @click="acknowledgePopup"><X :size="16" aria-hidden="true" /></button></header>
       <p class="notification-popup-summary" role="status">{{ popupSummary }}</p>
       <ul class="notification-popup-titles"><li v-for="item in popupItems.slice(0, popupTitleLimit)" :key="notificationKey(item)">{{ item.title }}</li></ul>
-      <p v-if="popupItems.length > popupTitleLimit" class="notification-popup-more">И ещё {{ popupItems.length - popupTitleLimit }}</p>
-      <button type="button" class="notification-open-list" data-notification-action="show-list" @click="showPanel">Открыть уведомления <ArrowUpRight :size="15" aria-hidden="true" /></button>
+      <footer class="notification-popup-footer">
+        <p v-if="popupItems.length > popupTitleLimit" class="notification-popup-more">И ещё {{ popupItems.length - popupTitleLimit }}</p>
+        <button type="button" class="notification-open-list" data-notification-action="show-list" @click="showPanel">Открыть уведомления <ArrowUpRight :size="14" aria-hidden="true" /></button>
+      </footer>
     </section>
   </div>
 </template>

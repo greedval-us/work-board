@@ -10,7 +10,6 @@ const FILTER_POPOVER = Object.freeze({ MAX_WIDTH: 720, VIEWPORT_MARGIN: 16, ANCH
 const props = defineProps({ filters: { type: Object, required: true }, appliedFilters: { type: Object, required: true },
   documentTypes: { type: Array, required: true }, disabled: Boolean, changed: Boolean, closed: Boolean, error: { type: String, default: '' } });
 const emit = defineEmits(['update', 'apply', 'reset']);
-const filterbar = useTemplateRef('filterbar');
 const toggle = useTemplateRef('toggle');
 const panel = useTemplateRef('panel');
 const panelId = useId();
@@ -40,11 +39,11 @@ const summary = computed(() => appliedConditions.value.map((condition) => condit
 const update = (field, event) => emit('update', { field, value: event.target.value });
 
 function positionPanel() {
-  const bounds = filterbar.value?.getBoundingClientRect();
+  const bounds = toggle.value?.getBoundingClientRect();
   if (!bounds) return;
   const width = Math.min(FILTER_POPOVER.MAX_WIDTH, window.innerWidth - FILTER_POPOVER.VIEWPORT_MARGIN * 2);
   const top = Math.max(FILTER_POPOVER.VIEWPORT_MARGIN, Math.min(bounds.bottom + FILTER_POPOVER.ANCHOR_GAP, window.innerHeight - FILTER_POPOVER.MIN_VISIBLE_HEIGHT));
-  panelStyle.value = { width: `${width}px`, left: `${Math.max(FILTER_POPOVER.VIEWPORT_MARGIN, Math.min(bounds.left, window.innerWidth - width - FILTER_POPOVER.VIEWPORT_MARGIN))}px`,
+  panelStyle.value = { width: `${width}px`, left: `${Math.max(FILTER_POPOVER.VIEWPORT_MARGIN, Math.min(bounds.right - width, window.innerWidth - width - FILTER_POPOVER.VIEWPORT_MARGIN))}px`,
     top: `${top}px`, maxHeight: `${window.innerHeight - top - FILTER_POPOVER.VIEWPORT_MARGIN}px` };
 }
 
@@ -92,14 +91,13 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="filterbar" class="registry-filter-container">
+  <div class="registry-filter-container">
     <div class="registry-filterbar">
-      <button ref="toggle" type="button" class="registry-button registry-filter-toggle" :class="{ 'registry-filter-toggle-active': appliedConditions.length }" :popovertarget="nativePopover ? panelId : undefined" :aria-controls="panelId" :aria-expanded="expanded" :disabled="props.disabled" @click="toggleFallback"><SlidersHorizontal :size="15" aria-hidden="true" />Фильтры<span v-if="appliedConditions.length" class="registry-filter-count">{{ appliedConditions.length }}</span></button>
-      <div class="registry-filter-summary" :aria-label="`Применено: ${summary}`" :title="summary">
-        <span v-if="!appliedConditions.length" class="registry-filter-all">Все указания</span>
+      <div v-if="appliedConditions.length" class="registry-filter-summary" :aria-label="`Применено: ${summary}`" :title="summary">
         <span v-for="condition in appliedConditions" :key="condition.key" class="registry-filter-chip" :title="condition.detail">{{ condition.label }}</span>
       </div>
       <span v-if="props.changed" class="registry-draft-label" title="Изменения фильтров ещё не применены"><span class="registry-draft-dot" aria-hidden="true" /><span>Не применено</span></span>
+      <button ref="toggle" type="button" class="registry-button registry-filter-toggle" :class="{ 'registry-filter-toggle-active': appliedConditions.length }" :popovertarget="nativePopover ? panelId : undefined" :aria-controls="panelId" :aria-expanded="expanded" :title="appliedConditions.length ? summary : undefined" :disabled="props.disabled" @click="toggleFallback"><SlidersHorizontal :size="15" aria-hidden="true" />Фильтры<span v-if="appliedConditions.length" class="registry-filter-count">{{ appliedConditions.length }}</span></button>
       <button v-if="appliedConditions.length || props.changed" type="button" class="registry-button registry-filter-reset" :disabled="props.disabled" aria-label="Сбросить фильтры" title="Сбросить фильтры" @click="reset"><RotateCcw :size="15" aria-hidden="true" /></button>
     </div>
     <Teleport to="body" :disabled="nativePopover">

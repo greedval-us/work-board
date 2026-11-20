@@ -63,13 +63,7 @@ function* monthOccurrences(firstDate, from, to, step, dayOfMonth, monthOfYear) {
   }
 }
 
-// Base dates retain their original anchors; moves and completion history are applied by callers.
-export function scheduledDates(schedule, from, to) {
-  if (from > to) return [];
-  const { frequency, firstDate, customDates, dayOfMonth, dayOfWeek, monthOfYear } = schedule;
-  if (frequency === 'custom' && Array.isArray(customDates)) {
-    return customDates.filter(date => isDate(date) && date >= from && date <= to);
-  }
+function recurringDates({ frequency, firstDate, dayOfMonth, dayOfWeek, monthOfYear }, from, to) {
   if (!isDate(firstDate)) return [];
   if (Object.hasOwn(DAY_STEPS, frequency)) {
     return dayOccurrences(firstDate, from, to, DAY_STEPS[frequency], frequency === 'weekly' ? dayOfWeek : undefined);
@@ -81,7 +75,25 @@ export function scheduledDates(schedule, from, to) {
   return [];
 }
 
+// Merge manual and automatic dates in order without materializing the recurrence.
+export function* scheduledDates(schedule, from, to) {
+  if (from > to || !schedule.frequency) return;
+  const { customDates } = schedule;
+  const manualDates = Array.isArray(customDates)
+    ? [...new Set(customDates.filter(date => isDate(date) && date >= from && date <= to))].sort() : [];
+  let manualIndex = 0;
+  for (const date of recurringDates(schedule, from, to)) {
+    while (manualIndex < manualDates.length && manualDates[manualIndex] < date) {
+      yield manualDates[manualIndex];
+      manualIndex += 1;
+    }
+    if (manualDates[manualIndex] === date) manualIndex += 1;
+    yield date;
+  }
+  yield* manualDates.slice(manualIndex);
+}
+
 export function isScheduledDate(schedule, date, deadline) {
   return isDate(date) && (!isDate(deadline) || date <= deadline)
-    && [...scheduledDates(schedule, date, date)].length > 0;
+    && !scheduledDates(schedule, date, date).next().done;
 }

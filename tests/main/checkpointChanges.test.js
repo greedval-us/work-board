@@ -129,6 +129,39 @@ test('weekly checkpoints use the saved weekday or the start date after clearing 
   assert.equal(instructions.list().items[0].nextCheckpoint, '2028-01-07');
 });
 
+test('a manual date in a weekly schedule survives reopening and reaches the calendar, registry and reminders', t => {
+  const { instructions, item, calendar, reopen } = fixture(t);
+  const customDates = ['2026-10-22', '2026-10-27'];
+  instructions.update(item.id, { controlSchedule: { ...item.controlSchedule, customDates } });
+  reopen();
+
+  assert.deepEqual(instructions.get(item.id).controlSchedule.customDates, customDates);
+  assert.equal(instructions.list().items[0].nextCheckpoint, '2026-10-22');
+  assert.equal(instructions.list({ filters: { checkpoint: 'today' }, today: '2026-10-27' }).total, 1);
+  assert.deepEqual(calendar.month({ month: '2026-10' }).days.filter(day => day.checkpoints).map(day => day.date), [
+    '2026-10-22', '2026-10-23', '2026-10-27', '2026-10-30',
+  ]);
+  assert.deepEqual(buildDeadlineNotifications({
+    instructions: [], tasks: [], scheduledInstructions: instructions.scheduledForCalendar(), today: '2026-10-24',
+  }).map(({ date }) => date), ['2026-10-22', '2026-10-23', '2026-10-27']);
+});
+
+test('only the monthly dates selected in the card reach the registry, calendar and reminders', t => {
+  const { instructions, item, calendar, reopen } = fixture(t);
+  const periodDates = { '2026-10-01': '2026-10-26', '2026-12-01': '2026-12-04' };
+  instructions.update(item.id, { extendedUntil: '2026-12-07', controlSchedule: { frequency: 'monthly', periodDates } });
+  reopen();
+
+  assert.deepEqual(instructions.get(item.id).controlSchedule.periodDates, periodDates);
+  assert.equal(instructions.list().items[0].nextCheckpoint, '2026-10-26');
+  assert.equal(instructions.list({ filters: { checkpoint: 'today' }, today: '2026-11-26' }).total, 0);
+  assert.deepEqual(calendar.month({ month: '2026-11' }).days.filter(day => day.checkpoints), []);
+  assert.deepEqual(calendar.day({ date: '2026-12-04' }).checkpoints.map(({ date }) => date), ['2026-12-04']);
+  assert.deepEqual(buildDeadlineNotifications({
+    instructions: [], tasks: [], scheduledInstructions: instructions.scheduledForCalendar(), today: '2026-12-01',
+  }).map(({ date }) => date), ['2026-10-26', '2026-12-04']);
+});
+
 test('annual checkpoints use the saved month in the registry, calendar and reminders', t => {
   const { instructions, item, calendar, reopen } = fixture(t);
   const schedule = { frequency: 'yearly', firstDate: '2027-12-17' };

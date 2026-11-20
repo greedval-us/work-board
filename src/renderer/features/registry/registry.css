@@ -1,14 +1,14 @@
 .registry-page { display: flex; flex-direction: column; height: 100%; min-width: 0; min-height: 0; overflow: hidden; }
-.registry-workspace { display: flex; flex: 1; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; container-type: inline-size; --registry-success: #236c3b; --registry-success-surface: #edf7ee; --registry-warning: #8d4c00; --registry-warning-surface: #fff4e5; }
+.registry-workspace { display: flex; flex: 1; flex-direction: column; gap: 14px; min-width: 0; min-height: 0; container-type: inline-size; --registry-success: #236c3b; --registry-success-surface: #edf7ee; --registry-warning: #8d4c00; --registry-warning-surface: #fff4e5; }
 :root[data-appearance='dark'] .registry-workspace, :root[data-appearance='dark'] .registry-dialog { --registry-success: #91d6a7; --registry-success-surface: #273b2f; --registry-warning: #f1c07a; --registry-warning-surface: #403525; }
 .registry-dialog { --registry-success: #236c3b; --registry-success-surface: #edf7ee; --registry-warning: #8d4c00; --registry-warning-surface: #fff4e5; }
 .registry-toolbar, .registry-actions, .registry-filter-footer, .registry-results-heading, .registry-pagination, .registry-pagination-controls, .registry-page-buttons, .registry-dialog-header, .registry-dialog-actions { display: flex; align-items: center; gap: 12px; }
-.registry-toolbar { flex: 0 0 auto; justify-content: space-between; gap: 16px; min-height: 40px; }
+.registry-toolbar { flex: 0 0 auto; justify-content: space-between; gap: 16px; min-height: 36px; }
 .registry-toolbar .page-heading { min-width: 0; margin: 0; }
 .registry-toolbar .page-heading h1 { white-space: nowrap; }
 .registry-toolbar > .registry-actions { flex-shrink: 0; flex-wrap: nowrap; gap: 8px; }
 .registry-actions { flex-wrap: wrap; }
-.registry-button { display: inline-flex; justify-content: center; align-items: center; gap: 7px; min-height: 36px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; color: var(--text); background: var(--panel); font: inherit; font-size: calc(12px + var(--app-font-offset)); font-weight: 550; white-space: nowrap; }
+.registry-button { display: inline-flex; justify-content: center; align-items: center; gap: 7px; min-height: 32px; padding: 6px 11px; border: 1px solid var(--border); border-radius: 9px; color: var(--text); background: var(--panel); box-shadow: var(--control-shadow); font: inherit; font-size: calc(12px + var(--app-font-offset)); font-weight: 550; line-height: 1.35; white-space: nowrap; }
 .registry-button:hover { background: var(--raised); }
 .registry-button-primary { border-color: transparent; color: var(--on-accent); background: var(--accent); }
 .registry-button-primary:hover { background: var(--accent); filter: brightness(.95); }
@@ -20,23 +20,23 @@
 .registry-inline-action:hover { background: var(--grouped); color: var(--text); }
 .registry-inline-action[aria-pressed='true'] { color: var(--accent); background: var(--accent-surface); }
 
-.registry-filter-container { flex: 0 0 auto; min-width: 0; }
-.registry-filterbar { display: flex; align-items: center; gap: 8px; min-width: 0; height: 36px; }
-.registry-filter-toggle { flex-shrink: 0; min-height: 34px; padding: 7px 10px; }
-.registry-filter-toggle-active { color: var(--accent); background: var(--accent-surface); border-color: transparent; }
+.registry-filter-container { flex: 1; min-width: 0; }
+.registry-filterbar { display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; }
+.registry-filter-toggle { flex-shrink: 0; min-height: 29px; padding: 4px 9px; border-radius: 7px; font-size: calc(11px + var(--app-font-offset)); }
+.registry-filter-toggle-active, .registry-filter-toggle[aria-expanded='true'] { color: var(--accent); background: var(--accent-surface); border-color: transparent; }
 .registry-filter-toggle-active:hover { color: var(--accent); background: var(--accent-surface); }
 .registry-filter-count { display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 5px; color: var(--on-accent); background: var(--accent); font-size: max(10px, calc(10px + var(--app-font-offset))); }
-.registry-filter-summary { display: flex; align-items: center; flex: 1; gap: 6px; min-width: 0; overflow: hidden; white-space: nowrap; }
-.registry-filter-all { padding-left: 3px; color: var(--muted); font-size: calc(12px + var(--app-font-offset)); }
+.registry-filter-summary { display: flex; align-items: center; justify-content: flex-end; flex: 1; gap: 5px; min-width: 0; overflow: hidden; white-space: nowrap; }
 .registry-filter-chip { display: block; flex: 0 1 auto; min-width: 28px; max-width: 180px; padding: 4px 8px; overflow: hidden; border-radius: 7px; background: var(--grouped); color: var(--muted); font-size: calc(11px + var(--app-font-offset)); text-overflow: ellipsis; }
 .registry-filter-reset { flex-shrink: 0; width: 32px; min-height: 32px; padding: 7px; border-color: transparent; color: var(--muted); background: transparent; }
 .registry-draft-label { display: inline-flex; align-items: center; flex-shrink: 0; gap: 5px; color: var(--muted); font-size: max(10px, calc(10px + var(--app-font-offset))); white-space: nowrap; }
 .registry-draft-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
-.registry-filter-panel { position: fixed; inset: auto; margin: 0; padding: 18px; overflow: auto; border: 1px solid var(--border); border-radius: 16px; color: var(--text); background: var(--panel); box-shadow: 0 12px 45px rgb(0 0 0 / .15); scrollbar-width: thin; scrollbar-color: var(--raised) transparent; scroll-padding: 14px; }
-.registry-filter-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.registry-filter-panel { position: fixed; inset: auto; margin: 0; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 16px; color: var(--text); background: var(--panel); box-shadow: 0 12px 45px rgb(0 0 0 / .15); }
+.registry-filter-panel > form { display: flex; flex-direction: column; max-height: inherit; }
+.registry-filter-panel-heading { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 15px; border-bottom: 1px solid var(--border); }
 .registry-filter-panel-heading h2 { font-size: calc(15px + var(--app-font-offset)); font-weight: 600; letter-spacing: -.02em; }
 .registry-filter-close { width: 30px; min-height: 30px; padding: 5px; border: 0; color: var(--muted); background: transparent; }
-.registry-filter-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 12px; min-width: 0; border: 0; margin: 0; padding: 0; }
+.registry-filter-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 12px; min-width: 0; min-height: 0; border: 0; margin: 0; padding: 12px 15px; overflow: auto; scrollbar-width: thin; }
 .registry-field { display: flex; flex-direction: column; gap: 7px; min-width: 0; color: var(--text); font-size: calc(12px + var(--app-font-offset)); }
 .registry-field > span { font-weight: 500; }
 .registry-field input, .registry-field select, .registry-field textarea, .registry-page-size select { width: 100%; min-width: 0; min-height: 40px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 11px; background: var(--panel); color: var(--text); font: inherit; line-height: 1.5; box-shadow: var(--control-shadow); }
@@ -44,15 +44,16 @@
 .registry-field textarea { resize: vertical; min-height: 80px; }
 .registry-field input[type='date'] { min-height: 40px; }
 .registry-filter-panel .registry-field { gap: 5px; font-size: calc(11px + var(--app-font-offset)); }
-.registry-filter-panel .registry-field input, .registry-filter-panel .registry-field select { min-height: 36px; padding: 7px 9px; border-radius: 9px; }
-.registry-filter-footer { justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
+.registry-filter-panel .registry-field input, .registry-filter-panel .registry-field select { min-height: 32px; padding: 5px 9px; border-radius: 8px; }
+.registry-filter-footer { flex: none; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; padding: 9px 15px; border-top: 1px solid var(--border); background: var(--toolbar); }
 .registry-inline-error { color: var(--error); font-size: calc(12px + var(--app-font-offset)); }
 
-.registry-results { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 14px; }
-.registry-results-heading { flex: 0 0 38px; justify-content: space-between; gap: 12px; min-width: 0; height: 38px; padding: 4px 10px 4px 12px; }
-.registry-results-heading h2 { display: flex; align-items: center; flex-shrink: 0; gap: 6px; color: var(--muted); font-size: calc(11px + var(--app-font-offset)); font-weight: 400; }
-.registry-count { color: var(--text); font-size: calc(11px + var(--app-font-offset)); font-weight: 600; font-variant-numeric: tabular-nums; }
-.registry-status-slot { flex: 1; min-width: 0; overflow: hidden; }
+.registry-results { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 16px; background: var(--panel); box-shadow: var(--surface-shadow); }
+.registry-results-heading { flex: 0 0 auto; min-height: 44px; gap: 8px; min-width: 0; padding: 6px 14px; }
+.registry-results-heading h2 { display: flex; align-items: center; flex-shrink: 0; gap: 7px; color: var(--text); font-size: calc(13px + var(--app-font-offset)); font-weight: 620; letter-spacing: -.025em; }
+.registry-count { min-width: 21px; padding: 2px 7px; border-radius: 20px; color: var(--accent); background: var(--accent-surface); font-size: calc(10px + var(--app-font-offset)); font-weight: 650; text-align: center; font-variant-numeric: tabular-nums; }
+.registry-column-toggle { min-height: 29px; padding-inline: 8px; border: 1px solid var(--border); color: var(--muted); }
+.registry-status-slot { flex: 0 0 auto; min-width: 0; padding: 0 13px 6px; }
 .registry-notice { padding: 0; margin: 0; overflow: hidden; color: var(--accent); font-size: calc(11px + var(--app-font-offset)); text-overflow: ellipsis; white-space: nowrap; }
 .registry-export-warning { min-width: 0; padding: 8px 10px; border-radius: 8px; color: var(--registry-warning); background: var(--registry-warning-surface); font-size: calc(12px + var(--app-font-offset)); }
 .registry-results > .registry-export-warning { flex: 0 0 auto; margin: 0 10px 8px 12px; }
@@ -61,38 +62,41 @@
 .registry-error-banner { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--error); font-size: calc(11px + var(--app-font-offset)); }
 .registry-error-banner > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .registry-error-banner .registry-inline-action { color: var(--error); }
-.registry-table-scroll { flex: 1; min-width: 0; min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--raised) transparent; scroll-padding: 50px 8px 12px; }
+.registry-table-scroll { flex: 1; min-width: 0; min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--raised) transparent; scroll-padding: 45px 8px 10px; }
 .registry-table-scroll:focus-visible { outline-offset: -3px; }
 .registry-table-scroll-wide { overflow-x: auto; }
 .registry-table { --registry-action-width: 0px; width: 100%; min-width: 0; table-layout: fixed; border-collapse: separate; border-spacing: 0; text-align: left; font-size: calc(11px + var(--app-font-offset)); }
 .registry-table-wide { min-width: 1800px; }
 .registry-table-with-actions { --registry-action-width: 42px; }
-.registry-table th { position: sticky; top: 0; z-index: 1; width: calc((100% - var(--registry-action-width)) * var(--registry-column-share)); overflow: hidden; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--grouped); vertical-align: middle; }
-.registry-table th[data-column='id'] { --registry-column-share: .04; }
-.registry-table th[data-column='controlDate'], .registry-table th[data-column='deadline'] { --registry-column-share: .07; }
-.registry-table th[data-column='incomingNumber'] { --registry-column-share: .055; }
+.registry-table th { position: sticky; top: 0; z-index: 1; width: var(--registry-column-width); overflow: hidden; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--grouped); vertical-align: middle; }
+.registry-table th[data-column='id'] { --registry-column-width: 4%; }
+.registry-table th[data-column='controlDate'], .registry-table th[data-column='deadline'] { --registry-column-width: 7%; }
+.registry-table th[data-column='incomingNumber'] { --registry-column-width: 5.5%; }
 .registry-table th[data-column='instructionNumber'], .registry-table th[data-column='title'],
-.registry-table th[data-column='nextCheckpoint'] { --registry-column-share: .09; }
-.registry-table th[data-column='executor'] { --registry-column-share: .08; }
+.registry-table th[data-column='nextCheckpoint'] { --registry-column-width: 9%; }
+.registry-table th[data-column='executor'] { --registry-column-width: 8%; }
 .registry-table th[data-column='documentType'], .registry-table th[data-column='summary'],
-.registry-table th[data-column='controlFrequency'] { --registry-column-share: .075; }
-.registry-table th[data-column='source'] { --registry-column-share: .06; }
-.registry-table th[data-column='extendedUntil'], .registry-table th[data-column='executionMark'] { --registry-column-share: .065; }
+.registry-table th[data-column='controlFrequency'] { --registry-column-width: 7.5%; }
+.registry-table th[data-column='source'] { --registry-column-width: 6%; }
+.registry-table th[data-column='extendedUntil'], .registry-table th[data-column='executionMark'] { --registry-column-width: 6.5%; }
 .registry-table th[data-column='actions'] { width: var(--registry-action-width); }
 .registry-static-heading { display: block; padding-inline: 8px; overflow-wrap: anywhere; color: var(--muted); font-size: calc(10.5px + var(--app-font-offset)); font-weight: 500; line-height: 1.3; }
-.registry-sort { display: flex; align-items: center; justify-content: space-between; gap: 4px; width: 100%; min-width: 0; height: 40px; padding: 0 8px; border: 0; border-radius: 0; background: transparent; color: var(--muted); text-align: left; font: inherit; font-size: calc(10.5px + var(--app-font-offset)); font-weight: 500; line-height: 1.3; }
+.registry-sort { display: flex; align-items: center; justify-content: space-between; gap: 4px; width: 100%; min-width: 0; height: 34px; padding: 0 8px; border: 0; border-radius: 0; background: transparent; color: var(--muted); text-align: left; font: inherit; font-size: calc(10.5px + var(--app-font-offset)); font-weight: 550; line-height: 1.25; }
+.registry-table th[aria-sort='ascending'] .registry-sort, .registry-table th[aria-sort='descending'] .registry-sort { color: var(--accent); }
+.registry-table th:is([aria-sort='ascending'], [aria-sort='descending']) { box-shadow: inset 0 -2px var(--accent); }
 .registry-sort > span { display: -webkit-box; min-width: 0; overflow: hidden; overflow-wrap: anywhere; line-clamp: 2; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.registry-table th[data-column='nextCheckpoint'] .registry-sort { height: calc(44px + 3 * var(--app-font-offset)); }
+.registry-table th[data-column='nextCheckpoint'] .registry-sort { height: calc(38px + 3 * var(--app-font-offset)); }
 .registry-sort > .registry-checkpoint-heading, .registry-sort > .registry-frequency-heading { line-clamp: 3; -webkit-line-clamp: 3; }
 .registry-checkpoint-heading-short, .registry-frequency-heading-short, .registry-document-type-heading-short { display: none; }
 .registry-sort:hover { color: var(--text); background: var(--raised); }
 .registry-sort:focus-visible { outline-offset: -4px; }
-.registry-table td { height: 56px; padding: 9px 8px; overflow: hidden; vertical-align: middle; border-bottom: 1px solid var(--border); }
+.registry-table td { height: 38px; padding: 4px 8px; overflow: hidden; vertical-align: middle; border-bottom: 1px solid var(--border); }
+.registry-table td[data-column='id'] { color: var(--muted); }
 .registry-table td[data-column='actions'] { padding-inline: 4px; text-align: center; }
 .registry-row-close-control { width: 30px; min-height: 30px; padding: 0; }
 .registry-row-close-control:hover { background: var(--raised); }
-.registry-row { cursor: pointer; }
-.registry-row:hover, .registry-row:focus-within { background: var(--grouped); }
+.registry-row { cursor: pointer; transition: background-color var(--motion-fast) ease; }
+.registry-row:hover, .registry-row:focus-within { background: var(--accent-surface); }
 .registry-row:last-child td { border-bottom: 0; }
 .registry-cell-text, .registry-cell-date { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .registry-cell-summary { display: -webkit-box; overflow: hidden; overflow-wrap: anywhere; line-clamp: 2; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.4; color: var(--muted); white-space: pre-line; }
@@ -100,90 +104,150 @@
 .registry-checkpoint-overdue { color: var(--error); font-weight: 650; }
 .registry-date-short { display: none; }
 .registry-record-link { display: block; width: 100%; padding: 0; border: 0; background: transparent; color: var(--accent); font: inherit; font-weight: 550; text-align: left; }
+.registry-table td[data-column='title'] .registry-record-link { color: var(--text); font-weight: 625; }
 .registry-record-link:hover { text-decoration: underline; }
 .registry-record-link:focus-visible { outline-offset: -1px; border-radius: 3px; }
-.registry-checkpoint-link { width: fit-content; max-width: 100%; min-height: 22px; text-decoration: underline; text-underline-offset: 2px; }
+.registry-checkpoint-link { width: fit-content; max-width: 100%; min-height: 20px; text-decoration: underline; text-underline-offset: 3px; }
 .registry-checkpoint-link:has(.registry-checkpoint-overdue) { color: var(--error); }
 .registry-status, .registry-urgency { display: block; width: fit-content; max-width: 100%; padding: 2px 5px; overflow: hidden; border-radius: 5px; font-size: max(10px, calc(10px + var(--app-font-offset))); font-weight: 500; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; color: var(--accent); background: var(--accent-surface); }
 .registry-urgency { margin-top: 2px; padding: 0; font-size: max(10px, calc(9.5px + var(--app-font-offset))); }
+.registry-urgency > svg { display: none; }
 .registry-tone-success { color: var(--registry-success); background: var(--registry-success-surface); }
 .registry-tone-warning { color: var(--registry-warning); background: var(--registry-warning-surface); }
 .registry-tone-danger { color: var(--error); background: var(--error-surface); }
 .registry-urgency[class*='registry-tone-'] { background: transparent; }
-.registry-pagination { flex: 0 0 auto; justify-content: space-between; gap: 12px; min-height: 50px; padding: 8px 12px; border-top: 1px solid var(--border); background: var(--panel); }
+.registry-pagination { flex: 0 0 auto; justify-content: space-between; gap: 10px; min-height: 40px; padding: 5px 14px; border-top: 1px solid var(--border); background: var(--toolbar); }
 .registry-result-count { min-width: 0; overflow: hidden; color: var(--muted); font-size: calc(11px + var(--app-font-offset)); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
 .registry-pagination-controls { flex-shrink: 0; gap: 16px; }
 .registry-page-size { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: calc(11px + var(--app-font-offset)); }
 .registry-page-size select { width: 57px; min-height: 30px; padding: 5px 7px; border-radius: 8px; box-shadow: none; font-size: calc(11px + var(--app-font-offset)); }
-.registry-page-buttons { gap: 9px; font-size: calc(11px + var(--app-font-offset)); font-variant-numeric: tabular-nums; }
-.registry-page-button { width: 30px; min-height: 30px; padding: 6px; border-radius: 8px; }
-.registry-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; }
-.registry-no-database { flex: 1; min-height: 0; padding: 24px 16px; }
-.registry-empty-icon { display: flex; align-items: center; justify-content: center; width: 72px; height: 72px; margin-bottom: 8px; border: 1px solid var(--border); border-radius: 21px; background: var(--grouped); color: var(--accent); }
+.registry-page-buttons { gap: 6px; padding: 1px; border: 1px solid var(--border); border-radius: 8px; font-size: calc(11px + var(--app-font-offset)); font-variant-numeric: tabular-nums; background: var(--panel); }
+.registry-page-button { width: 25px; min-height: 24px; padding: 3px; border: 0; border-radius: 6px; box-shadow: none; }
+.registry-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; }
+.registry-no-database { display: flex; flex: 1; min-height: 0; overflow: auto; }
+.registry-setup {
+  display: grid;
+  grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr);
+  align-items: center;
+  width: 100%;
+  max-width: 740px;
+  margin: auto;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--panel);
+  box-shadow: var(--surface-shadow);
+}
+.registry-setup-visual { display: grid; place-items: center; align-self: stretch; min-height: clamp(160px, 22cqw, 216px); padding: 20px 0 20px 12px; background: radial-gradient(ellipse at 48% 55%, var(--accent-surface), transparent 70%); }
+.registry-setup-art { display: block; width: clamp(140px, 20cqw, 211px); max-width: 88%; height: auto; object-fit: contain; user-select: none; }
+.registry-setup-content { min-width: 0; padding: 20px clamp(22px, 4cqw, 46px) 20px 0; }
+.registry-setup-content h2 { max-width: 12em; font-size: clamp(calc(23px + var(--app-font-offset)), 3cqw, calc(31px + var(--app-font-offset))); line-height: 1.12; font-weight: 650; letter-spacing: -.045em; text-wrap: balance; }
+.registry-setup-content > p { max-width: 37ch; margin-top: 10px; color: var(--muted); font-size: calc(13px + var(--app-font-offset)); line-height: 1.5; overflow-wrap: anywhere; }
+.registry-setup-footer { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 16px; padding: 10px 18px; border-top: 1px solid var(--border); background: var(--toolbar); }
+.registry-setup-footer .registry-actions { gap: 7px; }
+.registry-setup-note { margin-right: auto; color: var(--muted); font-size: calc(11px + var(--app-font-offset)); }
+.registry-setup-link { margin-top: 10px; font-size: calc(11px + var(--app-font-offset)); }
+.registry-setup-link { display: inline-block; color: var(--accent); }
+.registry-setup-link:hover { text-decoration: underline; }
+.registry-empty-art { display: block; width: 108px; max-height: 76px; margin-bottom: 6px; object-fit: contain; user-select: none; }
+.registry-empty-symbol { display: grid; place-items: center; width: 50px; height: 50px; margin-bottom: 5px; border-radius: 15px; background: var(--accent-surface); color: var(--accent); }
 .registry-empty h2 { font-size: calc(17px + var(--app-font-offset)); font-weight: 600; letter-spacing: -.025em; }
 .registry-empty p { max-width: 47ch; color: var(--muted); font-size: calc(12px + var(--app-font-offset)); }
 .registry-empty .registry-button { margin-top: 4px; }
 .registry-empty-results { flex: 1; min-height: 0; padding: 24px 16px; border-top: 1px solid var(--border); }
 .registry-empty-results > svg { color: var(--muted); margin-bottom: 3px; }
 
-.registry-eyebrow { display: block; margin: 0 0 5px; color: var(--muted); font-size: calc(11px + var(--app-font-offset)); font-weight: 600; letter-spacing: .04em; }
-.registry-dialog { padding: 0; border: 1px solid var(--border); border-radius: 24px; color: var(--text); background: var(--panel); font: inherit; box-shadow: 0 24px 100px rgb(0 0 0 / .24); max-width: calc(100vw - 32px); max-height: calc(100dvh - 44px); }
+.registry-dialog { padding: 0; border: 1px solid var(--border); border-radius: 18px; color: var(--text); background: var(--panel); font: inherit; box-shadow: 0 18px 70px rgb(0 0 0 / .22); max-width: calc(100vw - 28px); max-height: calc(100dvh - 24px); }
 .registry-dialog::backdrop { background: rgb(12 17 26 / .42); backdrop-filter: blur(5px); }
-.registry-dialog .registry-button { min-height: 38px; padding: 8px 13px; }
-.registry-instruction-dialog { width: 760px; overflow: hidden; }
-.registry-dialog-header { justify-content: space-between; align-items: flex-start; padding: 24px 26px 20px; border-bottom: 1px solid var(--border); }
-.registry-dialog-header h2 { margin-bottom: 6px; font-size: calc(24px + var(--app-font-offset)); font-weight: 600; letter-spacing: -.04em; }
+.registry-dialog .registry-button { min-height: 33px; padding: 5px 11px; }
+.registry-instruction-dialog { width: 980px; }
+:is(.registry-instruction-dialog, .registry-control-card-dialog)[open] { display: flex; flex-direction: column; overflow: hidden; }
+.registry-dialog-header { flex: none; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
+.registry-dialog-symbol { display: grid; flex: none; place-items: center; width: 37px; height: 37px; border-radius: 11px; color: var(--accent); background: var(--accent-surface); }
+.registry-dialog-intro { flex: 1; min-width: 0; }
+.registry-dialog-header h2 { margin-bottom: 4px; font-size: calc(21px + var(--app-font-offset)); font-weight: 620; letter-spacing: -.035em; }
 .registry-dialog-title { display: flex; align-items: center; flex-wrap: wrap; gap: 7px 12px; }
 .registry-dialog-title h2 { margin: 0; }
-.registry-dialog-title + .registry-help { margin-top: 6px; }
+.registry-dialog-title + .registry-help { margin-top: 2px; }
+.registry-card-id { padding: 2px 6px; border-radius: 5px; color: var(--muted); background: var(--grouped); font-size: calc(10px + var(--app-font-offset)); font-weight: 550; font-variant-numeric: tabular-nums; }
 .registry-dialog .registry-card-close-control { min-height: 32px; padding: 6px 10px; }
-.registry-dialog .registry-close-button { flex-shrink: 0; width: 36px; min-height: 36px; padding: 6px; background: var(--grouped); }
+.registry-dialog .registry-close-button { flex-shrink: 0; width: 29px; min-height: 29px; padding: 4px; border: 0; border-radius: 50%; color: var(--muted); background: var(--grouped); box-shadow: none; }
+.registry-dialog .registry-close-button:hover { color: var(--text); background: var(--raised); }
 .registry-instruction-form { display: flex; flex-direction: column; min-height: 0; }
-.registry-dialog-body { overflow: auto; max-height: calc(100dvh - 260px); padding: 24px 26px; scrollbar-width: thin; scrollbar-color: var(--raised) transparent; scroll-padding: 16px; }
-.registry-options-hint { margin-bottom: 14px; }
+.registry-dialog-body { min-height: 0; overflow: auto; padding: 16px 20px; scrollbar-width: thin; scrollbar-color: var(--raised) transparent; scroll-padding: 12px; }
+.registry-options-hint { margin-bottom: 12px; }
 .registry-options-hint a { color: var(--accent); text-decoration: underline; }
-.registry-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 20px; min-width: 0; border: 0; margin: 0; padding: 0; }
+.registry-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; gap: 9px 12px; min-width: 0; border: 0; margin: 0; padding: 0; }
+.registry-instruction-columns { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); align-items: start; gap: 20px; }
+.registry-form-grid legend, .registry-control-card-group legend { margin: 0 0 10px; padding: 0; color: var(--text); font-size: calc(14px + var(--app-font-offset)); font-weight: 625; letter-spacing: -.025em; }
+.registry-instruction-control { min-width: 0; padding-left: 20px; border-left: 1px solid var(--border); }
+.registry-dialog .registry-field { gap: 4px; }
+.registry-dialog .registry-field :is(input, select, textarea) { min-height: 33px; padding: 5px 9px; border-radius: 8px; background: var(--panel); }
+.registry-dialog .registry-field > span, .registry-filter-panel .registry-field > span { color: var(--muted); font-size: calc(11px + var(--app-font-offset)); line-height: 1.35; }
+.registry-field :is(input, select, textarea) { transition: background-color var(--motion-fast) ease, border-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease; }
+.registry-field :is(input, select, textarea):focus-visible { border-color: var(--accent); outline: 2px solid var(--accent-surface); outline-offset: 0; }
+.registry-dialog .registry-field textarea { min-height: 52px; }
 .registry-field-wide { grid-column: 1 / -1; }
 .registry-form-error { padding: 12px 14px; margin-bottom: 20px; border-radius: 12px; background: var(--error-surface); color: var(--error); font-size: calc(12px + var(--app-font-offset)); }
-.registry-dialog-actions { justify-content: flex-end; flex-wrap: wrap; padding: 18px 26px; border-top: 1px solid var(--border); background: var(--grouped); }
+.registry-dialog-actions { flex: 0 0 auto; justify-content: flex-end; flex-wrap: wrap; gap: 8px; padding: 10px 20px; border-top: 1px solid var(--border); background: var(--toolbar); }
 .registry-dialog-actions .registry-delete-button { margin-right: auto; }
 .registry-unsaved-label { margin-right: auto; color: var(--muted); font-size: calc(11px + var(--app-font-offset)); }
 .registry-dialog-actions .registry-delete-button + .registry-unsaved-label { margin-right: 0; }
 .registry-confirm-dialog { width: 480px; }
-.registry-confirm-content { padding: 26px; }
+.registry-confirm-content { padding: 22px; }
 .registry-confirm-content h2 { margin: 0 0 10px; font-size: calc(21px + var(--app-font-offset)); font-weight: 600; letter-spacing: -.035em; }
 .registry-confirm-content p { color: var(--muted); font-size: calc(13px + var(--app-font-offset)); overflow-wrap: anywhere; }
 .registry-confirm-actions { gap: 8px; }
-.registry-control-card-dialog { width: 720px; }
+.registry-control-card-dialog { width: 960px; }
 .registry-control-card-form { display: flex; flex-direction: column; min-height: 0; }
-.registry-control-card-body { display: grid; gap: 24px; }
+.registry-control-card-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 18px 24px; }
 .registry-control-card-group { min-width: 0; margin: 0; padding: 0; border: 0; }
-.registry-control-card-group legend { margin-bottom: 10px; padding: 0; color: var(--text); font-size: calc(13px + var(--app-font-offset)); font-weight: 650; }
+.registry-control-card-group legend { width: 100%; padding-bottom: 5px; border-bottom: 1px solid var(--border); }
 .registry-control-card-actions { gap: 8px; }
 .registry-control-card-actions > .registry-export-warning { flex: 1 1 100%; }
 .registry-control-card-notice, .registry-control-card-error { flex: 1 1 185px; margin: 0; font-size: calc(12px + var(--app-font-offset)); overflow-wrap: anywhere; }
 .registry-control-card-notice { color: var(--registry-success); }
 .registry-control-card-error { color: var(--error); }
 .registry-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-@container (max-width: 1100px) {
-  .registry-table:not(.registry-table-wide) th[data-column='nextCheckpoint']:not([aria-sort='none']) .registry-checkpoint-heading-full { display: none; }
-  .registry-table:not(.registry-table-wide) th[data-column='nextCheckpoint']:not([aria-sort='none']) .registry-checkpoint-heading-short { display: inline; }
-  .registry-table:not(.registry-table-wide) th[data-column='controlFrequency']:not([aria-sort='none']) .registry-frequency-heading-full { display: none; }
-  .registry-table:not(.registry-table-wide) th[data-column='controlFrequency']:not([aria-sort='none']) .registry-frequency-heading-short { display: inline; }
-  .registry-table:not(.registry-table-wide) th[data-column='documentType']:not([aria-sort='none']) .registry-document-type-heading-full { display: none; }
-  .registry-table:not(.registry-table-wide) th[data-column='documentType']:not([aria-sort='none']) .registry-document-type-heading-short { display: inline; }
+@media (min-width: 841px) {
+  .registry-instruction-body { display: flex; flex-direction: column; overflow: hidden; }
+  .registry-instruction-columns { min-height: 0; grid-template-rows: minmax(0, 1fr); align-items: stretch; }
+  .registry-instruction-document, .registry-instruction-control { min-height: 0; overflow: auto; padding-block: 2px; padding-right: 5px; scrollbar-width: thin; scrollbar-color: var(--raised) transparent; scroll-padding: 6px; }
+  .registry-instruction-document { padding-left: 2px; }
 }
-@container (max-width: 900px) {
+@media (min-width: 621px) and (max-width: 840px) {
+  .registry-instruction-columns, .registry-control-card-body { column-gap: 14px; }
+  .registry-instruction-control { padding-left: 14px; }
+  .registry-form-grid { column-gap: 8px; }
+}
+@media (max-height: 390px) {
+  :is(.registry-instruction-dialog, .registry-control-card-dialog)[open] { display: block; overflow: auto; }
+}
+@container (max-width: 1390px) {
+  .registry-table:not(.registry-table-wide) :is([data-column='incomingNumber'], [data-column='source'], [data-column='summary'], [data-column='executionMark'], [data-column='controlFrequency']) { display: none; }
+  .registry-table:not(.registry-table-wide) th[data-column='title'] { width: auto; }
+  .registry-table:not(.registry-table-wide) th[data-column='controlDate'] { --registry-column-width: 8%; }
+  .registry-table:not(.registry-table-wide) th:is([data-column='deadline'], [data-column='extendedUntil'], [data-column='instructionNumber'], [data-column='nextCheckpoint']) { --registry-column-width: 10%; }
+  .registry-table:not(.registry-table-wide) th[data-column='executor'] { --registry-column-width: 12%; }
   .registry-table:not(.registry-table-wide) .registry-checkpoint-heading-full,
   .registry-table:not(.registry-table-wide) .registry-frequency-heading-full,
   .registry-table:not(.registry-table-wide) .registry-document-type-heading-full { display: none; }
   .registry-table:not(.registry-table-wide) .registry-checkpoint-heading-short,
   .registry-table:not(.registry-table-wide) .registry-frequency-heading-short,
   .registry-table:not(.registry-table-wide) .registry-document-type-heading-short { display: inline; }
+  .registry-table:not(.registry-table-wide) [data-column='controlDate'] .registry-date-full { display: none; }
+  .registry-table:not(.registry-table-wide) [data-column='controlDate'] .registry-date-short { display: inline; }
 }
 @container (max-width: 760px) {
+  .registry-table:not(.registry-table-wide) :is([data-column='id'], [data-column='controlDate'], [data-column='documentType'], [data-column='controlFrequency']) { display: none; }
+  .registry-table:not(.registry-table-wide) th:is([data-column='instructionNumber'], [data-column='nextCheckpoint'], [data-column='executor']) { --registry-column-width: 14%; }
+  .registry-table:not(.registry-table-wide) th:is([data-column='deadline'], [data-column='extendedUntil']) { --registry-column-width: 10%; }
   .registry-table:not(.registry-table-wide) .registry-date-full { display: none; }
   .registry-table:not(.registry-table-wide) .registry-date-short { display: inline; }
+  .registry-table:not(.registry-table-wide) :is(.registry-date, .registry-checkpoint-link) { display: inline-block; vertical-align: middle; }
+  .registry-table:not(.registry-table-wide) .registry-urgency { position: relative; display: inline-flex; margin: 0 0 0 3px; overflow: visible; vertical-align: middle; }
+  .registry-table:not(.registry-table-wide) .registry-urgency > svg { display: block; }
+  .registry-table:not(.registry-table-wide) .registry-urgency > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .registry-table:not(.registry-table-wide) td { padding-inline: 6px; font-size: calc(10.5px + var(--app-font-offset)); }
   .registry-table:not(.registry-table-wide) td:first-child { padding-inline: 3px; }
   .registry-table:not(.registry-table-wide) .registry-sort { padding-inline: 5px; font-size: max(10px, calc(10px + var(--app-font-offset))); }
@@ -196,18 +260,36 @@
   .registry-toolbar > .registry-actions { width: 100%; }
   .registry-toolbar > .registry-actions .registry-button { flex: 1; }
   .registry-column-toggle > span { display: none; }
+  .registry-column-toggle { width: 30px; }
+  .registry-filter-summary { display: none; }
+  .registry-results-heading { padding-inline: 8px; gap: 5px; }
+  .registry-pagination { padding-inline: 8px; }
   .registry-pagination-controls { gap: 9px; }
   .registry-page-size > span { display: none; }
   .registry-draft-label > span:last-child { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+  .registry-table:not(.registry-table-wide) :is([data-column='instructionNumber'], [data-column='executor']) { display: none; }
+  .registry-table:not(.registry-table-wide) th:is([data-column='deadline'], [data-column='extendedUntil']) { --registry-column-width: 17%; }
+  .registry-table:not(.registry-table-wide) th[data-column='nextCheckpoint'] { --registry-column-width: 20%; }
+  .registry-table-with-actions:not(.registry-table-wide) { --registry-action-width: 34px; }
+  .registry-setup { grid-template-columns: minmax(0, 1fr); text-align: center; }
+  .registry-setup-visual { min-height: 90px; padding: 12px 0 0; }
+  .registry-setup-art { width: min(36%, 126px); }
+  .registry-setup-content { padding: 10px 18px 18px; }
+  .registry-setup-content h2, .registry-setup-content > p { margin-inline: auto; }
+  .registry-setup-footer { justify-content: center; }
 }
 @media (max-height: 580px) {
   .registry-workspace { gap: 10px; }
+  .registry-dialog-header { padding-block: 10px; }
+  .registry-dialog-body { padding-block: 12px; }
+  .registry-dialog-actions { padding-block: 7px; }
 }
 @media (max-width: 620px) {
   .registry-filter-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .registry-filter-footer { align-items: flex-start; }
   .registry-filter-footer > .registry-actions { margin-left: auto; }
-  .registry-form-grid { grid-template-columns: minmax(0, 1fr); }
+  .registry-instruction-columns, .registry-control-card-body, .registry-form-grid { grid-template-columns: minmax(0, 1fr); }
+  .registry-instruction-control { padding: 14px 0 0; border: 0; border-top: 1px solid var(--border); }
   .registry-field-wide { grid-column: auto; }
   .registry-dialog-header, .registry-dialog-body, .registry-dialog-actions { padding-inline: 18px; }
   .registry-dialog { max-width: calc(100vw - 20px); border-radius: 20px; }

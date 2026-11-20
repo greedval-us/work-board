@@ -8,6 +8,8 @@ import { FULL_INSTRUCTION_COLUMNS, SHORT_INSTRUCTION_COLUMNS, WORKBOOK_CONFIG as
 
 const FONT = { name: config.FONT_NAME, size: config.FONT_SIZE };
 const ALIGNMENT = { vertical: 'top', wrapText: true };
+const BORDER_EDGE = { style: 'thin', color: { argb: config.TABLE_BORDER_COLOR } };
+const TABLE_BORDER = { top: BORDER_EDGE, right: BORDER_EDGE, bottom: BORDER_EDGE, left: BORDER_EDGE };
 const BOLD_WIDTH_SCALE = 1.08;
 const NARROW_GLYPHS = /[ .,:;!|il]/u;
 const WIDE_GLYPHS = /[MW@%ЖМФШЩЮжмфшщю]/u;
@@ -48,7 +50,7 @@ function wrappedLines(text, width) {
   return lines;
 }
 
-function fitSheet(sheet, columns, filterPadding = 0) {
+function formatTable(sheet, columns, filterPadding = 0) {
   const widths = columns.map(({ label }) => lineWidth(label) * BOLD_WIDTH_SCALE + config.CELL_PADDING + filterPadding);
   sheet.eachRow((row, index) => {
     if (index === config.HEADER_ROW) return;
@@ -65,12 +67,14 @@ function fitSheet(sheet, columns, filterPadding = 0) {
   sheet.eachRow((row, index) => {
     const isHeader = index === config.HEADER_ROW;
     let lines = 1;
-    row.eachCell((cell, column) => {
-      const width = widths[column - 1] - config.CELL_PADDING - (isHeader ? filterPadding : 0);
+    for (let column = 0; column < widths.length; column++) {
+      const cell = row.getCell(column + 1);
+      cell.border = TABLE_BORDER;
+      const width = widths[column] - config.CELL_PADDING - (isHeader ? filterPadding : 0);
       const capacity = isHeader ? width / BOLD_WIDTH_SCALE : width;
       const height = textLines(cell.value).reduce((count, line) => count + wrappedLines(line, capacity), 0);
       lines = Math.max(lines, height);
-    });
+    }
     row.height = Math.min(config.MAX_ROW_HEIGHT, lines * config.LINE_HEIGHT + config.ROW_PADDING);
   });
 }
@@ -112,7 +116,7 @@ export function createRegistryWorkbook({ rows, request = {}, exportedAt = new Da
   header.alignment = ALIGNMENT;
   header.font = { ...FONT, bold: true, color: { argb: config.HEADER_TEXT_COLOR } };
   header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: config.HEADER_FILL_COLOR } };
-  fitSheet(sheet, columns, config.FILTER_PADDING);
+  formatTable(sheet, columns, config.FILTER_PADDING);
 
   const metadata = workbook.addWorksheet(config.PARAMETERS_SHEET);
   metadata.columns = PARAMETER_COLUMNS.map(({ key, label }) => ({ header: label, key }));
@@ -136,6 +140,6 @@ export function createRegistryWorkbook({ rows, request = {}, exportedAt = new Da
     row.font = FONT;
   });
   metadata.getRow(config.HEADER_ROW).font = { ...FONT, bold: true };
-  fitSheet(metadata, PARAMETER_COLUMNS);
+  formatTable(metadata, PARAMETER_COLUMNS);
   return workbook;
 }

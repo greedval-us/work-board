@@ -1,6 +1,7 @@
 import { validateDate } from '../dates.js';
 import { ValidationError } from '../errors.js';
 import { validateEnum, validateRecord } from '../validation.js';
+import { controlPeriodForDate, isControlPeriodOverridden } from './periods.js';
 import {
   isScheduledDate, isValidControlDayOfMonth, isValidControlDayOfWeek, isValidControlMonthOfYear, supportsControlDayOfMonth,
 } from './recurrence.js';
@@ -58,20 +59,33 @@ function validateMarks(values) {
 }
 
 // Moved checkpoints use their destination. Completed moves remain as history when the period changes.
-export function controlDatesRequiringBounds({ frequency, customDates = [], moves = [], marks = [] }) {
+export function controlDatesRequiringBounds(schedule) {
+  const { frequency, customDates = [], moves = [], marks = [], periodDates = {} } = schedule;
   const markedDates = new Set(marks.filter(mark => mark.text.trim()).map(mark => mark.date));
   const movedOrigins = new Set();
-  const dates = [];
+  const dates = Object.values(periodDates).filter(Boolean);
   for (const { from, to } of moves) {
     if (from !== to) movedOrigins.add(from);
-    if (!markedDates.has(to)) dates.push(to);
+    if (!markedDates.has(to) && !isControlPeriodOverridden(schedule, to)) dates.push(to);
   }
-  if (frequency === 'custom') {
+  if (frequency) {
     for (const date of customDates) {
-      if (!movedOrigins.has(date)) dates.push(date);
+      if (!movedOrigins.has(date) && !isControlPeriodOverridden(schedule, date)) dates.push(date);
     }
   }
   return dates;
+}
+
+function validatePeriodDates(value, frequency) {
+  const entries = Object.entries(validateRecord(value, 'Даты контроля по периодам'));
+  for (const [start, date] of entries) {
+    const period = controlPeriodForDate(frequency, start);
+    if (!period || period.start !== start) throw new ValidationError('Укажите корректное начало периода контроля.');
+    if (date === '') continue;
+    validateDate(date, 'Дата промежуточного контроля');
+    if (date < period.start || date > period.end) throw new ValidationError('Дата контроля должна попадать в выбранный период.');
+  }
+  return Object.fromEntries(entries.sort(([left], [right]) => left.localeCompare(right)));
 }
 
 function validateMoves(values, schedule) {
@@ -98,7 +112,7 @@ function validateMoves(values, schedule) {
 
 export function validateControlSchedule(value = {}, { controlDate, deadline } = {}) {
   const {
-    frequency = '', firstDate = '', customDates = [], marks = [], moves = [], dayOfMonth, dayOfWeek, monthOfYear,
+    frequency = '', firstDate = '', customDates = [], marks = [], moves = [], dayOfMonth, dayOfWeek, monthOfYear, periodDates,
   } = validateRecord(value, 'График промежуточного контроля');
   validateEnum(frequency, CONTROL_FREQUENCIES, 'Периодичность промежуточного контроля');
   if (dayOfMonth !== undefined) {
@@ -118,8 +132,9 @@ export function validateControlSchedule(value = {}, { controlDate, deadline } = 
     if (!isValidControlMonthOfYear(monthOfYear)) throw new ValidationError('Месяц: выберите месяц от января до декабря.');
   }
   const recurring = frequency && frequency !== 'custom';
-  if (firstDate !== '' || recurring) validateDate(firstDate, 'Первая дата промежуточного контроля');
-  if (recurring) checkScheduleBounds(firstDate, controlDate, deadline);
+  if (periodDates !== undefined && !recurring) throw new ValidationError('Выберите периодичность для дат контроля по периодам.');
+  if (firstDate !== '' || (recurring && periodDates === undefined)) validateDate(firstDate, 'Первая дата промежуточного контроля');
+  if (recurring && firstDate) checkScheduleBounds(firstDate, controlDate, deadline);
   if (!Array.isArray(customDates)) throw new ValidationError('Даты промежуточного контроля: укажите список дат.');
   for (const date of customDates) {
     validateDate(date, 'Дата промежуточного контроля');
@@ -130,11 +145,12 @@ export function validateControlSchedule(value = {}, { controlDate, deadline } = 
   const schedule = {
     frequency,
     firstDate: recurring ? firstDate : '',
-    customDates: frequency === 'custom' ? [...new Set(customDates)].sort() : [],
+    customDates: frequency ? [...new Set(customDates)].sort() : [],
     marks: validateMarks(marks),
     ...(dayOfMonth === undefined ? {} : { dayOfMonth }),
     ...(dayOfWeek === undefined ? {} : { dayOfWeek }),
     ...(monthOfYear === undefined ? {} : { monthOfYear }),
+    ...(periodDates === undefined ? {} : { periodDates: validatePeriodDates(periodDates, frequency) }),
   };
   const normalizedMoves = validateMoves(moves, schedule);
   for (const date of controlDatesRequiringBounds({ ...schedule, moves })) checkScheduleBounds(date, controlDate, deadline);

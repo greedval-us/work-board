@@ -26,4 +26,20 @@ export async function verifyMotion(driver) {
   await resize(720, 640);
   assert.equal(await js('document.documentElement.scrollWidth > innerWidth'), false);
   await screenshot('calendar-compact.png');
+  await window.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', {
+    width: 390, height: 760, deviceScaleFactor: 1, mobile: false,
+  });
+  try {
+    for (const [route, heading] of [['/', 'Реестр указаний'], ['/calendar', 'Календарь и задачи'], ['/tasks', 'Задачи'], ['/analytics', 'Аналитика'], ['/settings', 'Настройки']]) {
+      await js("document.querySelector('.sidebar-toggle').click()");
+      await wait("Boolean(document.querySelector('#expanded-navigation'))");
+      await js(`document.querySelector('#expanded-navigation nav a[href="${'#' + route}"]').click()`);
+      await wait(`document.querySelector('h1')?.textContent === ${JSON.stringify(heading)} && !document.querySelector('.workspace-enter-active,.navigation-panel-leave-active')`);
+      assert.ok(await js(`[document.documentElement, document.querySelector('.main-content'), document.querySelector('.page')]
+        .every(element => element.scrollWidth <= element.clientWidth + 1)`), `${heading} overflows at 390px`);
+    }
+    console.log('Narrow layout and menu navigation passed at 390px.');
+  } finally {
+    await window.webContents.debugger.sendCommand('Emulation.clearDeviceMetricsOverride');
+  }
 }

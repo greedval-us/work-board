@@ -4,7 +4,7 @@ import { Check, ChevronLeft, ChevronRight, FileText, Flag, ListTodo } from 'luci
 import { addCalendarDays, getUrgency, INSTRUCTION_STATUS } from '../../../../shared/registry.js';
 import { DATE_LIMITS } from '../../../../shared/constants/dates.js';
 import { monthLabel, moveMonth } from '../../../ui/calendarDates.js';
-import { CALENDAR_LAYOUT, CALENDAR_WEEKDAYS } from '../../../ui/calendarLabels.js';
+import { CALENDAR_LAYOUT, CALENDAR_MONTHS, CALENDAR_WEEKDAYS } from '../../../ui/calendarLabels.js';
 
 const props = defineProps({
   month: { type: String, required: true }, days: { type: Array, required: true },
@@ -12,6 +12,7 @@ const props = defineProps({
 });
 const emit = defineEmits(['changeMonth', 'selectDate', 'today']);
 const title = computed(() => monthLabel(props.month));
+const monthName = computed(() => CALENDAR_MONTHS[Number(props.month.slice(5)) - 1]);
 const buttons = new Map();
 const visibleDays = computed(() => {
   const finalDay = props.days.findLastIndex((day) => day.inMonth);
@@ -66,7 +67,7 @@ function registerButton(date, element) {
 <template>
   <section class="calendar-month-panel" aria-label="Месячный календарь" :aria-busy="loading">
     <div class="calendar-month-toolbar">
-      <h2 aria-live="polite">{{ title }}</h2>
+      <h2 aria-live="polite"><time :key="month" :datetime="month" class="calendar-period-name">{{ monthName }} <span class="calendar-period-year">{{ month.slice(0, 4) }}</span></time></h2>
       <div class="calendar-month-navigation">
         <button class="calendar-button calendar-today-button" @click="emit('today')">Сегодня</button>
         <button class="calendar-icon-button" aria-label="Предыдущий месяц" :disabled="month === DATE_LIMITS.MIN.slice(0, 7)" @click="emit('changeMonth', -1)"><ChevronLeft :size="18" aria-hidden="true" /></button>

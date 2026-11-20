@@ -27,7 +27,6 @@ export class DatabaseLocation {
       } else {
         const legacy = path.join(this.userData, DATABASE_CONFIG.LEGACY_DIRECTORY, DATABASE_CONFIG.LEGACY_FILENAME);
         if (existsSync(legacy)) this.database.replace({ filePath: legacy, persist: (filePath) => this.save(filePath) });
-        else this.database.message = 'Создайте новую базу или откройте существующую в настройках.';
       }
     } catch (error) {
       this.database.message = error.publicMessage ?? 'Не удалось восстановить выбранную базу. Выберите файл в настройках.';

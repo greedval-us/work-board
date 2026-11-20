@@ -1,18 +1,25 @@
-import { computed, watch } from 'vue';
+import { computed, onScopeDispose, shallowRef, watch } from 'vue';
 import { useAppStore } from './appStore.js';
 
-export function useAppearance() {
-  const store = useAppStore();
-  watch(() => store.theme, (theme) => {
-    document.documentElement.dataset.appearance = theme;
+export function useAppearance({
+  store = useAppStore(), root = document.documentElement,
+  preference = window.matchMedia('(prefers-color-scheme: dark)'),
+} = {}) {
+  const systemDark = shallowRef(preference.matches);
+  const updateSystemTheme = event => { systemDark.value = event.matches; };
+  preference.addEventListener('change', updateSystemTheme);
+  onScopeDispose(() => preference.removeEventListener('change', updateSystemTheme));
+
+  const isDark = computed(() => store.theme === 'system' ? systemDark.value : store.theme === 'dark');
+  watch(isDark, dark => {
+    root.dataset.appearance = dark ? 'dark' : 'light';
   }, { immediate: true });
   watch(() => store.typography, ({ fontFamily, fontSize }) => {
-    const root = document.documentElement;
     root.dataset.fontFamily = fontFamily;
     root.style.setProperty('--app-font-size-value', String(fontSize));
   }, { immediate: true });
   return {
-    isDark: computed(() => store.theme === 'dark'),
-    toggleAppearance: () => store.setTheme(store.theme === 'dark' ? 'light' : 'dark'),
+    isDark,
+    toggleAppearance: () => store.setTheme(isDark.value ? 'light' : 'dark'),
   };
 }

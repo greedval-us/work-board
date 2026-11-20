@@ -20,6 +20,7 @@ import { verifyMotion } from './smoke/verifyMotion.mjs';
 import { verifyClosedControl } from './smoke/verifyClosedControl.mjs';
 import { verifyScheduleCadence } from './smoke/verifyScheduleCadence.mjs';
 import { verifyTaskRecurrence } from './smoke/verifyTaskRecurrence.mjs';
+import { verifyTasksPage } from './smoke/verifyTasksPage.mjs';
 import { verifyDatabaseRecovery } from './smoke/verifyDatabaseRecovery.mjs';
 
 const SMOKE_TIMEOUT_MS = 80_000;
@@ -47,6 +48,7 @@ app.once('browser-window-created', (_event, window) => {
       await verifyMotion(driver);
       await verifyClosedControl(driver, fixture, reopened.generation);
       await verifyTaskRecurrence(driver, fixture, reopened.generation);
+      await verifyTasksPage(driver, fixture, reopened.generation);
       await verifyDatabaseRecovery(driver, fixture);
       assert.deepEqual(driver.errors, []);
       window.webContents.debugger.detach();

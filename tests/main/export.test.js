@@ -83,6 +83,28 @@ test('Excel short mode uses the eight requested columns with effective deadlines
   assert.equal(parameters.get('Раздел'), 'Закрытый контроль');
 });
 
+test('Excel saves borders around every cell in both report tables, including blank fields', async () => {
+  const sides = ['top', 'right', 'bottom', 'left'];
+  for (const [reportType, columns] of [['full', 13], ['short', 8]]) {
+    const workbook = await reloadWorkbook({ request: { reportType }, rows: [{ id: 1, deadline: '2026-11-12' }] });
+    for (const [name, width] of [['Указания', columns], ['Параметры', 2]]) {
+      const sheet = workbook.getWorksheet(name);
+      const height = sheet.rowCount;
+      for (let row = 1; row <= height; row++) {
+        for (let column = 1; column <= width; column++) {
+          const cell = sheet.getCell(row, column);
+          for (const side of sides) {
+            assert.equal(cell.border?.[side]?.style, 'thin', `${reportType}: ${name}!${cell.address} ${side}`);
+          }
+        }
+      }
+      for (const cell of [sheet.getCell(1, width + 1), sheet.getCell(height + 1, 1)]) {
+        assert.ok(sides.every(side => !cell.border?.[side]?.style), `${name}!${cell.address} is outside the table`);
+      }
+    }
+  }
+});
+
 test('Excel adapts widths to the longest line and retains full values in wrapped cells', async () => {
   const description = 'Проверить данные и подготовить итоговую справку';
   const longValue = `Первый абзац\n${'Второй абзац содержит полный текст поручения. '.repeat(70)}`;

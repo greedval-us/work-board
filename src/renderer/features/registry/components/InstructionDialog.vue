@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, shallowRef, useId, useTemplateRef, watch } from 'vue';
-import { Archive, FileText, Trash2, X } from 'lucide-vue-next';
+import { Archive, ClipboardList, FileText, Trash2, X } from 'lucide-vue-next';
 import { instructionDeadline } from '../../../../shared/registry.js';
 import { INSTRUCTION_OPTION_LABELS } from '../../../../shared/constants/settings.js';
 import { createDialogMotion } from '../../../ui/dialogMotion.js';
@@ -133,57 +133,69 @@ defineExpose({ requestClose, dirty, enterSurface, leaveSurface });
   <Teleport to="body">
     <dialog ref="dialog" class="registry-dialog registry-instruction-dialog" :aria-labelledby="titleId" :aria-describedby="helpId" @cancel.prevent="requestClose" @click="backdropClick">
       <div class="registry-dialog-header">
-        <div>
-          <p class="registry-eyebrow">{{ props.record.closedAt ? 'Закрытый контроль' : 'Реестр указаний' }}<span v-if="props.record.id" class="registry-card-id"> · ID {{ props.record.id }}</span></p>
+        <span class="registry-dialog-symbol" aria-hidden="true"><ClipboardList :size="20" /></span>
+        <div class="registry-dialog-intro">
           <div class="registry-dialog-title">
             <h2 :id="titleId">{{ props.record.id ? 'Карточка указания' : 'Новое указание' }}</h2>
-            <span v-if="props.record.id && !props.record.closedAt && props.closeControl" :title="dirty ? 'Сохраните изменения и снова откройте карточку.' : undefined">
-              <button type="button" class="registry-button registry-card-close-control" :disabled="busy || dirty || !props.canEdit" @click="closeControl"><Archive :size="16" aria-hidden="true" />{{ props.closingControl ? 'Закрытие…' : 'Закрытие контроля' }}</button>
-            </span>
+            <span v-if="props.record.id" class="registry-card-id">ID {{ props.record.id }}</span>
+            <span v-if="props.record.closedAt" class="registry-status">Закрытый контроль</span>
           </div>
           <p :id="helpId" class="registry-help">Обязательные поля отмечены звёздочкой.</p>
         </div>
+        <span v-if="props.record.id && !props.record.closedAt && props.closeControl" :title="dirty ? 'Сохраните изменения и снова откройте карточку.' : undefined">
+          <button type="button" class="registry-button registry-card-close-control" :disabled="busy || dirty || !props.canEdit" @click="closeControl"><Archive :size="15" aria-hidden="true" />{{ props.closingControl ? 'Закрытие…' : 'Закрытие контроля' }}</button>
+        </span>
         <button type="button" class="registry-button registry-close-button" aria-label="Закрыть карточку" :disabled="busy" @click="requestClose"><X :size="20" aria-hidden="true" /></button>
       </div>
       <form ref="formElement" class="registry-instruction-form" @submit.prevent="save">
-        <div class="registry-dialog-body">
+        <div class="registry-dialog-body registry-instruction-body">
           <p v-if="props.error" :id="errorId" ref="errorElement" class="registry-form-error" role="alert" tabindex="-1">{{ props.error }}</p>
           <p v-if="optionsMissing" class="registry-help registry-options-hint">
             Добавьте варианты для карточки указания в <RouterLink to="/settings">настройках</RouterLink>.
           </p>
-          <fieldset class="registry-form-grid" :disabled="busy || !props.canEdit" :aria-describedby="props.error ? errorId : undefined">
-            <label class="registry-field"><span>Дата постановки на контроль *</span><input v-model="form.controlDate" name="controlDate" type="date" required /></label>
-            <label class="registry-field"><span>Входящий номер</span><input v-model="form.incomingNumber" name="incomingNumber" type="text" :maxlength="INSTRUCTION_FORM_LIMITS.incomingNumber" placeholder="Например, 001/в" /></label>
-            <label class="registry-field registry-field-wide"><span>Подписной номер *</span><input ref="instructionNumber" v-model="form.instructionNumber" name="instructionNumber" type="text" required :maxlength="INSTRUCTION_FORM_LIMITS.instructionNumber" /></label>
-            <label class="registry-field">
-              <span>{{ INSTRUCTION_OPTION_LABELS.documentType }}</span>
-              <select v-model="form.documentType" name="documentType">
-                <option value="">Не указано</option>
-                <option v-for="value in optionsFor('documentType')" :key="value" :value="value">{{ value }}</option>
-              </select>
-            </label>
-            <label class="registry-field">
-              <span>{{ INSTRUCTION_OPTION_LABELS.source }}</span>
-              <select v-model="form.source" name="source">
-                <option value="">Не указано</option>
-                <option v-for="value in optionsFor('source')" :key="value" :value="value">{{ value }}</option>
-              </select>
-            </label>
-            <label class="registry-field registry-field-wide"><span>Название указания *</span><input v-model="form.title" name="title" type="text" required :maxlength="INSTRUCTION_FORM_LIMITS.title" /></label>
-            <label class="registry-field registry-field-wide"><span>Резолюция</span><textarea v-model="form.summary" name="summary" rows="4" :maxlength="INSTRUCTION_FORM_LIMITS.summary" /></label>
-            <label class="registry-field"><span>Срок исполнения *</span><input v-model="form.deadline" name="deadline" type="date" required /></label>
-            <label class="registry-field"><span>Продлён до</span><input v-model="form.extendedUntil" name="extendedUntil" type="date" :min="form.deadline || undefined" /></label>
-            <label class="registry-field registry-field-wide">
-              <span>{{ INSTRUCTION_OPTION_LABELS.executor }} *</span>
-              <select v-model="form.executor" name="executor" required>
-                <option value="" disabled>Выберите исполнителя</option>
-                <option v-for="value in optionsFor('executor')" :key="value" :value="value">{{ value }}</option>
-              </select>
-            </label>
-            <label class="registry-field registry-field-wide"><span>Отметка об исполнении</span><textarea v-model="form.executionMark" name="executionMark" rows="3" :maxlength="INSTRUCTION_FORM_LIMITS.executionMark" placeholder="Комментарий к исполнению" /></label>
-          </fieldset>
-          <InstructionControlSchedule ref="scheduleEditor" v-model="form.controlSchedule" :control-date="form.controlDate"
-            :deadline="instructionDeadline(form)" :selected-date="props.selectedCheckpoint" :closed="Boolean(props.record.closedAt)" :disabled="busy || !props.canEdit" />
+          <div class="registry-instruction-columns">
+            <div class="registry-instruction-document">
+              <fieldset class="registry-form-grid" :disabled="busy || !props.canEdit" :aria-describedby="props.error ? errorId : undefined">
+                <legend>Документ</legend>
+                <label class="registry-field registry-field-wide"><span>Название указания *</span><input v-model="form.title" name="title" type="text" required :maxlength="INSTRUCTION_FORM_LIMITS.title" /></label>
+                <label class="registry-field"><span>Входящий номер</span><input v-model="form.incomingNumber" name="incomingNumber" type="text" :maxlength="INSTRUCTION_FORM_LIMITS.incomingNumber" placeholder="Например, 001/в" /></label>
+                <label class="registry-field"><span>Подписной номер *</span><input ref="instructionNumber" v-model="form.instructionNumber" name="instructionNumber" type="text" required :maxlength="INSTRUCTION_FORM_LIMITS.instructionNumber" /></label>
+                <label class="registry-field">
+                  <span>{{ INSTRUCTION_OPTION_LABELS.documentType }}</span>
+                  <select v-model="form.documentType" name="documentType">
+                    <option value="">Не указано</option>
+                    <option v-for="value in optionsFor('documentType')" :key="value" :value="value">{{ value }}</option>
+                  </select>
+                </label>
+                <label class="registry-field">
+                  <span>{{ INSTRUCTION_OPTION_LABELS.source }}</span>
+                  <select v-model="form.source" name="source">
+                    <option value="">Не указано</option>
+                    <option v-for="value in optionsFor('source')" :key="value" :value="value">{{ value }}</option>
+                  </select>
+                </label>
+                <label class="registry-field registry-field-wide"><span>Резолюция</span><textarea v-model="form.summary" name="summary" rows="2" :maxlength="INSTRUCTION_FORM_LIMITS.summary" /></label>
+                <label class="registry-field registry-field-wide"><span>Отметка об исполнении</span><textarea v-model="form.executionMark" name="executionMark" rows="2" :maxlength="INSTRUCTION_FORM_LIMITS.executionMark" placeholder="Комментарий к исполнению" /></label>
+              </fieldset>
+            </div>
+            <div class="registry-instruction-control">
+              <fieldset class="registry-form-grid" :disabled="busy || !props.canEdit">
+                <legend>Исполнение</legend>
+                <label class="registry-field"><span>Дата постановки на контроль *</span><input v-model="form.controlDate" name="controlDate" type="date" required /></label>
+                <label class="registry-field">
+                  <span>{{ INSTRUCTION_OPTION_LABELS.executor }} *</span>
+                  <select v-model="form.executor" name="executor" required>
+                    <option value="" disabled>Выберите исполнителя</option>
+                    <option v-for="value in optionsFor('executor')" :key="value" :value="value">{{ value }}</option>
+                  </select>
+                </label>
+                <label class="registry-field"><span>Срок исполнения *</span><input v-model="form.deadline" name="deadline" type="date" required /></label>
+                <label class="registry-field"><span>Продлён до</span><input v-model="form.extendedUntil" name="extendedUntil" type="date" :min="form.deadline || undefined" /></label>
+              </fieldset>
+              <InstructionControlSchedule ref="scheduleEditor" v-model="form.controlSchedule" :control-date="form.controlDate"
+                :deadline="instructionDeadline(form)" :selected-date="props.selectedCheckpoint" :closed="Boolean(props.record.closedAt)" :disabled="busy || !props.canEdit" />
+            </div>
+          </div>
         </div>
         <div class="registry-dialog-actions"><button v-if="props.record.id" type="button" class="registry-button registry-delete-button" :disabled="busy || !props.canEdit" @click="remove"><Trash2 :size="16" aria-hidden="true" />{{ props.deleting ? 'Удаление…' : 'Удалить' }}</button><span v-if="dirty" class="registry-unsaved-label">Не сохранено</span><div class="registry-actions">
           <span v-if="props.record.id" :title="dirty ? 'Сохраните изменения и снова откройте карточку.' : undefined">

@@ -1,5 +1,5 @@
 <script setup>
-import { Sun, Moon, Check } from 'lucide-vue-next';
+import { Check, Contrast } from 'lucide-vue-next';
 import { APP_FONT_FAMILIES, APP_FONT_SIZE_LIMITS } from '../../../shared/constants/settings.js';
 
 const props = defineProps({
@@ -10,8 +10,9 @@ const props = defineProps({
 });
 const emit = defineEmits(['change', 'change-typography']);
 const options = [
-  { value: 'light', label: 'Светлая', icon: Sun },
-  { value: 'dark', label: 'Тёмная', icon: Moon },
+  { value: 'light', label: 'Светлая' },
+  { value: 'dark', label: 'Тёмная' },
+  { value: 'system', label: 'Системная' },
 ];
 const fontSizes = Array.from(
   { length: APP_FONT_SIZE_LIMITS.max - APP_FONT_SIZE_LIMITS.min + 1 },
@@ -27,10 +28,10 @@ function changeTypography(key, input) {
 </script>
 
 <template>
-  <section class="settings-section" aria-labelledby="appearance-title">
+  <section class="settings-section appearance-settings" aria-labelledby="appearance-title">
     <div class="section-heading">
+      <span class="settings-glyph"><Contrast :size="17" aria-hidden="true" /></span>
       <h2 id="appearance-title">Оформление</h2>
-      <p>Настройте тему, шрифт и размер текста.</p>
     </div>
     <fieldset class="theme-options" :disabled="disabled">
       <legend class="sr-only">Тема оформления</legend>
@@ -43,10 +44,9 @@ function changeTypography(key, input) {
           <span class="preview-content"><i /><i /><i /></span>
         </span>
         <span class="theme-option-caption">
-          <component :is="option.icon" :size="16" aria-hidden="true" />
           <span>{{ option.label }}</span>
-          <span class="theme-check" aria-hidden="true">
-            <Check v-if="theme === option.value" :size="12" :stroke-width="3" />
+          <span v-if="theme === option.value" class="theme-check" aria-hidden="true">
+            <Check :size="11" :stroke-width="3" />
           </span>
         </span>
       </button>
@@ -71,8 +71,8 @@ function changeTypography(key, input) {
 </template>
 
 <style scoped>
-.typography-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; min-width: 0; max-width: 382px; margin: 16px 0 0; padding: 0; border: 0; }
-.typography-option { display: grid; gap: 6px; min-width: 0; color: var(--muted); }
-.typography-option select { width: 100%; min-width: 0; min-height: 38px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 9px; color: var(--text); background: var(--panel); font: inherit; }
+.typography-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; min-width: 0; margin: 12px 0 0; padding: 0; border: 0; }
+.typography-option { display: grid; gap: 4px; min-width: 0; color: var(--muted); font-size: calc(12px + var(--app-font-offset)); }
+.typography-option select { width: 100%; min-width: 0; min-height: 32px; padding: 4px 7px; border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: var(--grouped); font: inherit; }
 .typography-error { margin: 8px 0 0; color: var(--error); }
 </style>

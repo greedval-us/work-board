@@ -5,7 +5,7 @@ import { formatDate } from '../../src/shared/registry.js';
 import { chooseExcelReport, createSmokeForms } from './forms.mjs';
 
 export async function verifyRegistry(driver, fixture, { generation, created, overdueTextColor }) {
-  const { window, js, api, wait, click, fill, openFilters, pressKey, verifyEntrance, resizeSweep, screenshot } = driver;
+  const { window, js, api, wait, click, fill, openFilters, pressKey, verifyEntrance, resize, resizeDefault, resizeSweep, screenshot } = driver;
   const { exportFile, shortExportFile, openRequests, today, originalDeadline, firstCheckpointMark, nextCheckpointCell, nextCheckpointTime, controlFrequencyCell, dailyControl, customControl, registrySelections, historicalDocumentType } = fixture;
   const { instructionField, fillInstruction } = createSmokeForms(driver);
 
@@ -72,6 +72,7 @@ export async function verifyRegistry(driver, fixture, { generation, created, ove
   await js("document.querySelector('.registry-table-scroll').scrollTop = 300");
   assert.equal(await js("Math.abs(document.querySelector('.registry-table th').getBoundingClientRect().top - document.querySelector('.registry-table-scroll').getBoundingClientRect().top) < 2"), true);
   await js("document.querySelector('.registry-column-toggle').click(); document.querySelector('.registry-table-scroll').scrollTop = 0");
+  await resize(1024, 768);
   const workspaceWidth = await js("document.querySelector('.main-content').getBoundingClientRect().width");
   await js("document.querySelector('.sidebar-toggle').click()");
   await wait("Boolean(document.querySelector('.sidebar-frame-overlay')) && document.activeElement?.classList.contains('sidebar-close')");
@@ -87,6 +88,7 @@ export async function verifyRegistry(driver, fixture, { generation, created, ove
   await pressKey('Escape');
   await wait("!document.querySelector('.sidebar-frame-overlay') && document.activeElement?.classList.contains('sidebar-toggle')");
   assert.equal(await js("document.querySelector('.app-body').inert"), false);
+  await resizeDefault();
   await openFilters();
   await fill('[data-filter=instructionNumber]', { 0: 'Черновик фильтра' });
   await pressKey('Escape');

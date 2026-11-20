@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   CONTROL_FREQUENCIES, CONTROL_MARK_LIMIT, CONTROL_WEEKDAY_LABELS, emptyControlSchedule, getControlWeekday,
-  getNextControlCheckpoint, listControlCheckpoints, supportsControlDayOfMonth, validateControlSchedule,
+  getNextControlCheckpoint, listControlCheckpoints, moveControlCheckpoint, supportsControlDayOfMonth, validateControlSchedule,
 } from '../../src/shared/controlSchedule.js';
 import { ValidationError } from '../../src/shared/errors.js';
 
@@ -185,6 +185,41 @@ test('custom schedules combine distinct dates with marks from the active schedul
     { date: '2026-11-09', mark: '', scheduled: true },
     { date: '2026-11-10', mark: '  Проверено\nи принято ', scheduled: true },
     { date: '2026-11-18', mark: 'Запрос снят', scheduled: false },
+  ]);
+});
+
+test('every recurring schedule keeps manual dates within the control period', () => {
+  const bounds = { controlDate: '2026-11-01', deadline: '2026-12-31' };
+  for (const frequency of ['daily', 'weekly', 'monthly', 'quarterly', 'semiannual', 'yearly']) {
+    const value = { frequency, firstDate: '2026-11-10', customDates: ['2026-11-15', '2026-11-05', '2026-11-15'] };
+    const schedule = validateControlSchedule(value, bounds);
+    assert.deepEqual(schedule.customDates, ['2026-11-05', '2026-11-15'], frequency);
+    assert.throws(() => validateControlSchedule({ ...value, customDates: ['2026-10-31'] }, bounds), ValidationError);
+    assert.throws(() => validateControlSchedule({ ...value, customDates: ['2027-01-01'] }, bounds), ValidationError);
+  }
+});
+
+test('manual dates share one checkpoint per day with automatic dates', () => {
+  const schedule = {
+    frequency: 'monthly', firstDate: '2026-11-10', customDates: ['2026-12-10', '2026-11-12', '2026-11-05'],
+    marks: [{ date: '2026-11-05', text: 'Получено' }, { date: '2026-11-10', text: 'Получено' }],
+  };
+  const bounds = { from: '2026-11-01', to: '2026-12-31' };
+  assert.deepEqual(listControlCheckpoints(schedule, bounds).map(row => [row.date, row.scheduled]), [
+    ['2026-11-05', true], ['2026-11-10', true], ['2026-11-12', true], ['2026-12-10', true],
+  ]);
+  assert.equal(getNextControlCheckpoint(schedule, bounds.to), '2026-11-12');
+});
+
+test('a recurring schedule can move a manual checkpoint without moving automatic dates', () => {
+  const schedule = { frequency: 'monthly', firstDate: '2026-11-10', customDates: ['2026-11-12'] };
+  const bounds = { controlDate: '2026-11-01', deadline: '2026-12-31' };
+  assert.throws(() => moveControlCheckpoint(schedule, '2026-11-10', '2026-11-12', bounds), /уже назначен/);
+  const moved = moveControlCheckpoint(schedule, '2026-11-12', '2026-11-06', bounds);
+  assert.deepEqual(moved.moves, [{ from: '2026-11-12', to: '2026-11-06' }]);
+  assert.equal(getNextControlCheckpoint(moved, bounds.deadline), '2026-11-06');
+  assert.deepEqual(listControlCheckpoints(moved, { from: '2026-11-01', to: '2026-11-30' }).map(row => row.date), [
+    '2026-11-06', '2026-11-10',
   ]);
 });
 

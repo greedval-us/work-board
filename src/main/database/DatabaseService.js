@@ -7,6 +7,7 @@ import { rethrowAfterCleanup } from '../errors/cleanup.js';
 
 export class DatabaseService {
   #connection = null;
+  #changeStatements = null;
   #generation = 0;
 
   constructor({ filePath = null } = {}) { this.filePath = filePath; this.message = ''; }
@@ -31,6 +32,7 @@ export class DatabaseService {
     catch (error) { rethrowAfterCleanup(error, [() => discardConnection({ connection, created }, filePath)]); }
     const oldConnection = this.#connection;
     this.#connection = connection;
+    this.#changeStatements = null;
     this.filePath = filePath;
     this.message = '';
     this.#generation++;
@@ -51,6 +53,17 @@ export class DatabaseService {
     return { ready: this.#connection !== null, generation: this.#generation };
   }
 
+  get changeStamp() {
+    const connection = this.connection;
+    // data_version detects other connections' commits; total_changes() covers this connection.
+    this.#changeStatements ??= {
+      external: connection.prepare('PRAGMA main.data_version'),
+      local: connection.prepare('SELECT total_changes() AS count'),
+    };
+    const { external, local } = this.#changeStatements;
+    return { external: external.get().data_version, local: local.get().count };
+  }
+
   getStatus() {
     return {
       ...this.connectionState, engine: 'SQLite', filePath: this.filePath, message: this.message,
@@ -63,6 +76,7 @@ export class DatabaseService {
     if (!this.#connection) return;
     this.#connection.close();
     this.#connection = null;
+    this.#changeStatements = null;
     this.#generation++;
   }
 }

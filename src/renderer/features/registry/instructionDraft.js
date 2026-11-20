@@ -1,7 +1,7 @@
 import { INSTRUCTION_FIELDS } from '../../../shared/registry.js';
 import { emptyControlSchedule } from '../../../shared/controlSchedule.js';
 
-function snapshotControlSchedule({ frequency, firstDate, customDates, marks, moves, dayOfMonth, dayOfWeek, monthOfYear }) {
+function snapshotControlSchedule({ frequency, firstDate, customDates, marks, moves, dayOfMonth, dayOfWeek, monthOfYear, periodDates }) {
   return {
     frequency, firstDate, customDates: [...customDates],
     marks: marks.map(({ date, text, actualDate }) => ({ date, text, ...(actualDate === undefined ? {} : { actualDate }) })),
@@ -9,6 +9,7 @@ function snapshotControlSchedule({ frequency, firstDate, customDates, marks, mov
     ...(dayOfMonth === undefined ? {} : { dayOfMonth }),
     ...(dayOfWeek === undefined ? {} : { dayOfWeek }),
     ...(monthOfYear === undefined ? {} : { monthOfYear }),
+    ...(periodDates === undefined ? {} : { periodDates: { ...periodDates } }),
   };
 }
 

@@ -25,7 +25,7 @@ const refresh = () => store.refresh({ force: true, keepData: Boolean(data.value)
 </script>
 <template>
   <section class="page analytics-page">
-    <div class="analytics-page-heading"><PageHeading title="Аналитика" description="Исполнение указаний по срокам и исполнителям." /><button type="button" class="analytics-button" :disabled="!ready || loading" @click="refresh"><RefreshCw :size="15" aria-hidden="true" />Обновить</button></div>
+    <div class="analytics-page-heading"><PageHeading title="Аналитика" /><button type="button" class="analytics-button" :disabled="!ready || loading" @click="refresh"><RefreshCw :size="15" aria-hidden="true" />Обновить</button></div>
     <template v-if="ready">
       <AnalyticsFilters :filters="draftFilters" :applied="appliedFilters" :executors="executors" :error="filterError"
         :changed="filtersChanged" :disabled="app.databaseSwitching" @change="Object.assign(draftFilters, $event)"
@@ -38,19 +38,21 @@ const refresh = () => store.refresh({ force: true, keepData: Boolean(data.value)
       <p v-if="loading && !data" class="analytics-empty" role="status">Рассчитываем показатели…</p>
       <template v-else-if="data">
         <AnalyticsSummary :totals="data.totals" />
-        <template v-if="data.totals.total">
-          <AnalyticsInstructions v-if="data.instructions" :result="data.instructions" :loading="loading" @page="store.setPage" />
-          <AnalyticsExecutors :rows="data.executors" />
+        <div v-if="data.totals.total" class="analytics-results">
+          <div class="analytics-records">
+            <AnalyticsExecutors :rows="data.executors" />
+            <AnalyticsInstructions v-if="data.instructions" :result="data.instructions" :loading="loading" @page="store.setPage" />
+          </div>
           <AnalyticsCharts :data="data" />
-        </template>
+        </div>
         <div v-else class="analytics-empty">
-          <BarChart3 :size="32" aria-hidden="true" />
-          <h2>По этим фильтрам нет указаний</h2>
+          <span class="empty-icon"><BarChart3 :size="32" aria-hidden="true" /></span>
+          <h2>По этим фильтрам нет контролей</h2>
           <p>Измените период или исполнителя.</p>
-          <button type="button" class="analytics-button" @click="store.resetFilters">Показать все указания</button>
+          <button type="button" class="analytics-button" @click="store.resetFilters">Сбросить фильтры</button>
         </div>
       </template>
     </template>
-    <div v-else class="analytics-empty"><BarChart3 :size="36" aria-hidden="true" /><h2>Подключите базу данных</h2><p>Для аналитики выберите или создайте базу в настройках.</p><RouterLink class="analytics-button analytics-button-primary" to="/settings">Открыть настройки</RouterLink></div>
+    <div v-else class="analytics-empty"><span class="empty-icon"><BarChart3 :size="36" aria-hidden="true" /></span><h2>Подключите базу данных</h2><p>Для аналитики выберите или создайте базу в настройках.</p><RouterLink class="analytics-button analytics-button-primary" to="/settings">Открыть настройки</RouterLink></div>
   </section>
 </template>

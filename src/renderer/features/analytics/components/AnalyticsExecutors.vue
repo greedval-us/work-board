@@ -5,9 +5,9 @@ defineProps({ rows: { type: Array, required: true } });
 const headingId = useId();
 const metrics = [
   { key: 'total', label: 'Всего' },
-  { key: 'active', label: 'Активные' },
+  { key: 'active', label: 'Активные', short: 'Актив.' },
   { key: 'closed', label: 'Закрыто' },
-  { key: 'overdue', label: 'Просрочено' },
+  { key: 'overdue', label: 'Просрочено', short: 'Проср.' },
 ];
 </script>
 
@@ -19,7 +19,10 @@ const metrics = [
         <thead>
           <tr>
             <th scope="col">Исполнитель</th>
-            <th v-for="metric in metrics" :key="metric.key" scope="col">{{ metric.label }}</th>
+            <th v-for="metric in metrics" :key="metric.key" scope="col" :aria-label="metric.label" :title="metric.label">
+              <span :class="{ 'analytics-full-label': metric.short }">{{ metric.label }}</span>
+              <span v-if="metric.short" class="analytics-short-label" aria-hidden="true">{{ metric.short }}</span>
+            </th>
           </tr>
         </thead>
         <tbody>

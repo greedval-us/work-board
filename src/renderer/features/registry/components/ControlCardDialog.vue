@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, shallowRef, useId, useTemplateRef, watch } from 'vue';
 import { storeToRefs } from 'pinia';
-import { Download, X } from 'lucide-vue-next';
+import { Download, FileText, X } from 'lucide-vue-next';
 import { CONTROL_CARD_OFFICE_LABEL, CONTROL_CARD_OPTION_LABELS } from '../../../../shared/constants/settings.js';
 import { CONTROL_CARD_FIELD_LIMITS, controlCardFields, executorContactFor } from '../../../../shared/controlCard.js';
 import { createDialogMotion } from '../../../ui/dialogMotion.js';
@@ -75,7 +75,8 @@ onBeforeUnmount(() => { motion.dispose(); report.reset(); });
   <Teleport to="body">
     <dialog ref="dialog" class="registry-dialog registry-control-card-dialog" :aria-labelledby="titleId" :aria-describedby="helpId" @cancel.prevent="close">
       <header class="registry-dialog-header">
-        <div><h2 :id="titleId">Контрольная карточка Ф‑21</h2><p :id="helpId" class="registry-help">Поля можно оставить пустыми. Изменения в этой форме действуют только для отчёта. Отметки промежуточного контроля берутся из сохранённого указания.</p></div>
+        <span class="registry-dialog-symbol" aria-hidden="true"><FileText :size="20" /></span>
+        <div class="registry-dialog-intro"><h2 :id="titleId">Контрольная карточка Ф‑21</h2><p :id="helpId" class="registry-help">Все поля необязательны. Изменения действуют только для отчёта. Отметки контроля берутся из сохранённого указания.</p></div>
         <button type="button" class="registry-button registry-close-button" aria-label="Закрыть форму Ф‑21" :disabled="busy" @click="close"><X :size="20" aria-hidden="true" /></button>
       </header>
       <form class="registry-control-card-form" :aria-busy="exporting" @submit.prevent="save">
@@ -83,9 +84,9 @@ onBeforeUnmount(() => { motion.dispose(); report.reset(); });
           <fieldset v-for="group in groups" :key="group.title" class="registry-control-card-group" :disabled="busy">
             <legend>{{ group.title }}</legend>
             <div class="registry-form-grid">
-              <label v-for="field in group.fields" :key="field.name" class="registry-field" :class="{ 'registry-field-wide': field.multiline }">
+              <label v-for="field in group.fields" :key="field.name" class="registry-field" :class="{ 'registry-field-wide': field.name === 'executor' }">
                 <span>{{ field.label }}</span>
-                <textarea v-if="field.multiline" v-model="fields[field.name]" :name="field.name" :maxlength="CONTROL_CARD_FIELD_LIMITS[field.name]" rows="3" />
+                <textarea v-if="field.multiline" v-model="fields[field.name]" :name="field.name" :maxlength="CONTROL_CARD_FIELD_LIMITS[field.name]" rows="2" />
                 <select v-else-if="field.name === 'office' || Object.hasOwn(CONTROL_CARD_OPTION_LABELS, field.name)"
                   v-model="fields[field.name]" :name="field.name">
                   <option value="">Не указано</option>

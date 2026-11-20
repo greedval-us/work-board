@@ -1,28 +1,9 @@
 import { addCalendarDays, localDate, validateDate } from '../../shared/dates.js';
 import { DATE_LIMITS } from '../../shared/constants/dates.js';
 import { buildDeadlineNotifications, deadlineNotificationHorizon } from '../../shared/deadlineNotifications.js';
-import { taskOccurrenceDates } from '../../shared/taskRecurrence.js';
 import { validateRecord } from '../../shared/validation.js';
 import { ValidationError } from '../../shared/errors.js';
-
-// One window includes 366 calendar dates, enough to cover the longest ordinary repeat interval.
-const TASK_LOOKBACK_OFFSET_DAYS = 365;
-
-function latestUnmovedTaskDate(task, through, movedOrigins, previousCandidate) {
-  const earliest = previousCandidate > task.date ? previousCandidate : task.date;
-  let to = through;
-  while (to >= earliest) {
-    const lookback = task.recurrence.frequency === 'custom' ? earliest : addCalendarDays(to, -TASK_LOOKBACK_OFFSET_DAYS);
-    const from = lookback < earliest ? earliest : lookback;
-    let latest;
-    for (const date of taskOccurrenceDates(task, { from, to })) {
-      if (!movedOrigins?.has(date)) latest = date;
-    }
-    if (latest || from === earliest) return latest;
-    to = addCalendarDays(from, -1);
-  }
-  return undefined;
-}
+import { latestUnmovedTaskDate } from '../domain/taskOccurrences.js';
 
 function taskReminderOccurrences(tasks, today, horizon) {
   const pending = tasks.occurrences({ from: today, to: horizon });

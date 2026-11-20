@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { nativeTheme } from 'electron';
 import { APP_FONT_SIZE_LIMITS, DEFAULT_SETTINGS } from '../../src/shared/constants/settings.js';
 import { createSmokeForms } from './forms.mjs';
 
 export async function verifyDatabaseSettings(driver, fixture, { generation, created }) {
   const { js, api, wait, click, navigate, fill, openFilters, geometry, resize, resizeDefault, screenshot } = driver;
   const { userData, firstFile, today, controlFrequencyCell, customControl, registrySelections, reportSelections, settingsSelections, renamedSelections, controlCardOffice, alternateOffice, dialogs } = fixture;
-  const { instructionField, optionRow, addRegistryOption, controlCardDialog, reportField } = createSmokeForms(driver);
+  const { instructionField, optionRow, selectRegistryDirectory, addRegistryOption, controlCardDialog, reportField } = createSmokeForms(driver);
   const defaultTypography = DEFAULT_SETTINGS.typography;
   const largeTypography = { fontFamily: 'system', fontSize: APP_FONT_SIZE_LIMITS.max };
   const applyTypography = async ({ fontFamily, fontSize }) => {
@@ -47,10 +48,36 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
   await screenshot('settings-typography-compact.png');
   await resizeDefault();
 
-  await js("document.querySelector('button[value=dark]').click()");
-  await wait("document.documentElement.dataset.appearance === 'dark'");
+  const originalThemeSource = nativeTheme.themeSource;
+  const systemPrefersDark = "matchMedia('(prefers-color-scheme: dark)').matches";
+  const appearance = 'document.documentElement.dataset.appearance';
+  const setSystemAppearance = async theme => {
+    nativeTheme.themeSource = theme;
+    await wait(`${systemPrefersDark} === ${theme === 'dark'}`);
+  };
+  try {
+    await setSystemAppearance('dark');
+    await click('Системная', '.theme-option');
+    await wait(`document.querySelector('.theme-option[value=system]')?.matches(':enabled[aria-pressed=true]') && ${appearance} === 'dark'`);
+
+    await setSystemAppearance('light');
+    await wait(`${appearance} === 'light'`);
+    await setSystemAppearance('dark');
+    await wait(`${appearance} === 'dark'`);
+    assert.equal((await api('settings', 'get', generation)).theme, 'system');
+
+    await click('Тёмная', '.theme-option');
+    await wait("document.querySelector('.theme-option[value=dark]')?.matches(':enabled[aria-pressed=true]')");
+    await setSystemAppearance('light');
+    await driver.animationFrames();
+    assert.equal(await js(appearance), 'dark', 'The fixed dark theme must ignore system appearance changes');
+    assert.equal((await api('settings', 'get', generation)).theme, 'dark');
+  } finally {
+    nativeTheme.themeSource = originalThemeSource;
+  }
+
   await navigate('/analytics', 'Аналитика');
-  await wait("document.querySelector('[data-metric=total]')?.textContent === '27'");
+  await wait("Boolean(document.querySelector('.analytics-results .analytics-timeline'))");
   await screenshot('analytics-dark.png');
   await navigate('/calendar', 'Календарь и задачи');
   await wait("Boolean(document.querySelector('.calendar-task-open'))");
@@ -73,11 +100,45 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
   await navigate('/', 'Реестр указаний');
   await wait("document.querySelector('.registry-table tbody tr') && !document.querySelector('.workspace-enter-active')");
   await geometry('registry', 'registry maximum typography');
+  await js("document.querySelector('.registry-record-link').click()");
+  await wait("Boolean(document.querySelector('.registry-instruction-dialog[open]:not([data-motion-state])'))");
+  assert.ok(await js(`(() => {
+    const dialog = document.querySelector('.registry-instruction-dialog');
+    const body = dialog.querySelector('.registry-dialog-body');
+    body.scrollTop = body.scrollHeight;
+    const actions = dialog.querySelector('.registry-dialog-actions').getBoundingClientRect();
+    const bounds = dialog.getBoundingClientRect();
+    return bounds.bottom <= innerHeight && bounds.top >= 0 && body.scrollTop > 0 &&
+      actions.top >= body.getBoundingClientRect().bottom - 1 && actions.bottom <= bounds.bottom + 1;
+  })()`), 'Card actions must stay visible while the form scrolls at the minimum window size');
+  await js("document.querySelector('.registry-instruction-dialog .registry-close-button').click()");
+  await wait("!document.querySelector('.registry-instruction-dialog[open]')");
   await resizeDefault();
   await screenshot('registry-dark.png');
 
+  await openFilters();
+  await fill('[data-filter=executor]', { 0: '' });
+  await click('Применить', '.registry-filters button');
+  await wait("document.querySelector('.registry-count')?.textContent === '1' && !document.querySelector('.registry-table-scroll[aria-busy=true]')");
+
+  const archived = await api('instructions', 'create', { generation, data: {
+    ...registrySelections, instructionNumber: 'ПЕРЕИМЕНОВАНИЕ-1', title: 'Закрытое указание для проверки справочников',
+    controlDate: today, deadline: today,
+  } });
+  await api('instructions', 'closeControl', { generation, id: archived.id });
+  const { closedAt } = await api('instructions', 'get', { id: archived.id, generation });
+  assert.ok(closedAt);
+
+  const renamedInstructionFields = Object.keys(registrySelections).map(field => [field, renamedSelections[field]]);
+  const waitForRenamedRow = id => wait(`(() => {
+    const row = document.querySelector('.registry-row:has(td[data-column=id] [title="${id}"])');
+    return ${JSON.stringify(renamedInstructionFields)}.every(([field, value]) =>
+      row?.querySelector('td[data-column=' + field + ']')?.textContent.trim() === value);
+  })()`);
+
   await navigate('/settings', 'Настройки');
   for (const [field, savedValue] of Object.entries(settingsSelections)) {
+    await selectRegistryDirectory(field);
     const renamedValue = renamedSelections[field];
     const savedRow = optionRow(field, savedValue);
     const renamedRow = optionRow(field, renamedValue);
@@ -94,7 +155,9 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
     await wait(`!document.querySelector(${JSON.stringify(savedRow)}) && Boolean(document.querySelector(${JSON.stringify(renamedRow)}))`);
     assert.deepEqual((await api('settings', 'get', generation)).registryOptions[field], [renamedValue]);
     if (Object.hasOwn(registrySelections, field)) {
-      assert.equal((await api('instructions', 'get', { id: created.id, generation }))[field], savedValue);
+      for (const id of [created.id, archived.id]) {
+        assert.equal((await api('instructions', 'get', { id, generation }))[field], renamedValue);
+      }
     }
 
     await addRegistryOption(field, savedValue);
@@ -113,7 +176,7 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
     await wait(`!document.querySelector(${JSON.stringify(savedRow)})`);
     assert.deepEqual((await api('settings', 'get', generation)).registryOptions[field], [renamedValue]);
     if (Object.hasOwn(registrySelections, field)) {
-      assert.equal((await api('instructions', 'get', { id: created.id, generation }))[field], savedValue);
+      assert.equal((await api('instructions', 'get', { id: created.id, generation }))[field], renamedValue);
     }
   }
   const updatedOptions = Object.fromEntries(Object.entries(renamedSelections).map(([field, value]) => [field, [value]]));
@@ -121,6 +184,11 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
   const updatedContact = { executor: renamedSelections.executor, department: renamedSelections.department, executorPhone: renamedSelections.executorPhone };
   assert.deepEqual((await api('settings', 'get', generation)).executorContacts, [updatedContact]);
 
+  await navigate('/', 'Реестр указаний');
+  await waitForRenamedRow(created.id);
+  await navigate('/closed-control', 'Закрытый контроль');
+  await waitForRenamedRow(archived.id);
+  await navigate('/settings', 'Настройки');
   await click('Создать другую базу', '.storage-button');
   await wait("document.querySelector('.file-path')?.textContent.includes('another.sqlite')");
   const next = await api('database', 'getStatus');
@@ -148,6 +216,10 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
   assert.deepEqual(reopenedSettings.registryOptions, updatedOptions);
   assert.deepEqual(reopenedSettings.executorContacts, [updatedContact]);
   assert.equal(reopenedSettings.office, controlCardOffice);
+  const reopenedArchived = await api('instructions', 'get', { id: archived.id, generation: reopened.generation });
+  assert.equal(reopenedArchived.closedAt, closedAt);
+  for (const [field, option] of renamedInstructionFields) assert.equal(reopenedArchived[field], option);
+  await api('instructions', 'remove', { id: archived.id, generation: reopened.generation });
   assert.equal((await api('calendar', 'day', { date: today, generation: reopened.generation })).checkpoints[0].mark,
     'Промежуточный отчёт проверен');
   assert.equal((await api('instructions', 'list', { generation: reopened.generation })).total, 27);
@@ -171,7 +243,7 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
   assert.equal(await js(`document.querySelector('${controlFrequencyCell}')?.textContent.trim()`), customControl);
   await js("document.querySelector('.registry-table tbody tr').click()");
   await wait("Boolean(document.querySelector('.registry-instruction-dialog[open]'))");
-  for (const [field, option] of Object.entries(registrySelections)) {
+  for (const [field, option] of renamedInstructionFields) {
     assert.equal(await js(`document.querySelector(${JSON.stringify(instructionField(field))}).value`), option);
   }
   await click('Ф‑21 в Word', '.registry-instruction-dialog .registry-control-card-open');
@@ -180,7 +252,7 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
     const selector = reportField(field);
     assert.deepEqual(await js(`[...document.querySelector(${JSON.stringify(selector)}).options].map(option => option.value)`),
       ['', renamedSelections[field]]);
-    assert.equal(await js(`document.querySelector(${JSON.stringify(selector)}).value`), '');
+    assert.equal(await js(`document.querySelector(${JSON.stringify(selector)}).value`), renamedSelections[field]);
   }
   await js(`document.querySelector('${controlCardDialog} .registry-close-button').click()`);
   await wait(`!document.querySelector('${controlCardDialog}')`);

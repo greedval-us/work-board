@@ -5,88 +5,53 @@ export async function verifyScheduleCadence(driver, { renamedSelections }, gener
   const { api, click, fill, js, navigate, screenshot, wait } = driver;
   const { fillInstruction } = createSmokeForms(driver);
   const card = '.registry-instruction-dialog[open]';
-  const instructionNumber = 'ТЕСТ-ПОЛУГОДИЕ';
+  const instructionNumber = 'ТЕСТ-ПЕРИОДЫ';
   const frequency = '[name=control-frequency]';
-  const choose = (selector, value) => js(`(() => {
-    const input = document.querySelector(${JSON.stringify(selector)});
-    input.value = ${JSON.stringify(value)};
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-  })()`);
-  const setDay = (value) => choose('[name=control-day-of-month]', value);
-  const showMonth = (value) => choose('.control-schedule input[type=month]', value);
-  const showsDate = (date) => `Boolean(document.querySelector('[data-checkpoint-date="${date}"]'))`;
+  const period = start => `[name=control-period-date][data-control-period="${start}"]`;
+  const field = start => `document.querySelector(${JSON.stringify(period(start))})`;
+  const chooseDate = (start, date) => fill(period(start), { 0: date });
 
   await navigate('/', 'Реестр указаний');
+  await js("document.querySelector('.registry-filter-reset')?.click()");
   await click('Добавить указание', '.registry-toolbar button');
   await wait(`document.querySelector('${card} select[name=executor]')?.matches(':enabled')`);
   await fillInstruction({ controlDate: '2028-01-05', deadline: '2028-12-31', executor: renamedSelections.executor,
     instructionNumber, title: 'Проверить график промежуточного контроля' });
-  await fill(frequency, { 0: 'weekly' });
-  await fill('[name=control-first-date]', { 0: '2028-01-07' });
-  const weekday = '[name=control-day-of-week]';
-  await wait(showsDate('2028-01-07'));
-  await wait(`document.querySelector('${weekday}')?.selectedOptions[0]?.textContent.trim() === 'Автоматически'`);
-  await fill(weekday, { 0: '1' });
-  await wait(showsDate('2028-01-10'));
-  assert.equal(await js(showsDate('2028-01-07')), false);
-  await fill(weekday, { 0: '' });
-  await wait(showsDate('2028-01-07'));
-  assert.equal(await js(showsDate('2028-01-10')), false);
-
   await fill(frequency, { 0: 'monthly' });
-  await setDay('31');
-  await showMonth('2028-02');
-  await wait(showsDate('2028-02-29'));
-  await setDay('');
-  await showMonth('2028-02');
-  await wait(showsDate('2028-02-07'));
+  await wait(`${field('2028-01-01')}?.value === ''`);
+  assert.equal(await js(`${field('2028-01-01')}.min`), '2028-01-05');
+  assert.equal(await js(`${field('2028-02-01')}.max`), '2028-02-29');
+  assert.equal(await js("Boolean(document.querySelector('[name=control-custom-date], [name=control-first-date]'))"), false);
+  await chooseDate('2028-01-01', '2028-01-10');
+  await chooseDate('2028-02-01', '2028-02-29');
+  await chooseDate('2028-01-01', '');
+  assert.equal(await js(`${field('2028-02-01')}.value`), '2028-02-29');
 
-  for (const [cadence, month, manualDate] of [
-    ['quarterly', '2028-04', '2028-04-30'],
-    ['semiannual', '2028-07', '2028-07-31'],
-  ]) {
-    await fill(frequency, { 0: cadence });
-    await showMonth(month);
-    await wait(showsDate(`${month}-07`));
-    await setDay('31');
-    await showMonth(month);
-    await wait(showsDate(manualDate));
-    assert.equal(await js(showsDate(`${month}-07`)), false);
-    await setDay('');
-    await showMonth(month);
-    await wait(showsDate(`${month}-07`));
-    assert.equal(await js(showsDate(manualDate)), false);
-  }
-
-  const annualMonth = '[name=control-month-of-year]';
-  await fill(frequency, { 0: 'yearly' });
-  await wait(showsDate('2028-01-07'));
-  await fill(annualMonth, { 0: '2' });
-  await wait(showsDate('2028-02-07'));
-  await setDay('31');
-  await wait(showsDate('2028-02-29'));
-  await fill(annualMonth, { 0: '' });
-  await wait(showsDate('2028-01-31'));
-  await setDay('');
-  await wait(showsDate('2028-01-07'));
-
-  await fill(frequency, { 0: 'semiannual' });
-  assert.equal(await js(`Boolean(document.querySelector('${annualMonth}'))`), false);
-  await setDay('31');
-  await showMonth('2028-07');
-  await wait(showsDate('2028-07-31'));
+  await fill(frequency, { 0: 'quarterly' });
+  await wait(`${field('2028-01-01')}?.value === '2028-02-29'`);
+  assert.equal(await js(`${field('2028-01-01')}.max`), '2028-03-31');
+  await chooseDate('2028-01-01', '2028-03-15');
+  await chooseDate('2028-04-01', '2028-05-20');
+  assert.equal(await js(`${field('2028-07-01')}.value`), '');
   await js("document.querySelector('[name=control-frequency]').scrollIntoView({ block: 'center' })");
-  await screenshot('control-schedule-semiannual.png');
+  await screenshot('control-schedule-quarterly.png');
   await js(`document.querySelector('${card} form').requestSubmit()`);
   await wait(`!document.querySelector('${card}')`);
 
   const { items } = await api('instructions', 'list', { generation, filters: { instructionNumber } });
   assert.equal(items.length, 1);
   const [item] = items;
-  assert.equal(item.controlFrequency, 'semiannual');
-  assert.equal(item.nextCheckpoint, '2028-01-31');
+  assert.equal(item.controlFrequency, 'quarterly');
+  assert.equal(item.nextCheckpoint, '2028-03-15');
   const saved = await api('instructions', 'get', { id: item.id, generation });
-  assert.deepEqual(saved.controlSchedule, { frequency: 'semiannual', firstDate: '2028-01-07', dayOfMonth: 31, customDates: [], marks: [] });
+  assert.deepEqual(saved.controlSchedule, { frequency: 'quarterly', firstDate: '', customDates: [], marks: [],
+    periodDates: { '2028-01-01': '2028-03-15', '2028-04-01': '2028-05-20' } });
+  const row = `document.querySelector('.registry-row:has(td[data-column=id] [title="${item.id}"])')`;
+  await wait(`Boolean(${row})`);
+  await js(`${row}.click()`);
+  await wait(`${field('2028-04-01')}?.value === '2028-05-20'`);
+  await js(`document.querySelector('${card} [aria-label="Закрыть карточку"]').click()`);
+  await wait(`!document.querySelector('${card}')`);
   await api('instructions', 'remove', { id: item.id, generation });
   await navigate('/calendar', 'Календарь и задачи');
 }

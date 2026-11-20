@@ -1,4 +1,4 @@
-import { getNextControlCheckpoint, listControlCheckpoints } from '../../../../shared/controlSchedule.js';
+import { getNextControlCheckpoint, isControlPeriodOverridden, listControlCheckpoints } from '../../../../shared/controlSchedule.js';
 import { DATE_LIMITS } from '../../../../shared/constants/dates.js';
 import { daysInMonth, isDate, localDate } from '../../../../shared/dates.js';
 import { getUrgency, INSTRUCTION_STATUS } from '../../../../shared/registry.js';
@@ -8,12 +8,13 @@ export function inControlPeriod(date, { controlDate, deadline }) {
 }
 
 export function effectiveCustomDates(schedule) {
+  if (!schedule.frequency) return [];
   const moves = new Map((schedule.moves ?? []).map(move => [move.from, move.to]));
-  return schedule.customDates.map(date => moves.get(date) ?? date).sort();
+  return schedule.customDates.map(date => moves.get(date) ?? date).filter(date => !isControlPeriodOverridden(schedule, date)).sort();
 }
 
 export function firstScheduledMonth(schedule, deadline) {
-  const first = getNextControlCheckpoint({ ...schedule, marks: [] }, deadline || DATE_LIMITS.MAX);
+  const first = getNextControlCheckpoint({ ...schedule, customDates: [], marks: [], periodDates: {} }, deadline || DATE_LIMITS.MAX);
   return (first || schedule.firstDate).slice(0, 7);
 }
 
@@ -24,11 +25,20 @@ export function startingMonth(schedule, { controlDate, deadline }, today = local
     const upcoming = dates.find(date => date >= today);
     return (upcoming || dates.at(-1)).slice(0, 7);
   }
+  if (schedule.periodDates && !isDate(schedule.firstDate)) {
+    const dates = [...effectiveCustomDates(schedule), ...Object.values(schedule.periodDates).filter(Boolean)].sort();
+    const upcoming = dates.find(date => date >= today);
+    const date = upcoming || dates.at(-1);
+    if (date) return date.slice(0, 7);
+  }
   if (schedule.frequency && isDate(schedule.firstDate)) {
-    if (schedule.frequency === 'yearly' && schedule.monthOfYear !== undefined && schedule.firstDate >= today) {
-      return firstScheduledMonth(schedule, deadline);
+    if (schedule.firstDate >= today) {
+      const firstMonth = schedule.frequency === 'yearly' && schedule.monthOfYear !== undefined
+        ? firstScheduledMonth(schedule, deadline) : schedule.firstDate.slice(0, 7);
+      const earlierManualDate = effectiveCustomDates(schedule).find(date => date >= today && date < `${firstMonth}-01`
+        && inControlPeriod(date, { controlDate, deadline }));
+      return earlierManualDate ? earlierManualDate.slice(0, 7) : firstMonth;
     }
-    if (schedule.firstDate > today) return schedule.firstDate.slice(0, 7);
     if (!deadline || deadline >= today) return today.slice(0, 7);
     return (recentMark > deadline ? recentMark : deadline).slice(0, 7);
   }
@@ -50,12 +60,14 @@ export function controlScheduleRows(schedule, { month, controlDate, deadline, ed
   const from = `${month}-01`;
   const to = `${month}-${daysInMonth(year, monthNumber)}`;
   const moves = new Map((schedule.moves ?? []).map(move => [move.from, move.to]));
-  const configuredDates = new Set(schedule.frequency === 'custom' ? effectiveCustomDates(schedule) : []);
+  const configuredDates = new Set(effectiveCustomDates(schedule));
   const marksByDate = new Map(schedule.marks.map(mark => [mark.date, mark]));
   const validSchedule = {
     ...schedule,
     firstDate: inControlPeriod(schedule.firstDate, period) ? schedule.firstDate : '',
     customDates: schedule.customDates.filter(date => inControlPeriod(moves.get(date) ?? date, period)),
+    ...(schedule.periodDates && { periodDates: Object.fromEntries(Object.entries(schedule.periodDates)
+      .map(([start, date]) => [start, inControlPeriod(date, period) ? date : ''])) }),
   };
   const checkpoints = listControlCheckpoints(validSchedule, { from, to, deadline });
   const byDate = new Map(checkpoints.map(row => [row.date, row]));
@@ -65,7 +77,7 @@ export function controlScheduleRows(schedule, { month, controlDate, deadline, ed
   }
   // A changed control period must not hide a move that the user needs to repair or cancel.
   for (const [originalDate, date] of moves) {
-    if (date < from || date > to) continue;
+    if (date < from || date > to || isControlPeriodOverridden(schedule, date)) continue;
     const row = byDate.get(date) ?? { date, mark: marksByDate.get(date)?.text ?? '', scheduled: false };
     byDate.set(date, { ...row, originalDate, scheduled: row.scheduled && inControlPeriod(date, period) });
   }
@@ -74,7 +86,7 @@ export function controlScheduleRows(schedule, { month, controlDate, deadline, ed
     return {
       ...row,
       configured,
-      movable: Boolean(row.scheduled || row.originalDate),
+      movable: Boolean((row.scheduled || row.originalDate) && !isControlPeriodOverridden(schedule, row.date)),
       canOpen: Boolean(row.scheduled || row.originalDate || row.mark || editedHistoryDate === row.date),
       status: checkpointStatus(row, today, configured, closed),
     };

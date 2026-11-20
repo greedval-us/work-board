@@ -116,6 +116,39 @@ test('native scheduler keeps checking without a window and resumes when a databa
   assert.equal(f.shown.length, 3);
 });
 
+test('idle scheduler skips unchanged reminder scans and checks on local edits, external commits and a new day', t => {
+  const f = fixture(t);
+  f.database.connection.exec('CREATE TABLE pragma_data_version (unused TEXT)');
+  const list = t.mock.method(f.service, 'list');
+  f.scheduler.start();
+  f.clock.advance(4 * 60_000);
+  assert.equal(list.mock.callCount(), 1);
+
+  f.task({ title: 'Записано этим приложением' });
+  f.clock.advance(60_000);
+  assert.equal(f.shown.length, 1);
+  assert.match(f.shown[0].options.body, /Записано этим приложением/);
+  f.shown[0].emit('show');
+
+  const external = new DatabaseService({ filePath: f.firstPath });
+  external.open();
+  try {
+    new TaskRepository(external).create({ title: 'Записано другим процессом', date: '2026-11-12' });
+  } finally { external.close(); }
+  f.powerMonitor.emit('resume');
+  assert.equal(f.shown.length, 2);
+  assert.match(f.shown[1].options.body, /Записано другим процессом/);
+  f.shown[1].emit('show');
+  f.scheduler.check();
+  const settled = list.mock.callCount();
+  f.clock.advance(60_000);
+  assert.equal(list.mock.callCount(), settled);
+
+  f.clock.time = new Date(2026, 10, 13, 0, 1).getTime();
+  f.scheduler.check();
+  assert.equal(f.shown.length, 3);
+});
+
 test('unsupported native delivery falls back without installing timers or power listeners', t => {
   const f = fixture(t, { supported: false });
   f.task();
@@ -129,6 +162,7 @@ test('unsupported native delivery falls back without installing timers or power 
 
 test('failed delivery retries at most three times with a cooldown and never consumes popup receipts', t => {
   const f = fixture(t);
+  const list = t.mock.method(f.service, 'list');
   f.task(); f.scheduler.start();
   f.shown[0].emit('failed', {}, 'OS denied notification with private path');
   f.scheduler.check(); f.powerMonitor.emit('resume');
@@ -138,7 +172,10 @@ test('failed delivery retries at most three times with a cooldown and never cons
   assert.doesNotMatch(f.scheduler.getStatus().error, /private path/);
   f.clock.advance(60_000); f.shown[1].emit('failed', {}, 'denied');
   f.clock.advance(60_000); f.shown[2].emit('failed', {}, 'denied');
+  f.scheduler.check();
+  const exhausted = list.mock.callCount();
   f.clock.advance(5 * 60_000);
+  assert.equal(list.mock.callCount(), exhausted);
   assert.equal(f.shown.length, 3);
   assert.equal(f.service.list().items[0].popupPending, true);
   assert.ok(f.shown.every(native => native.closeCount === 1 && native.listenerCount('show') === 0));
@@ -149,6 +186,7 @@ test('late native failure after show remains visible and retries despite the sav
   f.task(); f.scheduler.start();
   f.shown[0].emit('show');
   assert.equal(f.service.list().items[0].popupPending, false);
+  f.scheduler.check();
   f.shown[0].emit('failed', {}, 'Windows rejected queued delivery');
   assert.notEqual(f.scheduler.getStatus().error, '');
   f.scheduler.check();
@@ -241,6 +279,32 @@ test('a displayed toast stays unique through receipt write failures and is ackno
   assert.equal(f.service.list().items[0].popupPending, false);
   assert.equal(f.service.list().items[0].unread, true);
   assert.equal(f.scheduler.getStatus().error, '');
+});
+
+test('exhausted delivery retries do not stop saving receipts for other toasts', t => {
+  const f = fixture(t);
+  const displayed = f.task();
+  f.scheduler.start();
+  const write = t.mock.method(f.service, 'acknowledge', () => { throw new Error('database temporarily busy'); });
+  f.shown[0].emit('show');
+
+  const rejected = f.task({ title: 'Отклонено Windows' });
+  const create = f.scheduler.createNotification;
+  f.scheduler.createNotification = options => {
+    const toast = create(options);
+    toast.show = () => toast.emit('failed', {}, 'Windows denied delivery');
+    return toast;
+  };
+  f.scheduler.check();
+  f.clock.advance(2 * 60_000);
+  assert.equal(f.shown.length, 4);
+
+  write.mock.restore();
+  f.clock.advance(60_000);
+  const items = f.service.list().items;
+  assert.equal(items.find(item => item.recordId === displayed.id).popupPending, false);
+  assert.equal(items.find(item => item.recordId === rejected.id).popupPending, true);
+  assert.equal(f.shown.length, 4);
 });
 
 test('delivery errors from an old database are cleared when selecting an empty database', t => {

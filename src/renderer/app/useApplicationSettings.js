@@ -1,9 +1,9 @@
 import { ref, shallowRef } from 'vue';
-import { DEFAULT_SETTINGS } from '../../shared/constants/settings.js';
+import { DEFAULT_SETTINGS, INSTRUCTION_OPTION_LABELS } from '../../shared/constants/settings.js';
 import { errorMessage } from '../infrastructure/errorMessage.js';
 import { settingsService } from './services/SettingsService.js';
 
-export function useApplicationSettings({ database, canWrite, withOperation, error }) {
+export function useApplicationSettings({ database, canWrite, withOperation, touchData, error }) {
   const theme = ref(DEFAULT_SETTINGS.theme);
   const typography = shallowRef(DEFAULT_SETTINGS.typography);
   const registryOptions = shallowRef(DEFAULT_SETTINGS.registryOptions);
@@ -62,10 +62,12 @@ export function useApplicationSettings({ database, canWrite, withOperation, erro
     ), registryOptionsError);
   }
 
-  function updateRegistryOption(field, previousValue, value, contact) {
-    return saveSettings(generation => settingsService.updateRegistryOption(
+  async function updateRegistryOption(field, previousValue, value, contact) {
+    const saved = await saveSettings(generation => settingsService.updateRegistryOption(
       field, previousValue, value, generation, ...(contact === undefined ? [] : [contact]),
     ), registryOptionsError);
+    if (saved && Object.hasOwn(INSTRUCTION_OPTION_LABELS, field) && previousValue !== value.trim()) touchData();
+    return saved;
   }
 
   function removeRegistryOption(field, value) {

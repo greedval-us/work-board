@@ -1,4 +1,5 @@
 import { NOTIFICATION_CHECK_INTERVAL_MS as CHECK_INTERVAL_MS } from '../../../shared/constants/notifications.js';
+import { localDate } from '../../../shared/dates.js';
 import { notificationKey, notificationReference } from '../../../shared/notificationReference.js';
 import { NativeToast } from './NativeToast.js';
 import { NotificationDeliveryAttempts } from './NotificationDeliveryAttempts.js';
@@ -16,6 +17,7 @@ export class NativeNotificationScheduler {
   #checking = false;
   #interval = null;
   #scope = null;
+  #lastCheck = null;
   #attempts = new NotificationDeliveryAttempts();
   #deliveries = new Set();
   #errorKind = null;
@@ -56,6 +58,13 @@ export class NativeNotificationScheduler {
       const { ready, generation } = this.database.connectionState;
       if (!ready) { this.#clearScope(); return; }
       if (this.#scope && this.#scope.generation !== generation) this.#clearScope();
+      const today = localDate(new Date(this.now()));
+      // Sample before reading reminders so an external commit during the scan is seen next time.
+      const { external, local } = this.database.changeStamp;
+      const last = this.#lastCheck;
+      if (last?.generation === generation && last.today === today && last.external === external && last.local === local) return;
+      this.#lastCheck = null;
+
       const snapshot = this.notifications.list();
       if (this.#errorKind === 'check') this.#errorKind = null;
       this.database.assertGeneration(generation);
@@ -71,7 +80,13 @@ export class NativeNotificationScheduler {
       this.#saveShownReceipts(snapshot.items, generation);
       const pending = this.#attempts.due(snapshot.items, this.now());
       if (pending.length) this.#show(pending, generation, snapshot.today);
-    } catch (error) { this.#report('Cannot check native deadline notifications.', error, 'check'); }
+      if (!this.#attempts.hasPendingWork(snapshot.items)) {
+        this.#lastCheck = { generation, today, external, local };
+      }
+    } catch (error) {
+      this.#lastCheck = null;
+      this.#report('Cannot check native deadline notifications.', error, 'check');
+    }
     finally { this.#checking = false; }
   }
 
@@ -135,12 +150,14 @@ export class NativeNotificationScheduler {
 
   #fail(delivery, error) {
     if (!this.#deliveries.has(delivery)) return;
+    this.#lastCheck = null;
     this.#attempts.failed(delivery.items);
     this.#report('Cannot show native deadline notification.', error);
     this.#dispose(delivery);
   }
 
   #report(message, error, kind = 'delivery') {
+    if (kind === 'receipt') this.#lastCheck = null;
     this.#errorKind = kind;
     this.logger.error(message, error);
   }
@@ -155,6 +172,7 @@ export class NativeNotificationScheduler {
     for (const delivery of this.#deliveries) this.#dispose(delivery);
     this.#attempts.clear();
     this.#scope = null;
+    this.#lastCheck = null;
     this.#errorKind = null;
   }
 }

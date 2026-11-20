@@ -68,11 +68,22 @@ test('reopening preserves settings and does not reapply migrations', (t) => {
   assert.equal(database.getStatus().schemaVersion, currentSchemaVersion);
 });
 
+test('system theme is preserved when the database reopens', (t) => {
+  const { database } = fixture(t);
+  database.open();
+  const settings = settingsFor(database);
+  assert.equal(settings.setTheme('system').theme, 'system');
+
+  database.close();
+  database.open();
+  assert.equal(settings.get().theme, 'system');
+});
+
 test('invalid settings cannot modify persisted data', (t) => {
   const { database } = fixture(t);
   database.open();
   const settings = settingsFor(database);
-  for (const theme of [null, '', 'system', {}, "dark'); DROP TABLE app_settings; --"]) {
+  for (const theme of [null, '', 'auto', {}, "dark'); DROP TABLE app_settings; --"]) {
     assert.throws(() => settings.setTheme(theme), /тема/i);
   }
   assert.deepEqual(settings.get(), defaultSettings);
@@ -219,7 +230,7 @@ test('invalid and case-insensitive duplicate registry options leave settings int
   assert.deepEqual(settings.get(), existing);
 });
 
-test('renaming and removing registry options preserves their order and saved instructions after reopening', (t) => {
+test('registry option renames follow saved instructions and removal preserves values after reopening', (t) => {
   const { database } = fixture(t);
   database.open();
   const settings = settingsFor(database);
@@ -263,8 +274,55 @@ test('renaming and removing registry options preserves their order and saved ins
   database.close();
   database.open();
   assert.deepEqual(settings.get(), expected);
-  assert.deepEqual(instructions.get(instruction.id), instruction);
+  const saved = instructions.get(instruction.id);
+  assert.deepEqual(saved, { ...instruction, source: 'Общий архив', executor: 'Отдел Кадров', updatedAt: saved.updatedAt });
   assert.deepEqual(instructions.list().documentTypes, ['Распоряжение']);
+});
+
+test('renaming exact instruction options updates active and closed records and their search keys', (t) => {
+  const { database } = fixture(t);
+  database.open();
+  const settings = settingsFor(database);
+  const instructions = new InstructionRepository(database);
+  const former = { documentType: 'Письмо', source: 'Архив', executor: 'Иванов' };
+  const renamed = { documentType: 'Служебное письмо', source: 'Общий архив', executor: 'Петров' };
+  for (const [field, value] of Object.entries(former)) settings.addRegistryOption(field, value);
+  const base = { controlDate: '2026-11-10', deadline: '2026-11-12', title: 'Проверить отчёт', ...former };
+  const active = instructions.create({ ...base, instructionNumber: '1' });
+  const closed = instructions.closeControl(instructions.create({ ...base, instructionNumber: '2' }).id);
+  const historic = instructions.create({ ...base, instructionNumber: '3', documentType: 'ПИСЬМО', source: ' Архив ', executor: 'ИВАНОВ' });
+  database.connection.prepare('UPDATE instructions SET updated_at = ? WHERE id IN (?, ?)')
+    .run('2026-01-01T00:00:00.000Z', active.id, closed.id);
+
+  for (const [field, value] of Object.entries(renamed)) settings.updateRegistryOption(field, former[field], value);
+
+  for (const expected of [active, closed]) {
+    const saved = instructions.get(expected.id);
+    assert.ok(saved.updatedAt > '2026-01-01T00:00:00.000Z');
+    assert.deepEqual(saved, { ...expected, ...renamed, updatedAt: saved.updatedAt });
+  }
+  assert.deepEqual(instructions.get(historic.id), historic);
+  const filters = { documentType: 'СЛУЖЕБНОЕ ПИСЬМО', executor: 'ПЕТРОВ' };
+  assert.deepEqual(instructions.list({ filters }).items.map(item => item.id), [active.id]);
+  assert.deepEqual(instructions.list({ filters, closed: true }).items.map(item => item.id), [closed.id]);
+});
+
+test('a rejected instruction update rolls back the option rename and contact update', (t) => {
+  const { database } = fixture(t);
+  database.open();
+  const settings = settingsFor(database);
+  const instructions = new InstructionRepository(database);
+  settings.addRegistryOption('department', 'Канцелярия');
+  const before = settings.addRegistryOption('executor', 'Иванов', { department: 'Канцелярия' });
+  const instruction = instructions.create({
+    controlDate: '2026-11-10', deadline: '2026-11-12', title: 'Проверить отчёт', instructionNumber: '1', executor: 'Иванов',
+  });
+  database.connection.exec(`CREATE TRIGGER fail_instruction_rename BEFORE UPDATE OF executor ON instructions
+    BEGIN SELECT RAISE(ABORT, 'instruction rename failed'); END`);
+
+  assert.throws(() => settings.updateRegistryOption('executor', 'Иванов', 'Петров'), /instruction rename failed/);
+  assert.deepEqual(settings.get(), before);
+  assert.deepEqual(instructions.get(instruction.id), instruction);
 });
 
 test('invalid, duplicate, or stale registry option changes leave settings intact', (t) => {

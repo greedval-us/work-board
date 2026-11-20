@@ -1,7 +1,8 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'vue';
 import { onBeforeRouteLeave, onBeforeRouteUpdate, RouterLink, useRoute } from 'vue-router';
-import { Columns3, Download, FilePlus2, ListChecks, RefreshCw } from 'lucide-vue-next';
+import { Archive, Columns3, Download, FolderOpen, Plus, RefreshCw, SearchX } from 'lucide-vue-next';
+import registryFolder from '../../assets/registry-folder.webp';
 import { normalizeSearch, REGISTRY_REPORT_TYPE } from '../../../shared/registry.js';
 import { useRegistry } from './useRegistry.js';
 import { useRegistryRoute } from './useRegistryRoute.js';
@@ -19,6 +20,7 @@ const props = defineProps({ closed: Boolean });
 const sectionTitle = props.closed ? 'Закрытый контроль' : 'Реестр указаний';
 const routeName = props.closed ? 'ClosedControl' : 'Registry';
 const app = useAppStore();
+const choosingDatabase = computed(() => app.loading || app.databaseSwitching || app.pendingOperations > 0);
 const route = useRoute();
 const editor = useTemplateRef('editor');
 const confirmation = useTemplateRef('confirmation');
@@ -125,34 +127,57 @@ onBeforeUnmount(() => { disposed = true; surfaceVersion++; unregisterGuard(); cl
     <div class="registry-workspace">
       <div class="registry-toolbar">
         <PageHeading :title="sectionTitle" />
-        <div class="registry-actions">
-          <button ref="exportButton" class="registry-button" type="button" aria-haspopup="dialog" :disabled="!ready || exporting || app.databaseSwitching" @click="chooseExportFormat"><Download :size="17" aria-hidden="true" />{{ exporting ? 'Выгрузка…' : 'Выгрузить Excel' }}</button>
-          <button v-if="!props.closed" class="registry-button registry-button-primary" type="button" :disabled="!canMutate" @click="createRecord"><FilePlus2 :size="17" aria-hidden="true" />Добавить указание</button>
+        <div v-if="ready" class="registry-actions">
+          <button ref="exportButton" class="registry-button" type="button" aria-haspopup="dialog" :disabled="exporting || app.databaseSwitching" @click="chooseExportFormat"><Download :size="15" aria-hidden="true" />{{ exporting ? 'Выгрузка…' : 'Выгрузить Excel' }}</button>
+          <button v-if="!props.closed" class="registry-button registry-button-primary" type="button" :disabled="!canMutate" @click="createRecord"><Plus :size="16" aria-hidden="true" />Добавить указание</button>
         </div>
       </div>
-      <div v-if="!ready" class="registry-empty registry-no-database"><span class="registry-empty-icon"><ListChecks :size="36" :stroke-width="1.5" aria-hidden="true" /></span><h2>Выберите базу данных</h2><p>{{ app.database?.message || 'Создайте новую базу или откройте существующую в настройках, чтобы вести реестр указаний.' }}</p><RouterLink class="registry-button registry-button-primary" to="/settings">Перейти в настройки</RouterLink></div>
+      <div v-if="!ready" class="registry-no-database">
+        <section class="registry-setup" aria-labelledby="registry-setup-title">
+          <div class="registry-setup-visual">
+            <img class="registry-setup-art" :src="registryFolder" alt="" draggable="false" />
+          </div>
+          <div class="registry-setup-content">
+            <h2 id="registry-setup-title">Выберите базу данных</h2>
+            <p>{{ app.database?.message || 'Создайте базу для указаний и задач или откройте существующий файл.' }}</p>
+            <RouterLink v-if="app.database?.message" class="registry-setup-link" to="/settings">Настройки хранилища</RouterLink>
+          </div>
+          <div class="registry-setup-footer">
+            <p v-if="app.databaseSwitching" class="registry-setup-note" role="status">Выбор базы данных…</p>
+            <div class="registry-actions">
+              <button class="registry-button registry-button-primary" type="button" :disabled="choosingDatabase" @click="app.selectDatabase('create')">
+                <Plus :size="16" aria-hidden="true" />Создать базу
+              </button>
+              <button class="registry-button" type="button" :disabled="choosingDatabase" @click="app.selectDatabase('open')">
+                <FolderOpen :size="16" aria-hidden="true" />Открыть базу
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
       <template v-else>
-        <RegistryFilters :filters="draftFilters" :applied-filters="appliedFilters" :document-types="filterDocumentTypes" :closed="props.closed" :disabled="app.databaseSwitching" :changed="filtersChanged" :error="filterError" @update="({ field, value }) => draftFilters[field] = value" @apply="applyFilters" @reset="resetFilters" />
         <section class="registry-results" aria-label="Найденные указания">
           <div class="registry-results-heading">
-            <h2 ref="resultsHeading" tabindex="-1">Записей <span class="registry-count">{{ total }}</span></h2>
-            <div class="registry-status-slot"><div v-if="error" class="registry-error-banner" role="alert"><span :title="error">{{ error }}</span><button type="button" class="registry-inline-action" :disabled="loading" @click="refresh"><RefreshCw :size="12" aria-hidden="true" />Повторить</button></div><p v-else-if="notice && unopenedExportPath === null" class="registry-notice" role="status" :title="notice">{{ notice }}</p><span v-else class="registry-help" role="status">{{ loading ? 'Загрузка…' : opening ? 'Открытие карточки…' : '' }}</span></div>
-            <button type="button" class="registry-inline-action registry-column-toggle" :aria-pressed="wideColumns" :title="wideColumns ? 'Уместить столбцы в ширину окна' : 'Увеличить ширину столбцов для просмотра с прокруткой'" @click="wideColumns = !wideColumns"><Columns3 :size="14" aria-hidden="true" /><span>{{ wideColumns ? 'По ширине окна' : 'Столбцы шире' }}</span></button>
+            <h2 ref="resultsHeading" tabindex="-1">{{ hasAppliedFilters ? 'Найдено' : 'Все указания' }} <span class="registry-count">{{ total }}</span></h2>
+            <RegistryFilters :filters="draftFilters" :applied-filters="appliedFilters" :document-types="filterDocumentTypes" :closed="props.closed" :disabled="app.databaseSwitching" :changed="filtersChanged" :error="filterError" @update="({ field, value }) => draftFilters[field] = value" @apply="applyFilters" @reset="resetFilters" />
+            <button v-if="items.length" type="button" class="registry-inline-action registry-column-toggle" :aria-pressed="wideColumns" :aria-label="wideColumns ? 'Уместить столбцы в ширину окна' : 'Показать все столбцы в полной ширине'" :title="wideColumns ? 'Уместить столбцы в ширину окна' : 'Показать все столбцы в полной ширине'" @click="wideColumns = !wideColumns"><Columns3 :size="15" aria-hidden="true" /><span>{{ wideColumns ? 'По ширине окна' : 'Все столбцы' }}</span></button>
           </div>
+          <div v-if="error || notice && unopenedExportPath === null || loading || opening" class="registry-status-slot"><div v-if="error" class="registry-error-banner" role="alert"><span :title="error">{{ error }}</span><button type="button" class="registry-inline-action" :disabled="loading" @click="refresh"><RefreshCw :size="12" aria-hidden="true" />Повторить</button></div><p v-else-if="notice && unopenedExportPath === null" class="registry-notice" role="status">{{ notice }}</p><span v-else class="registry-help" role="status">{{ loading ? 'Загрузка…' : 'Открытие карточки…' }}</span></div>
           <ExportOpenWarning v-if="unopenedExportPath !== null" :message="`${notice} Файл сохранён.`" :file-path="unopenedExportPath" />
           <RegistryTable v-if="items.length" :items="items" :sort="sort" :loading="loading" :wide="wideColumns" :today="today"
             :closed="props.closed" :section-title="sectionTitle" :can-close-control="canMutate && !loading && !opening"
             @sort="changeSort" @open="openRecord" @close-control="closeControlFromList" />
           <div v-else-if="loading" class="registry-empty registry-empty-results" role="status"><RefreshCw :size="28" class="registry-loading-icon" aria-hidden="true" /><h2>Загрузка реестра…</h2></div>
           <div v-else class="registry-empty registry-empty-results">
-            <ListChecks :size="32" :stroke-width="1.5" aria-hidden="true" />
+            <span v-if="error || hasAppliedFilters || props.closed" class="registry-empty-symbol"><component :is="error ? RefreshCw : hasAppliedFilters ? SearchX : Archive" :size="26" :stroke-width="1.6" aria-hidden="true" /></span>
+            <img v-else class="registry-empty-art" :src="registryFolder" alt="" draggable="false" />
             <h2>{{ error ? 'Реестр недоступен' : hasAppliedFilters ? 'Указания не найдены' : props.closed ? 'Закрытых указаний пока нет' : 'В реестре пока нет указаний' }}</h2>
             <p>{{ error ? 'Повторите загрузку, чтобы показать указания.' : hasAppliedFilters ? 'Измените условия фильтров или сбросьте их.' : props.closed ? 'Здесь появятся указания после закрытия контроля.' : 'Добавьте первое указание — его срок появится в календаре.' }}</p>
             <button v-if="error" type="button" class="registry-button" @click="refresh">Повторить загрузку</button>
             <button v-else-if="hasAppliedFilters" type="button" class="registry-button" @click="resetFilters">Сбросить фильтры</button>
             <button v-else-if="!props.closed" type="button" class="registry-button registry-button-primary" :disabled="!canMutate" @click="createRecord">Добавить указание</button>
           </div>
-          <RegistryPagination :page="page" :page-size="pageSize" :page-count="pageCount" :total="total" :disabled="loading || app.databaseSwitching" @page="setPage" @page-size="setPageSize" />
+          <RegistryPagination v-if="total" :page="page" :page-size="pageSize" :page-count="pageCount" :total="total" :disabled="loading || app.databaseSwitching" @page="setPage" @page-size="setPageSize" />
         </section>
       </template>
       <InstructionDialog v-if="displayedRecord" :key="displayedKey" ref="editor" :record="displayedRecord" :selected-checkpoint="selectedCheckpoint"
