@@ -1,0 +1,69 @@
+{
+  "name": "work-board",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/greedval-us/work-board.git"
+  },
+  "bugs": {
+    "url": "https://github.com/greedval-us/work-board/issues"
+  },
+  "homepage": "https://github.com/greedval-us/work-board#readme",
+  "description": "Локальное настольное приложение на Electron, Vue и SQLite.",
+  "author": "Work Board",
+  "type": "module",
+  "main": "src/main/index.js",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "icons": "node scripts/generateIcons.mjs",
+    "check:repository": "node scripts/checkRepository.mjs",
+    "check:dependencies": "npm audit && npm --prefix packaging/legacy audit",
+    "test:package": "node scripts/checkPackage.mjs",
+    "test:package:legacy": "node scripts/checkPackage.mjs --legacy",
+    "test:desktop:legacy": "node scripts/checkLegacyDesktop.mjs",
+    "dev": "npm run build:preload && concurrently -k -s first \"vite\" \"vite build --config vite.preload.config.js --watch\" \"node scripts/startDevElectron.mjs\"",
+    "start": "npm run build:client && electron .",
+    "build:preload": "vite build --config vite.preload.config.js",
+    "build:client": "npm run build:preload && vite build",
+    "build": "npm run build:client",
+    "pack:win": "npm run build:client && electron-builder --config electron-builder.config.cjs --win --dir",
+    "build:win": "npm run build:client && electron-builder --config electron-builder.config.cjs --win nsis portable",
+    "prepare:win:legacy": "npm run build:client && vite build --config vite.legacy.config.js && node scripts/prepareLegacyWindows.mjs",
+    "build:win:legacy": "npm run prepare:win:legacy && electron-builder --config electron-builder.legacy.config.cjs --win nsis portable --ia32",
+    "test": "node --test \"tests/**/*.test.js\"",
+    "test:desktop": "npm run build:client && node scripts/checkDesktop.mjs",
+    "check": "npm test && npm run build:client"
+  },
+  "dependencies": {
+    "electron-log": "5.4.3",
+    "exceljs": "4.4.0",
+    "jszip": "3.10.2",
+    "lucide-vue-next": "0.536.0",
+    "pinia": "3.0.3",
+    "vue": "3.5.44",
+    "vue-router": "4.5.1"
+  },
+  "overrides": {
+    "exceljs": {
+      "uuid": "11.1.1"
+    },
+    "minimatch@>=7 <11.0.1": "11.0.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "6.0.1",
+    "autoprefixer": "10.4.21",
+    "concurrently": "9.2.0",
+    "electron": "45.4.1",
+    "electron-builder": "26.18.0",
+    "pe-library": "2.0.1",
+    "postcss": "8.5.31",
+    "resedit": "3.1.0",
+    "tailwindcss": "3.4.17",
+    "vite": "7.3.7",
+    "wait-on": "8.0.4"
+  }
+}

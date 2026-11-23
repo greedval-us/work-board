@@ -1,0 +1,28 @@
+<script setup>
+import { computed } from 'vue';
+const props = defineProps({ timeline: { type: Array, required: true } });
+const maximum = computed(() => props.timeline.reduce((max, row) => Math.max(max, row.total), 1));
+const monthLabel = month => `${month.slice(5)}.${month.slice(0, 4)}`;
+</script>
+<template>
+  <section class="analytics-chart-card analytics-timeline">
+    <header><h2>Контроль по месяцам</h2><p>По срокам исполнения и плановым датам проверок.</p></header>
+    <div class="analytics-chart-legend">
+      <span><i class="analytics-fill-success" />Закрыто</span>
+      <span><i class="analytics-fill-accent" />Активные</span>
+    </div>
+    <ul class="analytics-months">
+      <li v-for="row in timeline" :key="row.month">
+        <span class="analytics-month-label">{{ monthLabel(row.month) }}</span>
+        <div class="analytics-month-track" aria-hidden="true">
+          <span class="analytics-fill-success" :style="{ width: `${row.closed / maximum * 100}%` }" />
+          <span class="analytics-fill-accent" :style="{ width: `${row.active / maximum * 100}%` }" />
+        </div>
+        <span class="analytics-month-value" :title="`Закрыто ${row.closed}, активных ${row.active}, всего ${row.total}`">
+          {{ row.closed }} / {{ row.total }}<span class="analytics-sr-only"> закрыто / всего</span>
+        </span>
+      </li>
+    </ul>
+    <p class="analytics-chart-footnote">Справа указано число закрытых контролей из общего количества.</p>
+  </section>
+</template>

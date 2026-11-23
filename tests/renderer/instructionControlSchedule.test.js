@@ -1,0 +1,698 @@
+import assert from 'node:assert/strict';
+import { existsSync, readFileSync } from 'node:fs';
+import test from 'node:test';
+import { fileURLToPath } from 'node:url';
+import { compileScript, parse } from '@vue/compiler-sfc';
+import { createRenderer, h, markRaw, nextTick, shallowRef } from 'vue';
+
+function find(node, predicate) {
+  if (!node) return undefined;
+  if (predicate(node)) return node;
+  for (const child of node.children ?? []) {
+    const result = find(child, predicate);
+    if (result) return result;
+  }
+}
+
+async function mountEditor(t, value, options = {}) {
+  const component = new URL('../../src/renderer/features/registry/schedule/InstructionControlSchedule.vue', import.meta.url);
+  const filename = fileURLToPath(component);
+  assert.ok(existsSync(filename), 'the instruction form has a checkpoint editor');
+  const { descriptor } = parse(readFileSync(filename, 'utf8'), { filename });
+  const code = compileScript(descriptor, { id: 'control-schedule-test', inlineTemplate: true }).content
+    .replace(/from\s+(['"])([^'"]+)\1/g, (_match, quote, path) => `from ${quote}${path.startsWith('.') ? new URL(path, component).href : import.meta.resolve(path)}${quote}`);
+  const { default: Editor } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+  const schedule = shallowRef(value);
+  const selectedDate = shallowRef(options.selectedDate ?? '2026-02-15');
+  const controlDate = shallowRef(options.controlDate ?? '2026-01-01');
+  const deadline = shallowRef(options.deadline ?? '2026-12-31');
+  const disabled = shallowRef(false);
+  const ownerDocument = { activeElement: null };
+  const root = { children: [] };
+  const renderer = createRenderer({
+    createElement: type => markRaw({
+      type, children: [], props: {}, ownerDocument, focus() { ownerDocument.activeElement = this; },
+      setCustomValidity(message) { this.validationMessage = message; },
+      querySelector(selector) {
+        const date = selector.match(/\[data-checkpoint-date="([^"]+)"\] textarea/)?.[1];
+        const row = date && find(this, node => node.props?.['data-checkpoint-date'] === date);
+        return row && find(row, node => node.type === 'textarea');
+      },
+    }),
+    createText: text => ({ text }), createComment: text => ({ text }),
+    setText: (node, text) => { node.text = text; }, setElementText: (node, text) => { node.text = text; },
+    parentNode: node => node.parent,
+    nextSibling: node => node.parent?.children[node.parent.children.indexOf(node) + 1] ?? null,
+    patchProp: (node, key, _previous, value) => { node.props[key] = value; },
+    insert(node, parent, anchor) {
+      if (node.parent) node.parent.children.splice(node.parent.children.indexOf(node), 1);
+      node.parent = parent;
+      parent.children.splice(anchor ? parent.children.indexOf(anchor) : parent.children.length, 0, node);
+    },
+    remove(node) {
+      node.parent.children.splice(node.parent.children.indexOf(node), 1);
+      node.parent = null;
+    },
+  });
+  let editor;
+  const app = renderer.createApp({ render: () => h(Editor, {
+    ref: value => { editor = value; },
+    modelValue: schedule.value, 'onUpdate:modelValue': value => { schedule.value = value; },
+    controlDate: controlDate.value, deadline: deadline.value, selectedDate: selectedDate.value, disabled: disabled.value,
+  }) });
+  app.mount(root);
+  t.after(() => app.unmount());
+  const row = date => find(root, node => node.props?.['data-checkpoint-date'] === date);
+  const field = (date, name) => find(row(date), node => node.props?.name === name);
+  const textarea = date => find(row(date), node => node.type === 'textarea');
+  const moveButton = date => find(row(date), node => node.type === 'button' && node.props?.class?.includes('control-schedule-move'));
+  const cancelMoveButton = date => find(row(date), node => node.type === 'button' && node.props?.class?.includes('control-schedule-cancel-move'));
+  const input = async (node, value) => {
+    assert.ok(node, 'the requested editor input is rendered');
+    node.props.onInput({ target: { value } });
+    await nextTick();
+  };
+  return { editor, schedule, selectedDate, controlDate, deadline, disabled, ownerDocument, root, row, field, textarea, moveButton, cancelMoveButton, input };
+}
+
+test('calendar links focus the exact checkpoint and replacing a historical mark keeps its date', async t => {
+  const { editor, schedule, selectedDate, ownerDocument, row } = await mountEditor(t, {
+    frequency: 'monthly', firstDate: '2026-01-15', customDates: [], marks: [{ date: '2025-12-24', text: 'Старая отметка' }],
+  });
+
+  assert.equal(await editor.focusSelectedDate(), true);
+  assert.equal(ownerDocument.activeElement, find(row('2026-02-15'), node => node.type === 'textarea'));
+  assert.equal(row('2026-01-15'), undefined);
+
+  selectedDate.value = '2025-12-24';
+  await nextTick();
+  await nextTick();
+  assert.ok(ownerDocument.activeElement === find(row('2025-12-24'), node => node.type === 'textarea'), 'changing the calendar link focuses the new checkpoint');
+  const mark = ownerDocument.activeElement;
+  assert.equal(mark.props.value, 'Старая отметка');
+  mark.props.onInput({ target: { value: '' } });
+  await nextTick();
+  assert.equal(find(row('2025-12-24'), node => node.type === 'textarea'), mark);
+  mark.props.onInput({ target: { value: 'Новая отметка' } });
+  assert.deepEqual(schedule.value.marks, [{ date: '2025-12-24', text: 'Новая отметка' }]);
+  assert.equal(schedule.value.frequency, 'monthly');
+});
+
+test('moving one checkpoint across months retains its mark, actual date and editor focus', async t => {
+  const { editor, schedule, row, field, textarea, moveButton, input, ownerDocument } = await mountEditor(t, {
+    frequency: 'monthly', firstDate: '2026-01-15', customDates: [],
+    marks: [{ date: '2026-02-15', text: 'Проверено', actualDate: '2026-02-12' }],
+  });
+  await editor.focusSelectedDate();
+  await input(field('2026-02-15', 'control-planned-date'), '2026-03-03');
+  await moveButton('2026-02-15').props.onClick();
+  await nextTick();
+  assert.deepEqual(schedule.value.moves, [{ from: '2026-02-15', to: '2026-03-03' }]);
+  assert.equal(schedule.value.firstDate, '2026-01-15');
+  assert.ok(row('2026-03-15'), 'the following recurrence keeps its original date');
+  assert.equal(row('2026-02-15'), undefined);
+  assert.deepEqual(schedule.value.marks, [{ date: '2026-03-03', text: 'Проверено', actualDate: '2026-02-12' }]);
+  assert.equal(ownerDocument.activeElement, textarea('2026-03-03'));
+  await input(field('2026-03-03', 'control-planned-date'), '2026-02-15');
+  await moveButton('2026-03-03').props.onClick();
+  await nextTick();
+  assert.equal(schedule.value.moves, undefined);
+  assert.equal(ownerDocument.activeElement, textarea('2026-02-15'));
+});
+
+test('a collision leaves the schedule unchanged and presents an inline error', async t => {
+  const value = { frequency: 'monthly', firstDate: '2026-01-15', customDates: [], marks: [] };
+  const { editor, schedule, root, field, moveButton, input } = await mountEditor(t, value);
+  await editor.focusSelectedDate();
+  await input(field('2026-02-15', 'control-planned-date'), '2026-03-15');
+  await moveButton('2026-02-15').props.onClick();
+  await nextTick();
+  assert.deepEqual(schedule.value, value);
+  assert.ok(find(root, node => node.props?.role === 'alert')?.text);
+});
+
+test('a backdated factual date is kept until a mark is entered and survives comment replacement', async t => {
+  const { editor, schedule, field, textarea, input } = await mountEditor(t, {
+    frequency: 'monthly', firstDate: '2026-01-15', customDates: [], marks: [],
+  });
+  await editor.focusSelectedDate();
+  const actual = field('2026-02-15', 'control-actual-date');
+  assert.ok(actual, 'a factual date can be chosen before writing the mark');
+  assert.ok(actual.props.min < '2025-12-24', 'factual dates are independent of the planned control period');
+  await input(actual, '2025-12-24');
+  assert.deepEqual(schedule.value.marks, []);
+  await input(textarea('2026-02-15'), 'Получено ранее');
+  assert.deepEqual(schedule.value.marks, [{ date: '2026-02-15', text: 'Получено ранее', actualDate: '2025-12-24' }]);
+  await input(textarea('2026-02-15'), '');
+  await input(textarea('2026-02-15'), 'Уточнено');
+  assert.equal(schedule.value.marks[0].actualDate, '2025-12-24');
+  await input(field('2026-02-15', 'control-actual-date'), '2025-12-25');
+  assert.equal(schedule.value.marks[0].actualDate, '2025-12-25');
+});
+
+test('disabled editors ignore mutations of planned dates, factual dates and text', async t => {
+  const value = { frequency: 'monthly', firstDate: '2026-01-15', customDates: [], marks: [{ date: '2026-02-15', text: 'Проверено', actualDate: '2026-02-14' }] };
+  const { editor, schedule, disabled, field, textarea, moveButton, input } = await mountEditor(t, value);
+  await editor.focusSelectedDate();
+  await input(field('2026-02-15', 'control-planned-date'), '2026-02-16');
+  disabled.value = true;
+  await nextTick();
+  assert.equal(moveButton('2026-02-15').props.disabled, true);
+  assert.equal(field('2026-02-15', 'control-actual-date').props.readonly, true);
+  await moveButton('2026-02-15').props.onClick();
+  await input(field('2026-02-15', 'control-actual-date'), '2025-12-24');
+  await input(textarea('2026-02-15'), 'Изменено');
+  assert.deepEqual(schedule.value, value);
+});
+
+test('changing the recurring anchor resets individual moves while preserving historical marks', async t => {
+  const history = { date: '2026-02-17', text: 'Проверено', actualDate: '2026-02-16' };
+  const { schedule, root, input } = await mountEditor(t, {
+    frequency: 'monthly', firstDate: '2026-01-15', customDates: [], moves: [{ from: '2026-02-15', to: '2026-02-17' }], marks: [history],
+  });
+  await input(find(root, node => node.props?.name === 'control-first-date'), '2026-01-20');
+  assert.equal(schedule.value.moves, undefined);
+  assert.deepEqual(schedule.value.marks, [history]);
+});
+
+test('a changed calendar day redraws the preview while invalid or equivalent values preserve moves', async t => {
+  const history = { date: '2026-02-17', text: 'Проверено', actualDate: '2026-02-16' };
+  const moves = [{ from: '2026-02-15', to: '2026-02-17' }];
+  const { schedule, root, row } = await mountEditor(t, {
+    frequency: 'monthly', firstDate: '2026-01-15', customDates: [], moves, marks: [history],
+  });
+  const field = find(root, node => node.props?.name === 'control-day-of-month');
+  assert.ok(field, 'month-based schedules offer a day input');
+  assert.equal(field.props.min, '1');
+  assert.equal(field.props.max, '31');
+  const commit = async (value, badInput = false) => {
+    field.props.onChange({ currentTarget: { value, validity: { badInput } } });
+    await nextTick();
+  };
+
+  await commit('15');
+  assert.equal(schedule.value.dayOfMonth, 15);
+  assert.deepEqual(schedule.value.moves, moves);
+  await commit('', true);
+  await commit('32');
+  assert.equal(schedule.value.dayOfMonth, 15);
+  assert.deepEqual(schedule.value.moves, moves);
+  await commit('');
+  assert.equal(schedule.value.dayOfMonth, undefined);
+  assert.deepEqual(schedule.value.moves, moves);
+
+  await commit('3');
+  assert.equal(schedule.value.dayOfMonth, 3);
+  assert.equal(schedule.value.moves, undefined);
+  assert.deepEqual(schedule.value.marks, [history]);
+  assert.ok(row('2026-02-03'), 'the initial preview skips a date before the schedule starts');
+});
+
+test('a weekly selection keeps equivalent moves and preserves history when the weekday changes', async t => {
+  const history = { date: '2026-02-17', text: 'Проверено', actualDate: '2026-02-16' };
+  const moves = [{ from: '2026-02-12', to: '2026-02-17' }];
+  const { schedule, root, row } = await mountEditor(t, {
+    frequency: 'weekly', firstDate: '2026-01-15', customDates: [], moves, marks: [history],
+  });
+  const field = find(root, node => node.props?.name === 'control-day-of-week');
+  assert.equal(field?.type, 'select');
+  const commit = async (value) => {
+    field.props.onChange({ target: { value } });
+    await nextTick();
+  };
+
+  await commit('4');
+  assert.equal(schedule.value.dayOfWeek, 4);
+  assert.deepEqual(schedule.value.moves, moves);
+  await commit('8');
+  assert.equal(schedule.value.dayOfWeek, 4);
+  await commit('');
+  assert.equal(schedule.value.dayOfWeek, undefined);
+  assert.deepEqual(schedule.value.moves, moves);
+
+  await commit('5');
+  assert.equal(schedule.value.dayOfWeek, 5);
+  assert.equal(schedule.value.moves, undefined);
+  assert.deepEqual(schedule.value.marks, [history]);
+  assert.ok(row('2026-01-16'), 'the first Friday falls after the Thursday start date');
+
+  find(root, node => node.props?.name === 'control-frequency').props.onChange({ target: { value: 'monthly' } });
+  await nextTick();
+  assert.equal(schedule.value.dayOfWeek, undefined);
+  assert.equal(find(root, node => node.props?.name === 'control-day-of-week'), undefined);
+  assert.ok(find(root, node => node.props?.name === 'control-period-date'));
+});
+
+test('the annual month selector updates the preview independently of the day and preserves history', async t => {
+  const history = { date: '2027-08-21', text: 'Проверено', actualDate: '2027-08-20' };
+  const moves = [{ from: '2027-08-20', to: '2027-08-21' }];
+  const { schedule, root, row } = await mountEditor(t, {
+    frequency: 'yearly', firstDate: '2027-08-20', customDates: [], moves, marks: [history],
+  }, { selectedDate: '2027-08-21', deadline: '2028-12-31' });
+  const field = name => find(root, node => node.props?.name === name);
+  const month = field('control-month-of-year');
+  const setMonth = async (value) => {
+    month.props.onChange({ target: { value } });
+    await nextTick();
+  };
+
+  assert.equal(month?.props.value, '');
+  await setMonth('8');
+  assert.deepEqual(schedule.value.moves, moves);
+  await setMonth('2');
+  assert.equal(schedule.value.monthOfYear, 2);
+  assert.equal(schedule.value.moves, undefined);
+  assert.deepEqual(schedule.value.marks, [history]);
+  assert.ok(row('2028-02-20'), 'the chosen month falls before the start month, and the day comes from the start date');
+
+  field('control-day-of-month').props.onChange({ currentTarget: { value: '29' } });
+  await nextTick();
+  assert.ok(row('2028-02-29'));
+  await setMonth('');
+  assert.equal(Object.hasOwn(schedule.value, 'monthOfYear'), false);
+  assert.ok(row('2027-08-29'), 'clearing the month returns to the start month, keeping the chosen day');
+
+  await setMonth('11');
+  field('control-frequency').props.onChange({ target: { value: 'quarterly' } });
+  await nextTick();
+  assert.equal(field('control-month-of-year'), undefined);
+  assert.equal(Object.hasOwn(schedule.value, 'monthOfYear'), false);
+  assert.equal(schedule.value.dayOfMonth, undefined);
+  assert.deepEqual(schedule.value.periodDates, {});
+});
+
+test('moving a legacy mark after editing it preserves the original factual date on later edits', async t => {
+  const { editor, schedule, field, textarea, moveButton, input } = await mountEditor(t, {
+    frequency: 'monthly', firstDate: '2026-01-15', customDates: [], marks: [{ date: '2026-02-15', text: 'Получено' }],
+  });
+  await editor.focusSelectedDate();
+  await input(textarea('2026-02-15'), 'Получено полностью');
+  await input(field('2026-02-15', 'control-planned-date'), '2026-03-03');
+  await moveButton('2026-02-15').props.onClick();
+  await nextTick();
+  await input(textarea('2026-03-03'), 'Уточнено после переноса');
+  assert.deepEqual(schedule.value.marks, [{ date: '2026-03-03', text: 'Уточнено после переноса', actualDate: '2026-02-15' }]);
+});
+
+test('moving and removing a custom date keeps a single effective row and preserves the mark as history', async t => {
+  const { editor, schedule, root, row, field, textarea, moveButton, input } = await mountEditor(t, {
+    frequency: 'custom', firstDate: '', customDates: ['2026-02-15', '2026-03-15'], marks: [],
+  });
+  await editor.focusSelectedDate();
+  await input(field('2026-02-15', 'control-actual-date'), '2026-02-10');
+  await input(field('2026-02-15', 'control-planned-date'), '2026-03-03');
+  await moveButton('2026-02-15').props.onClick();
+  await nextTick();
+  await input(textarea('2026-03-03'), 'Принято');
+  assert.equal(schedule.value.marks[0].actualDate, '2026-02-10', 'an unsaved factual date follows the moved checkpoint');
+  const remove = find(row('2026-03-03'), node => node.props?.class?.includes('control-schedule-remove'));
+  assert.ok(remove, 'a moved custom date remains removable');
+  remove.props.onClick();
+  await nextTick();
+  assert.deepEqual(schedule.value.customDates, ['2026-03-15']);
+  assert.equal(schedule.value.moves, undefined);
+  assert.ok(textarea('2026-03-03'), 'the marked date remains open as history');
+  assert.equal(field('2026-03-03', 'control-planned-date'), undefined, 'a historical date cannot be rescheduled');
+  const month = find(root, node => node.props?.type === 'month');
+  month.props.onChange({ target: { value: '2026-02' } });
+  await nextTick();
+  assert.equal(row('2026-02-15'), undefined, 'the original custom date does not reappear');
+});
+
+test('changing frequency resets moves and keeps completed dates in history', async t => {
+  const history = { date: '2026-02-17', text: 'Проверено', actualDate: '2026-02-16' };
+  const { schedule, root } = await mountEditor(t, {
+    frequency: 'monthly', firstDate: '2026-01-15', customDates: [], dayOfMonth: 15,
+    moves: [{ from: '2026-02-15', to: '2026-02-17' }], marks: [history],
+  });
+  const select = find(root, node => node.props?.name === 'control-frequency');
+  select.props.onChange({ target: { value: 'semiannual' } });
+  await nextTick();
+  assert.equal(schedule.value.dayOfMonth, undefined);
+  assert.equal(schedule.value.firstDate, '');
+  assert.deepEqual(schedule.value.periodDates, {});
+  select.props.onChange({ target: { value: 'weekly' } });
+  await nextTick();
+  assert.equal(schedule.value.dayOfMonth, undefined);
+  assert.equal(find(root, node => node.props?.name === 'control-day-of-month'), undefined);
+  assert.equal(schedule.value.moves, undefined);
+  assert.deepEqual(schedule.value.marks, [history]);
+});
+
+test('shortening the deadline keeps an out-of-period move editable and allows correcting it', async t => {
+  const { editor, schedule, deadline, root, row, field, textarea, moveButton, input, ownerDocument } = await mountEditor(t, {
+    frequency: 'monthly', firstDate: '2026-01-31', customDates: [], marks: [],
+    moves: [{ from: '2026-02-28', to: '2026-03-02' }],
+  }, { selectedDate: '2026-03-02' });
+  await editor.focusSelectedDate();
+  deadline.value = '2026-02-28';
+  await nextTick();
+  assert.ok(row('2026-03-02'), 'the invalid moved date remains visible for correction');
+  assert.ok(find(root, node => node.props?.class?.includes('control-schedule-warning')), 'the invalid destination has a bounds warning');
+  await input(field('2026-03-02', 'control-planned-date'), '2026-02-27');
+  await moveButton('2026-03-02').props.onClick();
+  await nextTick();
+  assert.deepEqual(schedule.value.moves, [{ from: '2026-02-28', to: '2026-02-27' }]);
+  assert.equal(ownerDocument.activeElement, textarea('2026-02-27'));
+});
+
+test('cancelling a move returns to the original date and preserves factual completion', async t => {
+  const { editor, schedule, cancelMoveButton, textarea, ownerDocument } = await mountEditor(t, {
+    frequency: 'monthly', firstDate: '2026-01-31', customDates: [],
+    moves: [{ from: '2026-02-28', to: '2026-03-02' }],
+    marks: [{ date: '2026-03-02', text: 'Принято', actualDate: '2026-03-01' }],
+  }, { selectedDate: '2026-03-02' });
+  await editor.focusSelectedDate();
+  assert.ok(cancelMoveButton('2026-03-02'), 'moved dates have an explicit cancellation action');
+  await cancelMoveButton('2026-03-02').props.onClick();
+  await nextTick();
+  assert.equal(schedule.value.moves, undefined);
+  assert.deepEqual(schedule.value.marks, [{ date: '2026-02-28', text: 'Принято', actualDate: '2026-03-01' }]);
+  assert.equal(ownerDocument.activeElement, textarea('2026-02-28'));
+});
+
+test('cancelling a move whose original date is outside a shortened period keeps its mark as history', async t => {
+  const history = { date: '2026-04-02', text: 'Принято', actualDate: '2026-04-01' };
+  const { editor, schedule, deadline, field, cancelMoveButton, textarea } = await mountEditor(t, {
+    frequency: 'monthly', firstDate: '2026-01-31', customDates: [],
+    moves: [{ from: '2026-03-31', to: '2026-04-02' }], marks: [history],
+  }, { selectedDate: '2026-04-02' });
+  await editor.focusSelectedDate();
+  deadline.value = '2026-02-28';
+  await nextTick();
+  assert.ok(cancelMoveButton('2026-04-02'), 'an invalid original date does not prevent removing the override');
+  await cancelMoveButton('2026-04-02').props.onClick();
+  await nextTick();
+  assert.equal(schedule.value.moves, undefined);
+  assert.deepEqual(schedule.value.marks, [history]);
+  assert.ok(textarea('2026-04-02'), 'the factual history remains open');
+  assert.equal(field('2026-04-02', 'control-planned-date'), undefined);
+});
+
+test('cancelling an unmarked move outside the period removes its empty editor row', async t => {
+  const { editor, schedule, deadline, row, textarea, input, cancelMoveButton } = await mountEditor(t, {
+    frequency: 'monthly', firstDate: '2026-01-31', customDates: [], marks: [],
+    moves: [{ from: '2026-03-31', to: '2026-04-02' }],
+  }, { selectedDate: '2026-04-02' });
+  await editor.focusSelectedDate();
+  deadline.value = '2026-02-28';
+  await nextTick();
+  await input(textarea('2026-04-02'), '');
+  await cancelMoveButton('2026-04-02').props.onClick();
+  await nextTick();
+  assert.equal(schedule.value.moves, undefined);
+  assert.ok(!row('2026-04-02'), 'an empty historical editor is removed with the cancelled move');
+});
+
+test('a custom source before a changed control date remains scheduled at its valid moved destination', async t => {
+  const { editor, controlDate, row, field, cancelMoveButton, disabled, schedule } = await mountEditor(t, {
+    frequency: 'custom', firstDate: '', customDates: ['2026-02-01'], marks: [],
+    moves: [{ from: '2026-02-01', to: '2026-03-01' }],
+  }, { selectedDate: '2026-03-01' });
+  await editor.focusSelectedDate();
+  controlDate.value = '2026-02-15';
+  await nextTick();
+  const status = find(row('2026-03-01'), node => node.props?.class?.includes('registry-status'));
+  assert.doesNotMatch(status.text, /Вне периода|Вне текущего/);
+  assert.ok(field('2026-03-01', 'control-planned-date'));
+  assert.ok(cancelMoveButton('2026-03-01'));
+  disabled.value = true;
+  await nextTick();
+  assert.equal(cancelMoveButton('2026-03-01').props.disabled, true);
+  await cancelMoveButton('2026-03-01').props.onClick();
+  assert.deepEqual(schedule.value.moves, [{ from: '2026-02-01', to: '2026-03-01' }]);
+});
+
+test('custom dates reject both moved destinations and original dates before adding a sorted date', async t => {
+  const { schedule, root, input, ownerDocument } = await mountEditor(t, {
+    frequency: 'custom', firstDate: '', customDates: ['2026-02-15', '2026-03-15'], marks: [],
+    moves: [{ from: '2026-02-15', to: '2026-02-17' }],
+  });
+  const customDate = find(root, node => node.props?.name === 'control-custom-date');
+  const add = find(root, node => node.type === 'button' && node.text === 'Добавить дату');
+  for (const duplicate of ['2026-02-15', '2026-02-17']) {
+    await input(customDate, duplicate);
+    assert.equal(add.props.disabled, true);
+    assert.equal(find(root, node => node.props?.role === 'status')?.text, 'Эта дата уже в графике.');
+    add.props.onClick();
+    assert.deepEqual(schedule.value.customDates, ['2026-02-15', '2026-03-15']);
+  }
+  await input(customDate, '2026-02-18');
+  assert.equal(add.props.disabled, false);
+  add.props.onClick();
+  await nextTick();
+  assert.deepEqual(schedule.value.customDates, ['2026-02-15', '2026-02-18', '2026-03-15']);
+  assert.equal(customDate.props.value, '');
+  assert.equal(ownerDocument.activeElement, customDate);
+});
+
+test('each recurring schedule clips the first period and accepts a date within it', async t => {
+  const controlDate = '2026-01-07';
+  const deadline = '2026-08-15';
+  for (const [frequency, start, end] of [
+    ['daily', controlDate, controlDate], ['weekly', '2026-01-05', '2026-01-11'], ['monthly', '2026-01-01', '2026-01-31'],
+    ['quarterly', '2026-01-01', '2026-03-31'], ['semiannual', '2026-01-01', '2026-06-30'], ['yearly', '2026-01-01', deadline],
+  ]) {
+    await t.test(frequency, async t => {
+      const { schedule, root, row, input } = await mountEditor(t, {
+        frequency, firstDate: '', customDates: [], marks: [], periodDates: {},
+      }, { controlDate, deadline, selectedDate: '' });
+      const date = find(root, node => node.props?.['data-control-period'] === start);
+      assert.deepEqual([date.props.min, date.props.max], [controlDate, end]);
+      await input(date, '2026-01-06');
+      assert.deepEqual(schedule.value.periodDates, {});
+      await input(date, end);
+      assert.deepEqual(schedule.value.periodDates, { [start]: end });
+      assert.ok(row(end));
+      await input(date, '');
+      assert.deepEqual(schedule.value.periodDates, { [start]: '' });
+      assert.equal(row(end), undefined);
+    });
+  }
+});
+
+test('a new monthly schedule exposes one editable date per month within the instruction period', async t => {
+  const { schedule, root, row, input } = await mountEditor(t, {
+    frequency: '', firstDate: '', customDates: [], marks: [],
+  }, { controlDate: '2026-01-20', deadline: '2026-03-10', selectedDate: '' });
+  const select = find(root, node => node.props?.name === 'control-frequency');
+  const period = start => find(root, node => node.props?.['data-control-period'] === start);
+  select.props.onChange({ target: { value: 'monthly' } });
+  await nextTick();
+
+  assert.deepEqual(schedule.value, { frequency: 'monthly', firstDate: '', customDates: [], marks: [], periodDates: {} });
+  assert.equal(find(root, node => node.props?.name === 'control-first-date'), undefined);
+  assert.equal(find(root, node => node.props?.name === 'control-custom-date'), undefined);
+  assert.deepEqual([period('2026-01-01').props.min, period('2026-01-01').props.max], ['2026-01-20', '2026-01-31']);
+  assert.deepEqual([period('2026-03-01').props.min, period('2026-03-01').props.max], ['2026-03-01', '2026-03-10']);
+  assert.equal(period('2026-04-01'), undefined);
+
+  await input(period('2026-01-01'), '2026-01-23');
+  await input(period('2026-02-01'), '2026-02-04');
+  await input(period('2026-03-01'), '2026-03-08');
+  assert.deepEqual(schedule.value.periodDates, {
+    '2026-01-01': '2026-01-23', '2026-02-01': '2026-02-04', '2026-03-01': '2026-03-08',
+  });
+  assert.ok(row('2026-03-08'), 'the preview shows the entered checkpoint');
+
+  await input(period('2026-03-01'), '2026-03-07');
+  assert.equal(schedule.value.periodDates['2026-03-01'], '2026-03-07');
+  assert.equal(row('2026-03-08'), undefined);
+  assert.ok(row('2026-03-07'));
+});
+
+test('existing schedules show the legacy planned date and override only the edited period', async t => {
+  const value = { frequency: 'quarterly', firstDate: '2026-01-15', customDates: ['2026-02-05'],
+    marks: [{ date: '2026-02-05', text: 'Отмечено', actualDate: '2026-02-06' }] };
+  const { schedule, root, input } = await mountEditor(t, value);
+  const period = start => find(root, node => node.props?.['data-control-period'] === start);
+  assert.equal(period('2026-01-01').props.value, '', 'a period with several legacy dates asks for one replacement');
+  assert.equal(period('2026-04-01').props.value, '2026-04-15');
+  assert.equal(schedule.value, value, 'opening the editor does not change the saved schedule');
+
+  await input(period('2026-01-01'), '2026-03-10');
+  assert.deepEqual(schedule.value, { ...value, periodDates: { '2026-01-01': '2026-03-10' } });
+  assert.equal(period('2026-04-01').props.value, '2026-04-15');
+  await input(period('2026-01-01'), '');
+  assert.deepEqual(schedule.value.periodDates, { '2026-01-01': '' });
+  assert.deepEqual(schedule.value.marks, value.marks);
+});
+
+test('the legacy date field stays visible when its value must be repaired', async t => {
+  const { controlDate, root, input } = await mountEditor(t, {
+    frequency: 'monthly', firstDate: '2026-01-15', customDates: [], marks: [], periodDates: {},
+  });
+  const anchor = () => find(root, node => node.props?.name === 'control-first-date');
+  const details = () => find(root, node => node.type === 'details');
+  assert.ok(!details().props.open);
+  controlDate.value = '2026-01-20';
+  await nextTick();
+  assert.equal(details().props.open, true);
+  assert.ok(find(root, node => node.text?.includes('Укажите дату начала сохранённого графика')));
+
+  await input(anchor(), '');
+  assert.ok(anchor(), 'clearing a legacy date does not remove the input');
+  assert.equal(details().props.open, true);
+  await input(anchor(), '2026-01-23');
+  assert.ok(!details().props.open);
+});
+
+test('daily period pages retain entries and provide a way to remove dates beyond a shortened deadline', async t => {
+  const { schedule, root, deadline, input } = await mountEditor(t, {
+    frequency: 'daily', firstDate: '', customDates: [], marks: [], periodDates: {},
+  }, { controlDate: '2026-01-01', deadline: '2026-01-31', selectedDate: '' });
+  const period = start => find(root, node => node.props?.['data-control-period'] === start);
+  const navigate = label => find(root, node => node.type === 'button' && node.text === label).props.onClick();
+  assert.ok(period('2026-01-12'));
+  assert.equal(period('2026-01-13'), undefined);
+  await input(period('2026-01-12'), '2026-01-12');
+  navigate('Следующие периоды');
+  await nextTick();
+  assert.ok(period('2026-01-13'));
+  assert.equal(period('2026-01-12'), undefined);
+  await input(period('2026-01-15'), '2026-01-15');
+  navigate('Предыдущие периоды');
+  await nextTick();
+  assert.equal(period('2026-01-12').props.value, '2026-01-12');
+
+  deadline.value = '2026-01-14';
+  await nextTick();
+  const remove = find(root, node => node.type === 'button' && node.text === 'Убрать дату');
+  assert.ok(remove, 'the now out-of-period Jan 15 date is still repairable');
+  remove.props.onClick();
+  await nextTick();
+  assert.equal(schedule.value.periodDates['2026-01-12'], '2026-01-12');
+  assert.equal(schedule.value.periodDates['2026-01-15'], '');
+});
+
+test('manual dates remain in the draft when switching between active frequencies', async t => {
+  const manualDates = ['2026-02-10'];
+  const { schedule, root } = await mountEditor(t, {
+    frequency: 'monthly', firstDate: '2026-02-15', customDates: manualDates, marks: [],
+  });
+  const select = find(root, node => node.props?.name === 'control-frequency');
+  for (const [frequency, start] of [['quarterly', '2026-01-01'], ['custom', ''], ['monthly', '2026-02-01']]) {
+    select.props.onChange({ target: { value: frequency } });
+    await nextTick();
+    assert.equal(schedule.value.frequency, frequency);
+    assert.deepEqual(schedule.value.customDates, start ? [] : manualDates);
+    assert.deepEqual(schedule.value.periodDates, start ? { [start]: manualDates[0] } : undefined);
+  }
+});
+
+test('changing the recurrence keeps the effective manual date and preserves marks', async t => {
+  const manualMove = { from: '2026-02-10', to: '2026-02-12' };
+  const automaticMove = { from: '2026-02-15', to: '2026-02-17' };
+  const marks = [
+    { date: manualMove.to, text: 'Ручная дата проверена', actualDate: '2026-02-11' },
+    { date: automaticMove.to, text: 'Плановая дата проверена', actualDate: '2026-02-16' },
+  ];
+  const { schedule, root, row, textarea } = await mountEditor(t, {
+    frequency: 'monthly', firstDate: '2026-01-15', customDates: [manualMove.from],
+    moves: [manualMove, automaticMove], marks,
+  });
+  const select = find(root, node => node.props?.name === 'control-frequency');
+  select.props.onChange({ target: { value: 'quarterly' } });
+  await nextTick();
+  assert.deepEqual(schedule.value.periodDates, { '2026-01-01': manualMove.to });
+  assert.equal(schedule.value.moves, undefined);
+  assert.deepEqual(schedule.value.marks, marks);
+
+  const month = find(root, node => node.props?.type === 'month');
+  month.props.onChange({ target: { value: '2026-02' } });
+  await nextTick();
+  assert.equal(row(manualMove.from), undefined);
+  const open = async date => {
+    const button = find(row(date), node => node.props?.class?.includes('control-schedule-row-details'));
+    button.props.onClick();
+    await nextTick();
+  };
+  await open(manualMove.to);
+  assert.equal(textarea(manualMove.to).props.value, marks[0].text);
+  await open(automaticMove.to);
+  assert.ok(find(row(automaticMove.to), node => node.text === 'Вне текущего графика'), 'the former automatic destination remains as history');
+});
+
+test('changing cadence keeps conflicting effective dates until a period date is chosen', async t => {
+  const blockedMoves = [
+    { from: '2026-02-10', to: '2026-02-11' },
+    { from: '2026-02-11', to: '2026-02-12' },
+  ];
+  const independentMove = { from: '2026-02-13', to: '2026-02-14' };
+  const { schedule, root, input } = await mountEditor(t, {
+    frequency: 'monthly', firstDate: '2026-01-15',
+    customDates: [...blockedMoves, independentMove].map(move => move.from),
+    moves: [...blockedMoves, independentMove], marks: [],
+  });
+  const select = find(root, node => node.props?.name === 'control-frequency');
+  select.props.onChange({ target: { value: 'weekly' } });
+  await nextTick();
+  assert.deepEqual(schedule.value.customDates, [...blockedMoves, independentMove].map(move => move.to));
+  const week = find(root, node => node.props?.['data-control-period'] === '2026-02-09');
+  assert.equal(week.props.value, '');
+  assert.ok(find(root, node => node.text === 'Есть несколько дат. Выберите одну для этого периода.'));
+  await input(week, independentMove.to);
+  assert.deepEqual(schedule.value.periodDates, { '2026-02-09': independentMove.to });
+});
+
+test('out-of-period custom dates remain removable and update browser validity', async t => {
+  const { schedule, root, row, controlDate } = await mountEditor(t, {
+    frequency: 'custom', firstDate: '', customDates: ['2026-02-01', '2026-02-15'], marks: [],
+  });
+  const customDate = find(root, node => node.props?.name === 'control-custom-date');
+  controlDate.value = '2026-02-10';
+  await nextTick();
+  assert.equal(customDate.validationMessage, 'Удалите даты вне периода контроля.');
+  assert.ok(row('2026-02-01'), 'the invalid date stays visible so it can be removed');
+  find(row('2026-02-01'), node => node.props?.class?.includes('control-schedule-remove')).props.onClick();
+  await nextTick();
+  assert.deepEqual(schedule.value.customDates, ['2026-02-15']);
+  assert.equal(customDate.validationMessage, '');
+  find(row('2026-02-15'), node => node.props?.class?.includes('control-schedule-remove')).props.onClick();
+  await nextTick();
+  assert.equal(customDate.validationMessage, 'Добавьте хотя бы одну дату промежуточного контроля.');
+});
+
+test('a completed custom move stays valid when its destination falls outside the new deadline', async t => {
+  const destination = '2026-03-02';
+  const { editor, schedule, root, deadline, field, textarea, input } = await mountEditor(t, {
+    frequency: 'custom', firstDate: '', customDates: ['2026-02-28'],
+    moves: [{ from: '2026-02-28', to: destination }], marks: [{ date: destination, text: 'Принято' }],
+  }, { selectedDate: destination });
+  await editor.focusSelectedDate();
+  deadline.value = '2026-02-28';
+  await nextTick();
+  const customDate = find(root, node => node.props?.name === 'control-custom-date');
+  assert.equal(customDate.validationMessage, '');
+  const planned = field(destination, 'control-planned-date');
+  assert.ok(planned.props.value <= planned.props.max, 'opening saved history must not invalidate the parent form');
+  assert.equal(find(root, node => node.props?.class?.includes('control-schedule-warning')), undefined);
+  assert.equal(schedule.value.marks[0].text, 'Принято');
+  await input(textarea(destination), '');
+  assert.equal(customDate.validationMessage, 'Удалите даты вне периода контроля.');
+  assert.ok(find(root, node => node.props?.class?.includes('control-schedule-warning')));
+});
+
+test('navigation and rejected move drafts do not dirty the persisted schedule', async t => {
+  const value = { frequency: 'monthly', firstDate: '2026-01-15', customDates: [], marks: [] };
+  const { editor, schedule, root, row, field, moveButton, input } = await mountEditor(t, value);
+  await editor.focusSelectedDate();
+  await input(field('2026-02-15', 'control-actual-date'), '2026-02-01');
+  await input(field('2026-02-15', 'control-planned-date'), '2027-01-15');
+  await moveButton('2026-02-15').props.onClick();
+  await nextTick();
+  assert.equal(schedule.value, value, 'draft dates and rejected moves do not emit model changes');
+  assert.ok(find(root, node => node.props?.role === 'alert')?.text);
+  await input(field('2026-02-15', 'control-planned-date'), '2026-02-16');
+  assert.equal(find(root, node => node.props?.role === 'alert'), undefined, 'editing a move clears its previous error');
+  const month = find(root, node => node.props?.type === 'month');
+  const invalidTarget = { value: '' };
+  month.props.onChange({ target: invalidTarget });
+  await nextTick();
+  assert.equal(invalidTarget.value, '2026-02');
+  assert.ok(row('2026-02-15'));
+  month.props.onChange({ target: { value: '2026-03' } });
+  await nextTick();
+  assert.ok(row('2026-03-15'));
+  assert.equal(schedule.value, value, 'month navigation does not emit model changes');
+});

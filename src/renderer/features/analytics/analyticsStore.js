@@ -1,0 +1,95 @@
+import { defineStore } from 'pinia';
+import { computed, onScopeDispose, reactive, shallowRef, watch } from 'vue';
+import { localDate } from '../../../shared/registry.js';
+import { emptyAnalyticsFilters, normalizeAnalyticsFilters } from '../../../shared/analytics.js';
+import { analyticsService } from './AnalyticsService.js';
+import { errorMessage } from '../../infrastructure/errorMessage.js';
+import { createRequestChannel } from '../../infrastructure/requestScope.js';
+import { useAppStore } from '../../app/appStore.js';
+import { initialAnalyticsFilters } from './analyticsFilters.js';
+
+export function createAnalyticsStore({ getApp = useAppStore, service = analyticsService, initialDate = localDate } = {}) {
+  return defineStore('analytics', () => {
+    const app = getApp();
+    const initial = initialAnalyticsFilters(initialDate());
+    const draftFilters = reactive({ ...initial }); const appliedFilters = shallowRef({ ...initial });
+    const data = shallowRef(null); const loading = shallowRef(false); const error = shallowRef(''); const filterError = shallowRef('');
+    const executorOptions = shallowRef([]);
+    const ready = computed(() => Boolean(app.database?.ready));
+    const filtersChanged = computed(() => JSON.stringify(draftFilters) !== JSON.stringify(appliedFilters.value));
+    const requests = createRequestChannel();
+    let loadedKey; let consumers = 0;
+    let page = 1;
+    const keyFor = () => JSON.stringify([app.database?.generation, app.revision, appliedFilters.value, page]);
+    async function refresh({ force = false, keepData = false } = {}) {
+      if (!ready.value) { requests.invalidate(); data.value = null; loading.value = false; return Promise.resolve(false); }
+      const key = keyFor();
+      const pending = requests.hasPending(key);
+      const cached = loadedKey === key && data.value !== null;
+      const ticket = requests.issue(key);
+      error.value = '';
+      if (!force && !pending && cached) { loading.value = false; return true; }
+      const request = { filters: { ...appliedFilters.value }, generation: app.database.generation, page };
+      const matchesSelection = () => ready.value && keyFor() === key;
+      loading.value = true;
+      if (!keepData && !(pending && cached)) data.value = null;
+      try {
+        const published = await requests.run(key, async accepts => {
+          if (!accepts() || !matchesSelection()) return false;
+          const result = await service.summary(request);
+          if (!result || !accepts() || !matchesSelection()) return false;
+          if (result.instructions) page = result.instructions.page;
+          loadedKey = keyFor();
+          executorOptions.value = result.executorOptions ?? executorOptions.value;
+          data.value = result;
+          return true;
+        });
+        return published && ticket.isCurrent();
+      } catch (cause) {
+        if (ticket.isCurrent() && matchesSelection()) error.value = errorMessage(cause, 'Не удалось загрузить аналитику.');
+        return false;
+      } finally {
+        // The accepted response can clamp the requested page and change the key.
+        if (ticket.isCurrent()) loading.value = false;
+      }
+    }
+    function applyFilters() {
+      try {
+        const filters = normalizeAnalyticsFilters(draftFilters); filterError.value = '';
+        Object.assign(draftFilters, filters); appliedFilters.value = filters;
+        page = 1;
+        return refresh();
+      } catch (cause) { filterError.value = errorMessage(cause); return Promise.resolve(false); }
+    }
+    function resetFilters() { Object.assign(draftFilters, emptyAnalyticsFilters()); return applyFilters(); }
+    function selectExecutor(key) {
+      if (typeof key !== 'string') return Promise.resolve(false);
+      draftFilters.executor = key;
+      appliedFilters.value = { ...appliedFilters.value, executor: key };
+      page = 1;
+      return refresh();
+    }
+    function setPage(value) {
+      if (!appliedFilters.value.executor || !Number.isSafeInteger(value) || value < 1) return Promise.resolve(false);
+      page = value;
+      return refresh({ keepData: true });
+    }
+    function acquire() { consumers++; void refresh(); let released = false; return () => { if (!released) { consumers--; released = true; } }; }
+    watch([() => app.database?.generation, () => app.database?.ready, () => app.revision], ([generation, databaseReady], [previousGeneration, previousReady]) => {
+      requests.invalidate(); loadedKey = undefined; data.value = null; error.value = ''; loading.value = false;
+      if (generation !== previousGeneration || databaseReady !== previousReady) {
+        draftFilters.executor = '';
+        appliedFilters.value = { ...appliedFilters.value, executor: '' };
+        page = 1;
+        executorOptions.value = [];
+      }
+      if (consumers > 0) void refresh();
+    }, { flush: 'sync' });
+    onScopeDispose(() => requests.dispose());
+    return {
+      draftFilters, appliedFilters, data, executorOptions, loading, error, filterError, ready, filtersChanged,
+      refresh, applyFilters, resetFilters, selectExecutor, setPage, acquire,
+    };
+  });
+}
+export const useAnalyticsStore = createAnalyticsStore();

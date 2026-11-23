@@ -1,0 +1,102 @@
+:root {
+  --motion-fast: 140ms;
+  --motion-page-enter: 210ms;
+  --motion-page-exit: 75ms;
+  --motion-surface-enter: 260ms;
+  --motion-surface-exit: 145ms;
+  --motion-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-ease-in: cubic-bezier(0.4, 0, 1, 1);
+}
+
+.workspace-enter-active {
+  transition: opacity var(--motion-page-enter) var(--motion-ease-out), transform var(--motion-page-enter) var(--motion-ease-out);
+  will-change: opacity, transform;
+}
+.workspace-leave-active {
+  transition: opacity var(--motion-page-exit) var(--motion-ease-in), transform var(--motion-page-exit) var(--motion-ease-in);
+  pointer-events: none;
+  will-change: opacity, transform;
+}
+.workspace-enter-from { opacity: 0; transform: translate3d(0, 5px, 0); }
+.workspace-leave-to { opacity: 0; transform: translate3d(0, -2px, 0); }
+
+.theme-symbol-enter-active, .theme-symbol-leave-active {
+  transition: opacity var(--motion-fast) ease, transform var(--motion-fast) var(--motion-ease-out);
+}
+.theme-symbol-enter-from { opacity: 0; transform: rotate(-25deg) scale(.8); }
+.theme-symbol-leave-to { opacity: 0; transform: rotate(20deg) scale(.85); }
+.app-body, .nav-symbol, .storage-link, .storage-symbol,
+.registry-results, .calendar-layout, .analytics-summary, .settings-section {
+  transition: background-color var(--motion-fast) ease, border-color var(--motion-fast) ease, color var(--motion-fast) ease;
+}
+
+.sidebar-floating {
+  position: absolute;
+  inset: 6px auto 6px 6px;
+  z-index: 31;
+  width: min(232px, calc(100vw - 12px));
+  height: auto;
+  padding: 16px 10px 10px;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: linear-gradient(160deg, var(--sidebar-top), var(--rail) 72%);
+  box-shadow: 0 14px 44px rgb(15 24 42 / .18), var(--surface-shadow);
+  transform-origin: 0 24px;
+}
+.navigation-panel-enter-active { transition: opacity var(--motion-surface-enter) var(--motion-ease-out), transform var(--motion-surface-enter) var(--motion-ease-out); }
+.navigation-panel-leave-active { transition: opacity var(--motion-surface-exit) var(--motion-ease-in), transform var(--motion-surface-exit) var(--motion-ease-in); pointer-events: none; }
+.navigation-panel-enter-from, .navigation-panel-leave-to { opacity: 0; transform: translate3d(-10px, 0, 0) scale(.985); }
+.navigation-shade-enter-active { transition: opacity var(--motion-surface-enter) var(--motion-ease-out); }
+.navigation-shade-leave-active { transition: opacity var(--motion-surface-exit) var(--motion-ease-in); pointer-events: none; }
+.navigation-shade-enter-from, .navigation-shade-leave-to { opacity: 0; }
+
+/* A native popover remains in the top layer throughout its closing transition. */
+.registry-filter-panel {
+  opacity: 0;
+  transform: translate3d(0, -6px, 0) scale(.98);
+  transform-origin: 24px 0;
+  pointer-events: none;
+  transition: opacity var(--motion-surface-exit) var(--motion-ease-in), transform var(--motion-surface-exit) var(--motion-ease-in), overlay var(--motion-surface-exit) allow-discrete, display var(--motion-surface-exit) allow-discrete;
+}
+.registry-filter-panel:popover-open {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+  transition: opacity 240ms var(--motion-ease-out), transform 240ms var(--motion-ease-out), overlay 240ms allow-discrete, display 240ms allow-discrete;
+}
+@starting-style {
+  .registry-filter-panel:popover-open { opacity: 0; transform: translate3d(0, -6px, 0) scale(.98); }
+}
+/* Chromium 108 has no Popover API. The teleported fallback stays above the page. */
+.registry-filter-panel[data-fallback] { z-index: 40; }
+.registry-filter-panel[data-fallback][data-open='true'] { opacity: 1; transform: none; pointer-events: auto; animation: legacy-filter-enter 240ms var(--motion-ease-out); }
+@keyframes legacy-filter-enter {
+  from { opacity: 0; transform: translate3d(0, -6px, 0) scale(.98); }
+  to { opacity: 1; transform: none; }
+}
+
+:is(.registry-dialog, .calendar-task-dialog, .calendar-confirm-dialog) { transform-origin: center; }
+:is(.registry-dialog, .calendar-task-dialog, .calendar-confirm-dialog)::backdrop {
+  opacity: 1;
+  transition: opacity var(--motion-surface-enter) var(--motion-ease-out);
+}
+:is(.registry-dialog, .calendar-task-dialog, .calendar-confirm-dialog)[data-motion-state='leaving']::backdrop {
+  opacity: 0;
+  transition-duration: var(--motion-surface-exit);
+  transition-timing-function: var(--motion-ease-in);
+}
+@starting-style {
+  :is(.registry-dialog, .calendar-task-dialog, .calendar-confirm-dialog)[open]::backdrop { opacity: 0; }
+}
+
+:is(.registry-button, .calendar-button, .calendar-icon-button, .icon-button, .nav-item, .theme-option, .storage-button, .calendar-date) {
+  transition: background-color var(--motion-fast) ease, color var(--motion-fast) ease, border-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease, transform var(--motion-fast) var(--motion-ease-out);
+}
+:is(.registry-button, .calendar-button, .calendar-icon-button, .icon-button, .nav-item, .theme-option, .storage-button, .calendar-date):active:not(:disabled) { transform: scale(.98); }
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --motion-fast: 0ms; --motion-page-enter: 0ms; --motion-page-exit: 0ms; --motion-surface-enter: 0ms; --motion-surface-exit: 0ms; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  .workspace-enter-from, .workspace-leave-to, .navigation-panel-enter-from, .navigation-panel-leave-to { opacity: 1; transform: none; }
+  :is(.registry-button, .calendar-button, .calendar-icon-button, .icon-button, .nav-item, .theme-option, .storage-button, .calendar-date):active:not(:disabled) { transform: none; }
+}

@@ -1,0 +1,25 @@
+name: Ошибка
+description: Описать воспроизводимую ошибку Work Board
+body:
+  - type: markdown
+    attributes:
+      value: Не прикладывайте рабочую SQLite, выгрузки с персональными данными или секреты. Для уязвимости используйте SECURITY.md.
+  - type: textarea
+    id: steps
+    attributes:
+      label: Как воспроизвести
+      description: Шаги, ожидаемое и фактическое поведение
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Среда
+      placeholder: Версия Work Board, Windows, установленная или portable-сборка
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Диагностика
+      description: Обезличенный скриншот, сообщение ошибки или результат команды проверки

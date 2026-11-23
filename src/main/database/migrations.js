@@ -1,0 +1,129 @@
+import { runTransaction } from './transaction.js';
+import { DATABASE_CONFIG } from './databaseConfig.js';
+import { EFFECTIVE_INSTRUCTION_DEADLINE_SQL } from './instructionDeadline.js';
+
+// Published DDL also identifies historical files. Always append a new version.
+export const migrations = [
+  {
+    version: 1,
+    sql: `CREATE TABLE app_settings (
+      key TEXT PRIMARY KEY NOT NULL,
+      value TEXT NOT NULL
+    ) STRICT;`,
+  },
+  {
+    version: 2,
+    sql: `CREATE TABLE instructions (
+      id INTEGER PRIMARY KEY,
+      control_date TEXT NOT NULL,
+      incoming_number TEXT NOT NULL DEFAULT '',
+      instruction_number TEXT NOT NULL,
+      title TEXT NOT NULL,
+      summary TEXT NOT NULL DEFAULT '',
+      deadline TEXT NOT NULL,
+      executor TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed')),
+      execution_mark TEXT NOT NULL DEFAULT '',
+      instruction_number_search TEXT NOT NULL,
+      executor_search TEXT NOT NULL,
+      execution_mark_search TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX instructions_deadline_status_idx ON instructions (deadline, status);
+    CREATE INDEX instructions_status_idx ON instructions (status);
+    CREATE INDEX instructions_control_date_idx ON instructions (control_date);
+    CREATE TABLE calendar_tasks (
+      id INTEGER PRIMARY KEY,
+      title TEXT NOT NULL,
+      date TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      priority TEXT NOT NULL DEFAULT 'normal' CHECK (priority IN ('normal', 'important', 'urgent')),
+      completed INTEGER NOT NULL DEFAULT 0 CHECK (completed IN (0, 1)),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX calendar_tasks_date_completed_idx ON calendar_tasks (date, completed);`,
+  },
+  {
+    version: 3,
+    sql: `CREATE TABLE attachments (
+      id INTEGER PRIMARY KEY,
+      instruction_id INTEGER REFERENCES instructions(id) ON DELETE CASCADE,
+      task_id INTEGER REFERENCES calendar_tasks(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      relative_path TEXT NOT NULL UNIQUE,
+      size INTEGER NOT NULL CHECK (size >= 0),
+      created_at TEXT NOT NULL,
+      CHECK ((instruction_id IS NOT NULL AND task_id IS NULL) OR (instruction_id IS NULL AND task_id IS NOT NULL))
+    ) STRICT;
+    CREATE INDEX attachments_instruction_idx ON attachments(instruction_id);
+    CREATE INDEX attachments_task_idx ON attachments(task_id);`,
+  },
+  {
+    version: 4,
+    sql: `ALTER TABLE instructions ADD COLUMN source TEXT NOT NULL DEFAULT '';
+    ALTER TABLE instructions ADD COLUMN control_type TEXT NOT NULL DEFAULT '';`,
+  },
+  {
+    version: 5,
+    sql: `ALTER TABLE instructions ADD COLUMN extended_until TEXT NOT NULL DEFAULT '';
+    CREATE INDEX instructions_effective_deadline_status_idx ON instructions (${EFFECTIVE_INSTRUCTION_DEADLINE_SQL}, status);`,
+  },
+  {
+    version: 6,
+    sql: `ALTER TABLE instructions ADD COLUMN control_schedule TEXT NOT NULL DEFAULT '';
+    CREATE INDEX instructions_control_schedule_idx ON instructions (id) WHERE control_schedule <> '';`,
+  },
+  {
+    version: 7,
+    sql: 'ALTER TABLE instructions ADD COLUMN closed_at TEXT;',
+  },
+  {
+    version: 8,
+    sql: `ALTER TABLE instructions ADD COLUMN document_type TEXT NOT NULL DEFAULT '';
+    ALTER TABLE instructions ADD COLUMN document_type_search TEXT NOT NULL DEFAULT '';
+    CREATE INDEX instructions_document_type_idx ON instructions (document_type_search);`,
+  },
+  {
+    version: 9,
+    sql: `ALTER TABLE calendar_tasks ADD COLUMN recurrence TEXT NOT NULL DEFAULT '';
+    CREATE TABLE calendar_task_completions (
+      task_id INTEGER NOT NULL REFERENCES calendar_tasks(id) ON DELETE CASCADE,
+      date TEXT NOT NULL,
+      PRIMARY KEY (task_id, date)
+    ) STRICT;
+    CREATE INDEX calendar_task_completions_date_idx ON calendar_task_completions (date);`,
+  },
+  {
+    version: 10,
+    sql: `CREATE TABLE calendar_task_moves (
+      task_id INTEGER NOT NULL REFERENCES calendar_tasks(id) ON DELETE CASCADE,
+      original_date TEXT NOT NULL,
+      target_date TEXT NOT NULL CHECK (target_date <> original_date),
+      PRIMARY KEY (task_id, original_date),
+      UNIQUE (task_id, target_date)
+    ) STRICT;
+    CREATE INDEX calendar_task_moves_original_date_idx ON calendar_task_moves (original_date);
+    CREATE INDEX calendar_task_moves_target_date_idx ON calendar_task_moves (target_date);`,
+  },
+];
+
+// The caller holds a transaction across inspection, schema updates and identity repair.
+export function applyMigrations(database) {
+  const current = database.prepare('PRAGMA user_version').get().user_version;
+  const latest = migrations.at(-1)?.version ?? 0;
+  if (current > latest) throw new Error('Версия базы данных новее версии приложения.');
+  for (const migration of migrations) {
+    if (migration.version <= current) continue;
+    database.exec(migration.sql);
+  }
+  if (current !== latest) database.exec(`PRAGMA user_version = ${latest}`);
+  if (database.prepare('PRAGMA application_id').get().application_id === 0) {
+    database.exec(`PRAGMA application_id = ${DATABASE_CONFIG.APPLICATION_ID}`);
+  }
+}
+
+export function migrate(database) {
+  runTransaction(database, () => applyMigrations(database));
+}

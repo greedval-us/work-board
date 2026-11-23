@@ -1,0 +1,263 @@
+import assert from 'node:assert/strict';
+import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { test } from 'node:test';
+import { DatabaseSync } from 'node:sqlite';
+import { DatabaseService } from '../../src/main/database/DatabaseService.js';
+import { DatabaseLocation } from '../../src/main/database/DatabaseLocation.js';
+import { DATABASE_CONFIG } from '../../src/main/database/databaseConfig.js';
+import { migrations } from '../../src/main/database/migrations.js';
+import { InstructionRepository } from '../../src/main/repositories/InstructionRepository.js';
+import { TaskRepository } from '../../src/main/repositories/TaskRepository.js';
+
+const currentSchemaVersion = migrations.at(-1).version;
+
+function fixture(t) {
+  const directory = mkdtempSync(path.join(tmpdir(), 'work-board-selection-'));
+  const database = new DatabaseService();
+  const location = new DatabaseLocation({ userData: directory, database });
+  t.after(() => { database.close(); rmSync(directory, { recursive: true, force: true }); });
+  return { directory, database, location };
+}
+
+function createLegacyRegistryDatabase(filePath, version) {
+  const connection = new DatabaseSync(filePath);
+  try {
+    for (const migration of migrations.filter((entry) => entry.version <= version)) connection.exec(migration.sql);
+    connection.exec(`PRAGMA user_version = ${version}; PRAGMA application_id = ${DATABASE_CONFIG.APPLICATION_ID}`);
+    connection.exec(`INSERT INTO instructions (
+      id, control_date, instruction_number, title, deadline, executor,
+      instruction_number_search, executor_search, execution_mark_search, created_at, updated_at
+    ) VALUES (
+      17, '2026-10-23', '007/Б', 'Проверить отчёт', '2026-10-26', 'Иванов И. И.',
+      '007/б', 'иванов и. и.', '', '2026-10-23T00:00:00Z', '2026-10-23T00:00:00Z'
+    )`);
+    if (version === 4) connection.exec("UPDATE instructions SET source = 'Архив', control_type = 'Плановый'");
+  } finally { connection.close(); }
+}
+
+test('first run has no database until the user selects one', (t) => {
+  const { database, location } = fixture(t);
+  location.restore();
+  assert.equal(database.getStatus().ready, false);
+  assert.equal(database.getStatus().filePath, null);
+});
+
+test('an interrupted migration of an original unbranded database can resume without losing settings', t => {
+  const { database, directory } = fixture(t);
+  const filePath = path.join(directory, 'original-installation.sqlite');
+  const original = new DatabaseSync(filePath);
+  try {
+    original.exec(`CREATE TABLE app_settings (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL) STRICT;
+      INSERT INTO app_settings VALUES ('theme', 'dark');
+      PRAGMA user_version = 1;`);
+  } finally { original.close(); }
+
+  const exec = DatabaseSync.prototype.exec;
+  const interruption = new Error('temporary write failure');
+  const failure = t.mock.method(DatabaseSync.prototype, 'exec', function (sql) {
+    if (sql === migrations[2].sql) throw interruption;
+    return exec.call(this, sql);
+  });
+  try { assert.throws(() => database.replace({ filePath }), error => error === interruption); }
+  finally { failure.mock.restore(); }
+
+  assert.equal(database.replace({ filePath }).schemaVersion, currentSchemaVersion);
+  assert.equal(database.connection.prepare("SELECT value FROM app_settings WHERE key = 'theme'").get().value, 'dark');
+});
+
+test('create and reopen persist the chosen location and guard stale writes', (t) => {
+  const { database, directory, location } = fixture(t);
+  const filePath = path.join(directory, 'chosen.sqlite');
+  database.replace({ filePath, create: true, persist: (value) => location.save(value) });
+  const generation = database.getStatus().generation;
+  database.assertGeneration(generation);
+  database.connection.prepare('INSERT INTO app_settings VALUES (?, ?)').run('theme', 'dark');
+  assert.equal(JSON.parse(readFileSync(location.configPath, 'utf8')).filePath, filePath);
+  database.close();
+  location.restore();
+  assert.equal(database.connection.prepare('SELECT value FROM app_settings WHERE key = ?').get('theme').value, 'dark');
+  assert.throws(() => database.assertGeneration(generation), /база|обновите/i);
+});
+
+test('failed config persistence leaves the original connection and file active', (t) => {
+  const { database, directory } = fixture(t);
+  const original = path.join(directory, 'original.sqlite');
+  const next = path.join(directory, 'next.sqlite');
+  database.replace({ filePath: original, create: true });
+  const generation = database.getStatus().generation;
+  assert.throws(() => database.replace({ filePath: next, create: true, persist() { throw new Error('disk failure'); } }), /disk failure/);
+  assert.equal(database.getStatus().filePath, original);
+  assert.equal(database.getStatus().generation, generation);
+  assert.equal(existsSync(next), false);
+  assert.equal(database.connection.prepare('SELECT 42 AS value').get().value, 42);
+});
+
+test('foreign database is rejected before journal or schema changes', (t) => {
+  const { database, directory } = fixture(t);
+  const foreign = path.join(directory, 'foreign.sqlite');
+  const raw = new DatabaseSync(foreign);
+  raw.exec('CREATE TABLE unrelated (value TEXT); PRAGMA user_version = 1;');
+  raw.close();
+  const before = readFileSync(foreign);
+  assert.throws(() => database.replace({ filePath: foreign }), /Work Board|другая/i);
+  assert.deepEqual(readFileSync(foreign), before);
+  assert.equal(database.getStatus().ready, false);
+});
+
+test('opening a version 3 database preserves instruction data and initializes the new fields', (t) => {
+  const { database, directory } = fixture(t);
+  const filePath = path.join(directory, 'version-3.sqlite');
+  createLegacyRegistryDatabase(filePath, 3);
+  database.replace({ filePath });
+  assert.equal(database.getStatus().schemaVersion, currentSchemaVersion);
+  const { instructionNumber, executor, source, deadline, extendedUntil } = new InstructionRepository(database).get(17);
+  assert.deepEqual({ instructionNumber, executor, source, deadline, extendedUntil }, {
+    instructionNumber: '007/Б', executor: 'Иванов И. И.', source: '', deadline: '2026-10-26', extendedUntil: '',
+  });
+});
+
+test('opening a version 4 database keeps existing instruction details and defaults the extension', (t) => {
+  const { database, directory } = fixture(t);
+  const filePath = path.join(directory, 'version-4.sqlite');
+  createLegacyRegistryDatabase(filePath, 4);
+  database.replace({ filePath });
+  assert.equal(database.getStatus().schemaVersion, currentSchemaVersion);
+  const { source, deadline, extendedUntil } = new InstructionRepository(database).get(17);
+  assert.deepEqual({ source, deadline, extendedUntil }, {
+    source: 'Архив', deadline: '2026-10-26', extendedUntil: '',
+  });
+  assert.equal(database.connection.prepare('SELECT control_type FROM instructions WHERE id = 17').get().control_type, 'Плановый');
+});
+
+for (const [version, missing] of [[4, 'instruction fields'], [5, 'extension'], [6, 'checkpoint schedule']]) {
+  test(`a version ${version} database missing its ${missing} is rejected`, t => {
+    const { database, directory } = fixture(t);
+    const filePath = path.join(directory, 'incomplete.sqlite');
+    createLegacyRegistryDatabase(filePath, version - 1);
+    const connection = new DatabaseSync(filePath);
+    try { connection.exec(`PRAGMA user_version = ${version}`); }
+    finally { connection.close(); }
+    assert.throws(() => database.replace({ filePath }), { code: 'DATABASE_INVALID' });
+  });
+}
+
+test('opening a version 5 database preserves extensions and initializes the checkpoint schedule', (t) => {
+  const { database, directory } = fixture(t);
+  const filePath = path.join(directory, 'version-5.sqlite');
+  createLegacyRegistryDatabase(filePath, 5);
+  const connection = new DatabaseSync(filePath);
+  try { connection.exec("UPDATE instructions SET extended_until = '2026-11-02'"); }
+  finally { connection.close(); }
+
+  database.replace({ filePath });
+  assert.equal(database.getStatus().schemaVersion, currentSchemaVersion);
+  const { deadline, extendedUntil, controlSchedule } = new InstructionRepository(database).get(17);
+  assert.equal(deadline, '2026-10-26');
+  assert.equal(extendedUntil, '2026-11-02');
+  assert.deepEqual(controlSchedule, { frequency: '', firstDate: '', customDates: [], marks: [] });
+});
+
+test('opening a version 6 database keeps completed instructions in the open registry', (t) => {
+  const { database, directory } = fixture(t);
+  const filePath = path.join(directory, 'version-6.sqlite');
+  createLegacyRegistryDatabase(filePath, 6);
+  const connection = new DatabaseSync(filePath);
+  try { connection.exec("UPDATE instructions SET status = 'completed' WHERE id = 17"); }
+  finally { connection.close(); }
+
+  database.replace({ filePath });
+  const instructions = new InstructionRepository(database);
+  assert.deepEqual(instructions.list().items.map(({ id, status, closedAt }) => [id, status, closedAt]), [[17, 'completed', null]]);
+  assert.equal(instructions.list({ closed: true }).total, 0);
+});
+
+test('opening version 7 preserves closed records with an initially empty document type', (t) => {
+  const { database, directory } = fixture(t);
+  const filePath = path.join(directory, 'version-7.sqlite');
+  createLegacyRegistryDatabase(filePath, 7);
+  const connection = new DatabaseSync(filePath);
+  try { connection.exec("UPDATE instructions SET closed_at = '2026-10-25T00:00:00Z' WHERE id = 17"); }
+  finally { connection.close(); }
+
+  database.replace({ filePath });
+  assert.equal(database.getStatus().schemaVersion, currentSchemaVersion);
+  const instructions = new InstructionRepository(database);
+  const archived = instructions.list({ closed: true });
+  assert.deepEqual(archived.items.map(({ id, documentType }) => [id, documentType]), [[17, '']]);
+  assert.deepEqual(archived.documentTypes, []);
+  assert.equal(instructions.update(17, { documentType: 'Письмо' }).documentType, 'Письмо');
+});
+
+test('opening version 8 keeps a completed task one-time with its saved date', (t) => {
+  const { database, directory } = fixture(t);
+  const filePath = path.join(directory, 'version-8.sqlite');
+  createLegacyRegistryDatabase(filePath, 8);
+  const connection = new DatabaseSync(filePath);
+  try {
+    connection.prepare(`INSERT INTO calendar_tasks
+      (id, title, date, completed, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(8, 'Проверить журнал', '2026-11-16', 1, '2026-11-16T08:00:00Z', '2026-11-16T10:00:00Z');
+  } finally { connection.close(); }
+
+  database.replace({ filePath });
+  const tasks = new TaskRepository(database);
+  assert.equal(database.getStatus().schemaVersion, currentSchemaVersion);
+  const task = tasks.get(8);
+  assert.equal(task.completed, true);
+  assert.equal(Object.hasOwn(task, 'recurrence'), false);
+  assert.deepEqual(tasks.occurrences({ from: '2026-11-16', to: '2026-11-30' }), [task]);
+});
+
+test('opening version 9 preserves a series and its existing completion when moving a date', (t) => {
+  const { database, directory } = fixture(t);
+  const filePath = path.join(directory, 'version-9.sqlite');
+  createLegacyRegistryDatabase(filePath, 9);
+  const connection = new DatabaseSync(filePath);
+  const originalDate = '2026-11-23';
+  try {
+    connection.prepare(`INSERT INTO calendar_tasks
+      (id, title, date, recurrence, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(8, 'Проверить журнал', '2026-11-16', '{"frequency":"weekly"}', '2026-11-16T08:00:00Z', '2026-11-16T10:00:00Z');
+    connection.prepare('INSERT INTO calendar_task_completions (task_id, date) VALUES (?, ?)').run(8, originalDate);
+  } finally { connection.close(); }
+
+  database.replace({ filePath });
+  const tasks = new TaskRepository(database);
+  assert.equal(database.getStatus().schemaVersion, currentSchemaVersion);
+  assert.equal(tasks.get(8, originalDate).completed, true);
+  const moved = tasks.moveOccurrence(8, originalDate, '2026-11-24');
+  assert.equal(moved.completed, true);
+  assert.equal(moved.originalDate, originalDate);
+});
+
+test('missing selected database and create-on-existing never destroy files', (t) => {
+  const { database, directory, location } = fixture(t);
+  const missing = path.join(directory, 'missing.sqlite');
+  location.save(missing);
+  location.restore();
+  assert.equal(existsSync(missing), false);
+  assert.equal(database.getStatus().ready, false);
+  assert.match(database.getStatus().message, /найден|открыть/i);
+  const existing = path.join(directory, 'existing.sqlite');
+  database.replace({ filePath: existing, create: true });
+  const before = readFileSync(existing);
+  assert.throws(() => database.replace({ filePath: existing, create: true }), /существует/i);
+  assert.deepEqual(readFileSync(existing), before);
+});
+
+test('an incomplete current schema cannot replace a healthy active database', (t) => {
+  const { database, directory } = fixture(t);
+  const original = path.join(directory, 'healthy.sqlite');
+  database.replace({ filePath: original, create: true });
+  const damaged = new DatabaseService({ filePath: path.join(directory, 'damaged.sqlite') });
+  damaged.open();
+  damaged.connection.exec('DROP TABLE instructions');
+  const candidate = damaged.filePath;
+  damaged.close();
+  const before = readFileSync(candidate);
+  assert.throws(() => database.replace({ filePath: candidate }), /структур|поврежд/i);
+  assert.equal(database.getStatus().filePath, original);
+  assert.deepEqual(readFileSync(candidate), before);
+});

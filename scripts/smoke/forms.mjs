@@ -1,0 +1,42 @@
+const instructionField = field => `.registry-form-grid [name="${field}"]`;
+const optionForm = field => `[data-registry-option="${field}"]`;
+const optionRow = (field, value) =>
+  `.registry-option-group:has(> ${optionForm(field)}) [data-registry-option-value=${JSON.stringify(value)}]`;
+const controlCardDialog = '.registry-control-card-dialog[open]';
+const reportField = name => `${controlCardDialog} [name="${name}"]`;
+
+export async function chooseExcelReport({ click, wait }, label) {
+  const dialog = '.registry-confirm-dialog[open]';
+  await click('Выгрузить Excel', '.registry-toolbar button');
+  await wait(`document.querySelector('${dialog} h2')?.textContent === 'Формат отчёта Excel'`);
+  await click(label, `${dialog} button`);
+  await wait(`!document.querySelector('${dialog}')`);
+}
+
+export function createSmokeForms({ fill, wait, js }) {
+  async function fillInstruction(values) {
+    for (const [field, value] of Object.entries(values)) await fill(instructionField(field), { 0: value });
+  }
+
+  async function selectRegistryDirectory(field) {
+    const selector = 'select[name=registry-directory]';
+    await wait(`document.querySelector('${selector}')?.matches(':enabled')`);
+    await fill(selector, { 0: field });
+    await wait(`document.querySelector(${JSON.stringify(optionForm(field))})?.getClientRects().length > 0`);
+  }
+
+  async function addRegistryOption(field, value, contacts = {}) {
+    await selectRegistryDirectory(field);
+    const form = optionForm(field);
+    const input = `${form} input`;
+    await wait(`document.querySelector(${JSON.stringify(input)})?.matches(':enabled')`);
+    await fill(input, { 0: value });
+    for (const [contact, selected] of Object.entries(contacts)) {
+      await fill(`${form} select[name=${contact}]`, { 0: selected });
+    }
+    await js(`document.querySelector(${JSON.stringify(form)}).requestSubmit()`);
+    await wait(`document.querySelector(${JSON.stringify(input)})?.value === ''`);
+  }
+
+  return { instructionField, fillInstruction, optionForm, optionRow, selectRegistryDirectory, addRegistryOption, controlCardDialog, reportField };
+}

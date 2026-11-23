@@ -1,0 +1,4 @@
+export const SQLITE_PRIMARY_CODE_MASK = 0xff;
+export const SQLITE_RESULT = Object.freeze({
+  PERMISSION: 3, BUSY: 5, LOCKED: 6, READ_ONLY: 8, CANNOT_OPEN: 14, AUTHORIZATION: 23,
+});
