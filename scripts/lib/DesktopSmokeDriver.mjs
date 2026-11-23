@@ -63,7 +63,6 @@ export function assertWorkspaceFits(measurements, kind, label) {
 
 export class DesktopSmokeDriver {
   errors = [];
-  pageMotionVerified = false;
 
   constructor(window, { output, timing = {} } = {}) {
     this.window = window;
@@ -110,10 +109,6 @@ export class DesktopSmokeDriver {
   navigate = async (route, heading) => {
     await this.js(`document.querySelector('nav a[href=${JSON.stringify('#' + route)}]').click()`);
     await this.wait(`document.querySelector('h1')?.textContent === ${JSON.stringify(heading)}`);
-    if (!this.pageMotionVerified) {
-      await this.verifyEntrance('.page', 'page navigation');
-      this.pageMotionVerified = true;
-    }
   };
 
   fill = async (selector, values) => {

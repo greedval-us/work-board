@@ -23,7 +23,14 @@ export async function setupRegistry(driver, fixture) {
   assert.equal((await api('database', 'getStatus')).ready, false);
   await click('Создать базу', '.registry-setup button');
   await wait("Boolean(document.querySelector('.registry-results'))");
+  // Observe the incoming page before clicking, so a slow polling round trip cannot miss its fade.
+  await js(`document.addEventListener('transitionend', function onSettingsFade(event) {
+    if (!event.target.matches('.settings-page') || event.propertyName !== 'opacity' || event.elapsedTime <= 0) return;
+    performance.mark('smoke-settings-fade-in');
+    document.removeEventListener('transitionend', onSettingsFade);
+  })`);
   await navigate('/settings', 'Настройки');
+  await wait("performance.getEntriesByName('smoke-settings-fade-in', 'mark').length > 0");
   await wait("document.querySelector('.file-path')?.textContent.includes('selected-controls.sqlite')");
   const initial = await api('database', 'getStatus');
   const generation = initial.generation;
