@@ -46,6 +46,23 @@ test('desktop smoke polling retries renderer conditions and reports exhausted co
   await assert.rejects(driver.wait('false'), /Renderer condition not met: false/);
 });
 
+test('ordinary smoke navigation waits for the destination even when motion is disabled', async () => {
+  const heading = { textContent: 'Реестр указаний' };
+  const elements = {
+    h1: heading,
+    'nav a[href="#/calendar"]': { click() { heading.textContent = 'Календарь и задачи'; } },
+    '.page': { getAnimations: () => [] },
+  };
+  const driver = rendererDriver({
+    document: { querySelector: selector => elements[selector] },
+    requestAnimationFrame: callback => callback(),
+    getComputedStyle: () => ({ opacity: '1', transform: 'none' }),
+  });
+
+  await driver.navigate('/calendar', 'Календарь и задачи');
+  await assert.rejects(driver.navigate('/calendar', 'Настройки'), /Renderer condition not met/);
+});
+
 function registryMeasurements() {
   return {
     width: 1000, height: 600, document: { width: 1001, height: 601 }, columns: INSTRUCTION_COLUMNS.length + 1, dates: [],

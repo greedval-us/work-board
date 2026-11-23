@@ -72,7 +72,7 @@ function groupOccurrenceMoves(moves) {
   return movesByTask;
 }
 
-export function latestUnmovedTaskDate(task, through, movedOrigins, previousCandidate) {
+function latestUnmovedTaskDate(task, through, movedOrigins, previousCandidate) {
   const earliest = previousCandidate > task.date ? previousCandidate : task.date;
   let to = through;
   while (to >= earliest) {
@@ -80,7 +80,7 @@ export function latestUnmovedTaskDate(task, through, movedOrigins, previousCandi
     const from = lookback < earliest ? earliest : lookback;
     let latest;
     for (const date of taskOccurrenceDates(task, { from, to })) {
-      if (!movedOrigins?.has(date)) latest = date;
+      if (!movedOrigins.has(date)) latest = date;
     }
     if (latest || from === earliest) return latest;
     to = addCalendarDays(from, -1);
@@ -88,34 +88,36 @@ export function latestUnmovedTaskDate(task, through, movedOrigins, previousCandi
   return undefined;
 }
 
-function agendaOccurrence(task, moves, agendaDate) {
+function selectSeriesOccurrence(task, moves, day, preferUpcoming) {
   const movedOrigins = new Set();
   let upcomingMove;
   let previousMove;
   for (const move of moves) {
     movedOrigins.add(move.originalDate);
-    if (move.date >= agendaDate) {
+    if (move.date >= day) {
       if (!upcomingMove || move.date < upcomingMove.date) upcomingMove = move;
     } else if (!previousMove || move.date > previousMove.date) previousMove = move;
   }
 
-  for (const date of taskOccurrenceDates(task, { from: agendaDate, to: upcomingMove?.date ?? DATE_LIMITS.MAX })) {
-    if (!movedOrigins.has(date)) return { date, originalDate: date };
+  if (preferUpcoming) {
+    for (const date of taskOccurrenceDates(task, { from: day, to: upcomingMove?.date ?? DATE_LIMITS.MAX })) {
+      if (!movedOrigins.has(date)) return { date, originalDate: date };
+    }
+    if (upcomingMove) return upcomingMove;
   }
-  if (upcomingMove) return upcomingMove;
-  if (agendaDate === DATE_LIMITS.MIN) return undefined;
+  if (day === DATE_LIMITS.MIN) return undefined;
 
-  const previousDate = latestUnmovedTaskDate(task, addCalendarDays(agendaDate, -1), movedOrigins, previousMove?.date);
+  const previousDate = latestUnmovedTaskDate(task, addCalendarDays(day, -1), movedOrigins, previousMove?.date);
   return previousDate && (!previousMove || previousDate > previousMove.date)
     ? { date: previousDate, originalDate: previousDate } : previousMove;
 }
 
-export function taskAgendaOccurrences(tasks, moves, agendaDate) {
+export function selectSeriesOccurrences(tasks, moves, day, { preferUpcoming }) {
   const movesByTask = groupOccurrenceMoves(moves);
   const occurrences = [];
   for (const task of tasks) {
     if (!task.recurrence) continue;
-    const occurrence = agendaOccurrence(task, movesByTask.get(task.id) ?? [], agendaDate);
+    const occurrence = selectSeriesOccurrence(task, movesByTask.get(task.id) ?? [], day, preferUpcoming);
     if (occurrence) occurrences.push({ task, date: occurrence.date, originalDate: occurrence.originalDate });
   }
   return occurrences;

@@ -1,36 +1,7 @@
-import { addCalendarDays, localDate, validateDate } from '../../shared/dates.js';
-import { DATE_LIMITS } from '../../shared/constants/dates.js';
+import { localDate, validateDate } from '../../shared/dates.js';
 import { buildDeadlineNotifications, deadlineNotificationHorizon } from '../../shared/deadlineNotifications.js';
 import { validateRecord } from '../../shared/validation.js';
 import { ValidationError } from '../../shared/errors.js';
-import { latestUnmovedTaskDate } from '../domain/taskOccurrences.js';
-
-function taskReminderOccurrences(tasks, today, horizon) {
-  const pending = tasks.occurrences({ from: today, to: horizon });
-  if (today === DATE_LIMITS.MIN) return pending;
-
-  const yesterday = addCalendarDays(today, -1);
-  const moved = new Map();
-  const latestPast = new Map();
-  for (const { taskId, originalDate, date } of tasks.occurrenceMoves()) {
-    if (!moved.has(taskId)) moved.set(taskId, new Set());
-    moved.get(taskId).add(originalDate);
-    if (date <= yesterday && date > (latestPast.get(taskId) ?? '')) latestPast.set(taskId, date);
-  }
-  for (const task of tasks.list({ to: yesterday })) {
-    if (!task.recurrence) {
-      pending.push(task);
-      continue;
-    }
-    const latest = latestUnmovedTaskDate(task, yesterday, moved.get(task.id), latestPast.get(task.id) ?? '');
-    if (latest) latestPast.set(task.id, latest);
-  }
-  for (const [taskId, date] of latestPast) {
-    const task = tasks.get(taskId, date);
-    if (task) pending.push(task);
-  }
-  return pending;
-}
 
 function validateAcknowledgement(value) {
   const request = validateRecord(value, 'Подтверждение уведомлений');
@@ -64,7 +35,7 @@ export class NotificationService {
     const items = buildDeadlineNotifications({
       instructions: this.instructions.all({ filters: { deadlineTo: horizon } }),
       scheduledInstructions: this.instructions.scheduledForCalendar(),
-      tasks: taskReminderOccurrences(this.tasks, today, horizon), today,
+      tasks: [...this.tasks.occurrences({ from: today, to: horizon }), ...this.tasks.overdueBefore(today)], today,
     });
     const receipts = this.repository.get();
     return { today, ...(this.getDeliveryStatus ? { delivery: this.getDeliveryStatus() } : {}), items: items.map(item => {

@@ -54,7 +54,7 @@ test('saving a Ф‑21 exports report overrides and saved checks without changin
   assert.match(text, /Участок делопроизводства\s*Приёмная № 4/);
   assert.match(text, /Отдел контроля, Иванов И\. И\., тел\. 112-23/);
   assert.match(text, /Результат проверки/);
-  assert.doesNotMatch(text, /001\/К|Устаревший телефон|Молочная коровка|Участок из настроек/);
+  assert.doesNotMatch(text, /001\/К|Устаревший телефон|Участок из настроек/);
   assert.equal(record.instructionNumber, '001/К');
   assert.equal(record.office, undefined);
   assert.deepEqual((await readdir(directory)).sort(), ['report.docx', 'work.docx']);

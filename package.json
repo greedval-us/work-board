@@ -20,6 +20,8 @@
   },
   "scripts": {
     "icons": "node scripts/generateIcons.mjs",
+    "check:repository": "node scripts/checkRepository.mjs",
+    "check:dependencies": "npm audit && npm --prefix packaging/legacy audit",
     "test:package": "node scripts/checkPackage.mjs",
     "test:package:legacy": "node scripts/checkPackage.mjs --legacy",
     "test:desktop:legacy": "node scripts/checkLegacyDesktop.mjs",
@@ -46,17 +48,17 @@
     "vue-router": "4.5.1"
   },
   "overrides": {
-    "app-builder-lib": {
-      "tar": "7.5.21"
+    "exceljs": {
+      "uuid": "11.1.1"
     },
-    "builder-util-runtime": "9.7.0"
+    "minimatch@>=7 <11.0.1": "11.0.1"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "6.0.1",
     "autoprefixer": "10.4.21",
     "concurrently": "9.2.0",
-    "electron": "38.8.6",
-    "electron-builder": "24.13.3",
+    "electron": "45.4.1",
+    "electron-builder": "26.18.0",
     "pe-library": "2.0.1",
     "postcss": "8.5.31",
     "resedit": "3.1.0",

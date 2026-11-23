@@ -18,7 +18,8 @@ function deadlineAlert(item) {
 const rows = computed(() => props.items.map((item) => ({
   ...item,
   deadlineAlert: deadlineAlert(item),
-  closedDate: item.closedAt ? localDate(new Date(item.closedAt)) : '',
+  controlDateLabel: formatDate(item.controlDate),
+  closedDateLabel: props.closed && item.closedAt ? formatDate(localDate(new Date(item.closedAt))) : '',
   checkpointLabel: formatDate(item.nextCheckpoint),
   checkpointOverdue: Boolean(item.nextCheckpoint && item.nextCheckpoint < props.today),
   frequencyLabel: item.controlFrequency ? CONTROL_FREQUENCIES[item.controlFrequency] : '',
@@ -58,7 +59,7 @@ const columnLabels = { controlDate: 'Учёт с', incomingNumber: 'Вх. №', 
       <tbody>
         <tr v-for="item in rows" :key="item.id" class="registry-row" @click="emit('open', item.id)">
           <td data-column="id"><span class="registry-cell-text registry-number" :title="String(item.id)">{{ item.id }}</span></td>
-          <td data-column="controlDate"><time class="registry-cell-date" :datetime="item.controlDate" :title="formatDate(item.controlDate)" :aria-label="formatDate(item.controlDate)"><span class="registry-date-full">{{ formatDate(item.controlDate) }}</span><span class="registry-date-short" aria-hidden="true">{{ formatDate(item.controlDate).slice(0, 5) }}</span></time></td>
+          <td data-column="controlDate"><time class="registry-cell-date" :datetime="item.controlDate" :title="item.controlDateLabel" :aria-label="item.controlDateLabel"><span class="registry-date-full">{{ item.controlDateLabel }}</span><span class="registry-date-short" aria-hidden="true">{{ item.controlDateLabel.slice(0, 5) }}</span></time></td>
           <td data-column="incomingNumber"><span class="registry-cell-text" :title="item.incomingNumber">{{ item.incomingNumber || '—' }}</span></td>
           <td data-column="instructionNumber"><span class="registry-cell-text registry-number" :title="item.instructionNumber">{{ item.instructionNumber }}</span></td>
           <td data-column="documentType"><span class="registry-cell-text" :title="item.documentType">{{ item.documentType || '—' }}</span></td>
@@ -71,8 +72,8 @@ const columnLabels = { controlDate: 'Учёт с', incomingNumber: 'Вх. №', 
             <span v-if="date.showUrgency && item.deadlineAlert" class="registry-urgency" :class="`registry-tone-${item.deadlineAlert.tone}`" :title="item.deadlineAlert.label"><component :is="item.deadlineAlert.tone === 'danger' ? CircleAlert : Clock3" :size="12" aria-hidden="true" /><span>{{ item.deadlineAlert.label }}</span></span>
           </td>
           <td v-if="props.closed" data-column="closedAt">
-            <time v-if="item.closedAt" class="registry-cell-date" :datetime="item.closedAt" :title="formatDate(item.closedDate)" :aria-label="formatDate(item.closedDate)">
-              <span class="registry-date-full">{{ formatDate(item.closedDate) }}</span><span class="registry-date-short" aria-hidden="true">{{ formatDate(item.closedDate).slice(0, 5) }}</span>
+            <time v-if="item.closedAt" class="registry-cell-date" :datetime="item.closedAt" :title="item.closedDateLabel" :aria-label="item.closedDateLabel">
+              <span class="registry-date-full">{{ item.closedDateLabel }}</span><span class="registry-date-short" aria-hidden="true">{{ item.closedDateLabel.slice(0, 5) }}</span>
             </time>
             <span v-else>—</span>
           </td>

@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -10,3 +11,5 @@ const applicationRoot = typeof __WORK_BOARD_APP_ROOT__ === 'undefined'
 export function appPath(...segments) {
   return path.join(applicationRoot, ...segments);
 }
+
+export const requireFromApp = createRequire(appPath('package.json'));

@@ -177,6 +177,36 @@ test('overdue task reminders honor earlier moves and skip displaced dates even b
   ]);
 });
 
+test('checking overdue reminders uses the same number of SQLite reads as more series are added', t => {
+  const { database, tasks, service } = fixture(t);
+  const createSeries = () => tasks.create({ title: 'Проверка', date: '2026-11-05', recurrence: { frequency: 'weekly' } });
+  const first = createSeries();
+  const statement = Object.getPrototypeOf(database.connection.prepare('SELECT 1'));
+  const all = t.mock.method(statement, 'all');
+  const get = t.mock.method(statement, 'get');
+  function scan() {
+    all.mock.resetCalls();
+    get.mock.resetCalls();
+    const items = service.list().items;
+    return { items, reads: all.mock.callCount() + get.mock.callCount() };
+  }
+  const initial = scan();
+  assert.equal(initial.items.length, 2);
+
+  const moved = createSeries();
+  tasks.moveOccurrence(moved.id, '2026-11-05', '2026-11-06');
+  const completed = createSeries();
+  tasks.moveOccurrence(completed.id, '2026-11-05', '2026-11-06');
+  tasks.updateOccurrence(completed.id, '2026-11-06', true);
+  const result = scan();
+  assert.deepEqual(result.items.map(({ recordId, date }) => [recordId, date]), [
+    [first.id, '2026-11-05'], [moved.id, '2026-11-06'],
+    [first.id, '2026-11-12'], [moved.id, '2026-11-12'], [completed.id, '2026-11-12'],
+  ]);
+  assert.match(result.items[1].id, /:2026-11-05$/);
+  assert.equal(result.reads, initial.reads);
+});
+
 test('checkpoint reminders follow moves, omit marked history and completed parents, and include every due occurrence', t => {
   const f = fixture(t);
   const instruction = f.instruction({ deadline: '2026-11-30', controlSchedule: {

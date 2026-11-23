@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'vue';
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'vue';
 import { onBeforeRouteLeave, onBeforeRouteUpdate, RouterLink, useRoute } from 'vue-router';
 import { Archive, Columns3, Download, FolderOpen, Plus, RefreshCw, SearchX } from 'lucide-vue-next';
 import registryFolder from '../../assets/registry-folder.webp';
@@ -10,12 +10,12 @@ import { useAppStore } from '../../app/appStore.js';
 import PageHeading from '../../ui/PageHeading.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
 import ExportOpenWarning from './components/ExportOpenWarning.vue';
-import InstructionDialog from './components/InstructionDialog.vue';
 import RegistryFilters from './components/RegistryFilters.vue';
 import RegistryPagination from './components/RegistryPagination.vue';
 import RegistryTable from './components/RegistryTable.vue';
 import './registry.css';
 
+const InstructionDialog = defineAsyncComponent(() => import('./components/InstructionDialog.vue'));
 const props = defineProps({ closed: Boolean });
 const sectionTitle = props.closed ? 'Закрытый контроль' : 'Реестр указаний';
 const routeName = props.closed ? 'ClosedControl' : 'Registry';
@@ -112,7 +112,12 @@ function updateDate() {
   midnightTimer = setTimeout(updateDate, next.getTime() - now.getTime() + 100);
 }
 
-const guardDraft = async () => editor.value ? editor.value.requestClose() : true;
+function guardDraft() {
+  if (editor.value) return editor.value.requestClose();
+  // Navigation can leave the selected card while its editor is still loading.
+  if (selected.value) closeRecord();
+  return true;
+}
 const unregisterGuard = app.registerUnsavedGuard(guardDraft);
 onBeforeRouteLeave(guardDraft);
 const routeNavigation = useRegistryRoute({ app, route, routeName, selected, selectedCheckpoint, openRecord, requestClose: guardDraft });
