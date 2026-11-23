@@ -73,10 +73,10 @@ test('typography follows the active database and applies only after a successful
 });
 
 test('registry and Ф‑21 options load for the active database and refresh after each saved change', async (t) => {
-  const first = { source: ['Канцелярия'], executor: [], department: ['Отдел кадров'], executorPhone: ['+7 900 100-20-30'] };
+  const first = { source: ['Канцелярия'], executor: [], department: ['Отдел кадров'], executorPhone: ['+7 000 000-00-01'] };
   const second = { source: [], executor: ['Иванов'], department: ['Архив'], executorPhone: [] };
-  const oldPhone = '+7 900 123-45-67';
-  const newPhone = '+7 900 765-43-21';
+  const oldPhone = '+7 000 000-00-02';
+  const newPhone = '+7 000 000-00-04';
   const store = bridge(t, {
     database: {
       getStatus: async () => ({ ready: true, generation: 1 }),

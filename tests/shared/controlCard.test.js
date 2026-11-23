@@ -33,10 +33,10 @@ test('Ф‑21 overrides may clear prefilled fields, supply optional fields, or k
 
 test('Ф‑21 accepts an office line separately from executor contact options', () => {
   const department = validateRegistryOption('department', '  Отдел контроля  ');
-  const executorPhone = validateRegistryOption('executorPhone', '  +7 900 555-01-23 доб. 17 ');
+  const executorPhone = validateRegistryOption('executorPhone', '  +7 000 000-00-03 доб. 17 ');
   const values = normalizeControlCardFields({ department, executorPhone, office: '  Канцелярия, 123-45  ', officePhone: '01' });
   assert.equal(values.department, 'Отдел контроля');
-  assert.equal(values.executorPhone, '+7 900 555-01-23 доб. 17');
+  assert.equal(values.executorPhone, '+7 000 000-00-03 доб. 17');
   assert.equal(values.office, 'Канцелярия, 123-45');
   assert.equal(Object.hasOwn(values, 'officePhone'), false);
   assert.throws(() => normalizeControlCardFields({ office: 'а'.repeat(501) }), ValidationError);

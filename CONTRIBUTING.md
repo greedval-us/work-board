@@ -30,7 +30,16 @@ npm run dev
 
 ## Проверки
 
+После добавления файлов в индекс Git проверьте состав коммита:
+
 ```sh
+npm run check:repository
+```
+
+Проверка ищет файлы, подпадающие под правила `.gitignore`, и распространённые форматы ключей доступа в индексированном тексте.
+
+```sh
+npm run check:dependencies
 npm run check
 npm run test:desktop
 ```

@@ -1,7 +1,6 @@
 import { readFile } from 'node:fs/promises';
-import JSZip from 'jszip';
 import { formatDate } from '../../../shared/dates.js';
-import { appPath } from '../../runtime/appPaths.js';
+import { appPath, requireFromApp } from '../../runtime/appPaths.js';
 
 const TEMPLATE = appPath('src/main/exports/word/control-card-f21.docx');
 const DOCUMENT = 'word/document.xml';
@@ -57,6 +56,7 @@ function fillHistory(fragment, marks) {
 }
 
 export async function createControlCardDocument({ fields, marks = [], recordId }) {
+  const JSZip = requireFromApp('jszip');
   const archive = await JSZip.loadAsync(await readFile(TEMPLATE));
   const template = await archive.file(DOCUMENT).async('string');
   const [before, history, after] = template.split(HISTORY_SECTION);

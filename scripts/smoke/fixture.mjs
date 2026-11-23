@@ -40,7 +40,7 @@ export function createSmokeFixture(userData, dialog, today = localDate()) {
   }
   const nextCheckpointCell = '.registry-table tbody td[data-column=nextCheckpoint]';
   const registrySelections = { documentType: 'Письмо', source: 'Канцелярия', executor: 'Иванов И.И.' };
-  const reportSelections = { department: 'Отдел контроля', executorPhone: '+7 900 555-01-23' };
+  const reportSelections = { department: 'Отдел контроля', executorPhone: '+7 000 000-00-03' };
   return {
     userData, firstFile, secondFile, exportFile, shortExportFile, controlCardFile,
     openRequests, openPath,

@@ -23,6 +23,15 @@ coverage/
 *.pid.lock
 *.tgz
 *.tmp
+*.dmp
+*.stackdump
+*.exe
+*.msi
+*.asar
+*.blockmap
+/test-results/
+/playwright-report/
+/userData/
 
 # Local databases, exported documents and recovery files
 *.sqlite
@@ -36,9 +45,14 @@ coverage/
 *.db.*
 *.files/
 database-location.json
+*.xls
 *.xlsx
+*.xlsm
+*.csv
+*.doc
 *.docx
 !/src/main/exports/word/control-card-f21.docx
+*.pdf
 ~$*
 .~lock.*#
 *.bak
@@ -56,16 +70,39 @@ database-location.json
 *.pfx
 /secrets/
 /.secrets/
-/.aws/
-/.ssh/
+.aws/
+.ssh/
 credentials*.json
 service-account*.json
 
-# Editor, OS and local agent state
+# Editor and OS state
 .idea/
 .vscode/
 .vscode-test/
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Local assistant configuration, sessions and working notes
+.agents/
+.codex/
+.claude/
+.cursor/
+.gemini/
+.windsurf/
+.aider*
+.clinerules
+.cursorrules
+.cursorignore
+.windsurfrules
+AGENTS.md
+AGENTS.override.md
+CLAUDE.md
+CLAUDE.local.md
+GEMINI.md
 .superpowers/
+/docs/superpowers/
+/.github/copilot-instructions.md
+/.github/agents/
+/.github/instructions/
+/.github/prompts/

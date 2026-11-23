@@ -240,7 +240,7 @@ test('registry option renames follow saved instructions and removal preserves va
     source: ['Канцелярия', 'Архив', 'Приёмная'],
     executor: ['Отдел кадров', 'Бухгалтерия'],
     department: ['Отдел контроля', 'Отдел отчётности'],
-    executorPhone: ['+7 900 555-01-23', '102'],
+    executorPhone: ['+7 000 000-00-03', '102'],
   })) {
     for (const value of values) settings.addRegistryOption(field, value);
   }
@@ -258,7 +258,7 @@ test('registry option renames follow saved instructions and removal preserves va
   settings.updateRegistryOption('department', 'Отдел контроля', 'Управление контроля');
   settings.updateRegistryOption('executorPhone', '102', '103');
   settings.removeRegistryOption('department', 'Отдел отчётности');
-  settings.removeRegistryOption('executorPhone', '+7 900 555-01-23');
+  settings.removeRegistryOption('executorPhone', '+7 000 000-00-03');
   settings.removeRegistryOption('source', 'Канцелярия');
   const removed = settings.removeRegistryOption('executor', 'Бухгалтерия');
   const expected = {
@@ -367,7 +367,7 @@ test('executor contacts persist after reopening and follow edits and deletions i
   const settings = settingsFor(database);
   const executor = 'Иванов И. И.';
   const department = 'Отдел контроля';
-  const executorPhone = '+7 900 555-01-23';
+  const executorPhone = '+7 000 000-00-03';
   settings.addRegistryOption('executor', executor);
   settings.addRegistryOption('department', department);
   settings.addRegistryOption('executorPhone', executorPhone);

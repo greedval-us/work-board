@@ -1,9 +1,9 @@
-import ExcelJS from 'exceljs';
 import {
   CHECKPOINT_FILTER_LABELS, formatDate, INSTRUCTION_COLUMNS, INSTRUCTION_STATUSES, instructionDeadline,
   localDate, normalizeExportRequest, REGISTRY_REPORT_TYPE,
 } from '../../../shared/registry.js';
 import { CONTROL_FREQUENCIES } from '../../../shared/controlSchedule.js';
+import { requireFromApp } from '../../runtime/appPaths.js';
 import { FULL_INSTRUCTION_COLUMNS, SHORT_INSTRUCTION_COLUMNS, WORKBOOK_CONFIG as config } from './workbookConfig.js';
 
 const FONT = { name: config.FONT_NAME, size: config.FONT_SIZE };
@@ -97,7 +97,8 @@ export function createRegistryWorkbook({ rows, request = {}, exportedAt = new Da
   const normalized = normalizeExportRequest(request);
   const short = normalized.reportType === REGISTRY_REPORT_TYPE.SHORT;
   const columns = short ? SHORT_INSTRUCTION_COLUMNS : FULL_INSTRUCTION_COLUMNS;
-  const workbook = new ExcelJS.Workbook();
+  const { Workbook } = requireFromApp('exceljs');
+  const workbook = new Workbook();
   workbook.creator = config.CREATOR;
   workbook.created = exportedAt;
   const sheet = workbook.addWorksheet(config.INSTRUCTIONS_SHEET, { views: [{ state: 'frozen', ySplit: config.HEADER_ROW }] });

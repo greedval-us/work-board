@@ -53,7 +53,7 @@ test('Ф‑21 fills and underlines the header fields in the supplied form', asyn
   assert.ok(afterPageBreak);
   assert.match(visibleText(afterPageBreak), /Наименование подразделения, исполнитель \(фамилия, инициалы, телефон\)/);
   assertRun(afterPageBreak, 'Отдел № 5, Иванов И. И., тел. 678-90', true);
-  assert.doesNotMatch(visibleText(xml), /Молочная коровка|0988366648|78467593047|финансовый отдел ООО|01\.01\.2026|123-45/);
+  assert.ok(!visibleText(xml).includes('123-45'));
   assert.ok(Object.keys(archive.files).every(name => !/^(docProps|customXml)\//.test(name)));
   for (const part of ['[Content_Types].xml', '_rels/.rels', 'word/_rels/document.xml.rels']) {
     assert.doesNotMatch(await archive.file(part).async('string'), /(?:docProps|customXml)\//);
@@ -96,6 +96,14 @@ test('Ф‑21 keeps a manually entered «от» only once in each number', async
 test('Ф‑21 retains the blank lines and verification table of the supplied form', async () => {
   const { xml, tables, history } = await report();
   assert.deepEqual(tables.map(table => elements(table, 'tr').length), [3, 5, 6, 32]);
+  const labels = elements(xml, 'p').map(paragraph => visibleText(paragraph).trim()).filter(Boolean);
+  assert.deepEqual(labels, [
+    'КОНТРОЛЬНАЯ КАРТОЧКА', 'учета исполнения поручения №',
+    'Срок исполнения:', 'Продлен до:', 'Участок делопроизводства', 'Подписной №', 'Вх. №', 'Поступил из',
+    'Вид и краткое содержание СДМ:', 'Содержание поручения (резолюции):', 'Отметка об исполнении:',
+    '(отметка о снятии с контроля)', '(дата)', '(подпись)',
+    'Наименование подразделения, исполнитель (фамилия, инициалы, телефон):', 'Дата проверки', 'Ход исполнения',
+  ]);
   const heading = xml.slice(0, xml.indexOf(tables[0]));
   const blankLines = elements(heading, 'r').filter(run => visibleText(run).includes('\u2007'));
   assert.ok(blankLines.length >= 6);

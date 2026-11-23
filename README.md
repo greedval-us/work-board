@@ -239,7 +239,7 @@ scripts/smoke/                    # пользовательские сцена�
 ## SQLite
 
 Используется встроенный `node:sqlite`, без `sqlite3`, `better-sqlite3`,
-`node-gyp` и пересборки нативных модулей. В Electron 38 он уже доступен.
+`node-gyp` и пересборки нативных модулей. В основной сборке с Electron 45 этот модуль встроен.
 Node.js может выводить штатный `ExperimentalWarning` для этого API.
 
 При первом запуске без существующей базы приложение предлагает открыть настройки
@@ -336,8 +336,9 @@ preload и Vue. Сценарий охватывает первый запуск,
 
 ## GitHub
 
-Workflow [Windows CI](.github/workflows/ci.yml) запускает `npm ci`, `npm run check`
-и `npm run test:desktop` на push, pull request и вручную.
+Workflow [Windows CI](.github/workflows/ci.yml) проверяет состав репозитория, устанавливает зависимости
+через `npm ci`, запускает `npm run check:dependencies`, `npm run check` и `npm run test:desktop`
+на push, pull request и вручную.
 Скриншоты smoke доступны в artifacts запуска.
 Workflow [Build Windows artifacts](.github/workflows/build-windows.yml) запускается вручную:
 проверяет приложение, собирает Windows с `--publish never`, выполняет `npm run test:package`
