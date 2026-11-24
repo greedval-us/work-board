@@ -3,6 +3,7 @@ import { createDesktopService } from '../../infrastructure/desktopApi.js';
 export const settingsService = createDesktopService({
   get: ['settings', 'get'],
   setTheme: ['settings', 'setTheme'],
+  setAppearanceStyle: ['settings', 'setAppearanceStyle'],
   setTypography: ['settings', 'setTypography'],
   setOffice: ['settings', 'setOffice'],
   addRegistryOption: ['settings', 'addRegistryOption'],

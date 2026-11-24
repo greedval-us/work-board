@@ -1,4 +1,11 @@
 export const THEMES = Object.freeze(['light', 'dark', 'system']);
+export const APP_APPEARANCE_STYLES = Object.freeze({
+  standard: 'Стандартная',
+  witcher: 'Ведьмак',
+  'harry-potter': 'Гарри Поттер',
+  cyberpunk: 'Киберпанк',
+  gzhel: 'Гжель',
+});
 export const APP_FONT_FAMILIES = Object.freeze({ inter: 'Inter', system: 'Системный' });
 export const APP_FONT_SIZE_LIMITS = Object.freeze({ min: 12, max: 16 });
 export const INSTRUCTION_OPTION_LABELS = Object.freeze({
@@ -20,6 +27,7 @@ export const REGISTRY_OPTION_LIMITS = Object.freeze({
 });
 export const DEFAULT_SETTINGS = Object.freeze({
   theme: 'light',
+  appearanceStyle: 'standard',
   typography: Object.freeze({ fontFamily: 'inter', fontSize: 14 }),
   registryOptions: Object.freeze(Object.fromEntries(
     Object.keys(REGISTRY_OPTION_LABELS).map(field => [field, Object.freeze([])]),

@@ -5,6 +5,7 @@ import router from './app/router.js';
 import { useErrorStore } from './app/errorStore.js';
 import { installErrorHandling } from './app/installErrorHandling.js';
 import './app/style.css';
+import './ui/themedControls.css';
 import './ui/motion.css';
 import './features/notifications/notifications.css';
 

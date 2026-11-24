@@ -1,7 +1,8 @@
 <script setup>
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'vue';
 import { onBeforeRouteLeave, onBeforeRouteUpdate, RouterLink, useRoute } from 'vue-router';
-import { Archive, Columns3, Download, FolderOpen, Plus, RefreshCw, SearchX } from 'lucide-vue-next';
+import { Archive, Columns3, RefreshCw, SearchX } from 'lucide-vue-next';
+import ActionIcon from '../../ui/ActionIcon.vue';
 import registryFolder from '../../assets/registry-folder.webp';
 import { normalizeSearch, REGISTRY_REPORT_TYPE } from '../../../shared/registry.js';
 import { useRegistry } from './useRegistry.js';
@@ -133,8 +134,8 @@ onBeforeUnmount(() => { disposed = true; surfaceVersion++; unregisterGuard(); cl
       <div class="registry-toolbar">
         <PageHeading :title="sectionTitle" />
         <div v-if="ready" class="registry-actions">
-          <button ref="exportButton" class="registry-button" type="button" aria-haspopup="dialog" :disabled="exporting || app.databaseSwitching" @click="chooseExportFormat"><Download :size="15" aria-hidden="true" />{{ exporting ? 'Выгрузка…' : 'Выгрузить Excel' }}</button>
-          <button v-if="!props.closed" class="registry-button registry-button-primary" type="button" :disabled="!canMutate" @click="createRecord"><Plus :size="16" aria-hidden="true" />Добавить указание</button>
+          <button ref="exportButton" class="registry-button" type="button" aria-haspopup="dialog" :disabled="exporting || app.databaseSwitching" @click="chooseExportFormat"><ActionIcon name="export" :size="15" />{{ exporting ? 'Выгрузка…' : 'Выгрузить Excel' }}</button>
+          <button v-if="!props.closed" class="registry-button registry-button-primary" type="button" :disabled="!canMutate" @click="createRecord"><ActionIcon name="create" :size="16" />Добавить указание</button>
         </div>
       </div>
       <div v-if="!ready" class="registry-no-database">
@@ -151,10 +152,10 @@ onBeforeUnmount(() => { disposed = true; surfaceVersion++; unregisterGuard(); cl
             <p v-if="app.databaseSwitching" class="registry-setup-note" role="status">Выбор базы данных…</p>
             <div class="registry-actions">
               <button class="registry-button registry-button-primary" type="button" :disabled="choosingDatabase" @click="app.selectDatabase('create')">
-                <Plus :size="16" aria-hidden="true" />Создать базу
+                <ActionIcon name="create" :size="16" />Создать базу
               </button>
               <button class="registry-button" type="button" :disabled="choosingDatabase" @click="app.selectDatabase('open')">
-                <FolderOpen :size="16" aria-hidden="true" />Открыть базу
+                <ActionIcon name="open" :size="16" />Открыть базу
               </button>
             </div>
           </div>
@@ -175,7 +176,8 @@ onBeforeUnmount(() => { disposed = true; surfaceVersion++; unregisterGuard(); cl
           <div v-else-if="loading" class="registry-empty registry-empty-results" role="status"><RefreshCw :size="28" class="registry-loading-icon" aria-hidden="true" /><h2>Загрузка реестра…</h2></div>
           <div v-else class="registry-empty registry-empty-results">
             <span v-if="error || hasAppliedFilters || props.closed" class="registry-empty-symbol"><component :is="error ? RefreshCw : hasAppliedFilters ? SearchX : Archive" :size="26" :stroke-width="1.6" aria-hidden="true" /></span>
-            <img v-else class="registry-empty-art" :src="registryFolder" alt="" draggable="false" />
+            <img v-else-if="app.appearanceStyle === 'standard'" class="registry-empty-art" :src="registryFolder" alt="" draggable="false" />
+            <span v-else class="registry-empty-art registry-theme-art" aria-hidden="true" />
             <h2>{{ error ? 'Реестр недоступен' : hasAppliedFilters ? 'Указания не найдены' : props.closed ? 'Закрытых указаний пока нет' : 'В реестре пока нет указаний' }}</h2>
             <p>{{ error ? 'Повторите загрузку, чтобы показать указания.' : hasAppliedFilters ? 'Измените условия фильтров или сбросьте их.' : props.closed ? 'Здесь появятся указания после закрытия контроля.' : 'Добавьте первое указание — его срок появится в календаре.' }}</p>
             <button v-if="error" type="button" class="registry-button" @click="refresh">Повторить загрузку</button>

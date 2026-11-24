@@ -9,6 +9,7 @@ export const IPC_CHANNELS = Object.freeze({
   settings: Object.freeze({
     get: 'settings:get',
     setTheme: 'settings:set-theme',
+    setAppearanceStyle: 'settings:set-appearance-style',
     setTypography: 'settings:set-typography',
     setOffice: 'settings:set-office',
     addRegistryOption: 'settings:add-registry-option',

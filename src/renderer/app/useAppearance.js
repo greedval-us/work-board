@@ -14,6 +14,9 @@ export function useAppearance({
   watch(isDark, dark => {
     root.dataset.appearance = dark ? 'dark' : 'light';
   }, { immediate: true });
+  watch(() => store.appearanceStyle, style => {
+    root.dataset.appearanceStyle = style;
+  }, { immediate: true });
   watch(() => store.typography, ({ fontFamily, fontSize }) => {
     root.dataset.fontFamily = fontFamily;
     root.style.setProperty('--app-font-size-value', String(fontSize));

@@ -191,6 +191,14 @@ export async function setupRegistry(driver, fixture) {
   assert.equal(await js(`document.querySelector('${extended} .registry-urgency').textContent`), 'Срок сегодня');
   assert.equal(await js(`document.querySelector('${nextCheckpointTime}.registry-checkpoint-overdue')?.dateTime`), originalDeadline);
   const overdueTextColor = await js(`getComputedStyle(document.querySelector('${nextCheckpointTime}')).color`);
-  assert.equal(overdueTextColor, 'rgb(179, 38, 48)');
+  const expectedErrorColor = await js(`(() => {
+    const sample = document.createElement('span');
+    sample.style.color = 'var(--error)';
+    document.body.append(sample);
+    const color = getComputedStyle(sample).color;
+    sample.remove();
+    return color;
+  })()`);
+  assert.equal(overdueTextColor, expectedErrorColor);
   return { generation, created, overdueTextColor, executorContact };
 }

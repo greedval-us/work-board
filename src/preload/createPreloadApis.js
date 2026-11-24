@@ -34,6 +34,7 @@ export function createPreloadApis(ipcRenderer) {
     settings: {
       get: (generation) => ipcRenderer.invoke(channels.settings.get, { generation }),
       setTheme: (theme, generation) => ipcRenderer.invoke(channels.settings.setTheme, { theme, generation }),
+      setAppearanceStyle: (appearanceStyle, generation) => ipcRenderer.invoke(channels.settings.setAppearanceStyle, { appearanceStyle, generation }),
       setTypography: (typography, generation) => ipcRenderer.invoke(channels.settings.setTypography, { typography, generation }),
       setOffice: (office, generation) => ipcRenderer.invoke(channels.settings.setOffice, { office, generation }),
       addRegistryOption: (field, value, generation, contact) => ipcRenderer.invoke(channels.settings.addRegistryOption, {

@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 200">
+  <style>
+    :root { --wire: #087b8b; --edge: #a32676; --signal: #aa6304; --shadow: #453657; --glass: #b3d6df; --plane: #d6eced }
+    @media (prefers-color-scheme: dark) {
+      :root { --wire: #59dce0; --edge: #ff79ca; --signal: #efdc68; --shadow: #352940; --glass: #324557; --plane: #29434e }
+    }
+  </style>
+  <defs>
+    <pattern id="pins" width="4" height="4" patternUnits="userSpaceOnUse">
+      <circle cx="1" cy="1" r=".75" fill="var(--wire)"/>
+    </pattern>
+    <g id="via" fill="var(--plane)" stroke="var(--wire)" stroke-width="1.7"><circle r="3"/><circle r=".75" fill="var(--wire)" stroke="none"/></g>
+    <g id="tower">
+      <path fill="var(--glass)" d="m0 0 19-9 15 7v53l-19 9-15-7Z"/>
+      <path fill="var(--shadow)" d="m15 7 19-9v53l-19 9Z"/>
+      <path fill="var(--plane)" d="m0 0 19-9 15 7-19 9Z"/>
+      <path fill="none" stroke="var(--wire)" stroke-width="1.6" stroke-linejoin="round" d="m0 0 19-9 15 7v53l-19 9-15-7Zm0 0 15 7 19-9M15 7v53"/>
+      <path fill="none" stroke="var(--edge)" stroke-width="2" d="m20 10 9-4m-9 9 9-4m-9 9 9-4m-9 25 9-4m-9 9 9-4"/>
+      <path fill="none" stroke="var(--wire)" stroke-width="1.5" d="M5 7v28l5 7v8"/>
+    </g>
+  </defs>
+  <!-- Routed traces terminate in plated vias around the raised, isometric processor. -->
+  <g fill="none" stroke="var(--wire)" stroke-width="1.5" stroke-linejoin="bevel">
+    <path d="M11 75h23l18 18h22m-53-30h20l21 21h9M10 128h28l20-20h20M18 136h24l18-18h8"/>
+    <path d="M152 66h18l15-15h32m-64 9h13l21-21h18M163 84h19l12-12h24m-30 55 10 10h28"/>
+    <path d="m85 144-22 22H41l-12 12H12m88-27-22 22H55l-9 9m69-26v14l-14 14v7"/>
+    <path d="m146 149 20 20h24l10 10h20m-65-38 18 18h25l8 8h15"/>
+  </g>
+  <g stroke="var(--edge)" stroke-width="2" fill="none">
+    <path d="M27 91h10l17 17M155 75h20l16-16h16M31 151h16l17-17M158 135l15 15h32"/>
+  </g>
+  <g>
+    <use href="#via" x="11" y="75"/><use href="#via" x="21" y="63"/><use href="#via" x="10" y="128"/>
+    <use href="#via" x="18" y="136"/><use href="#via" x="12" y="178"/><use href="#via" x="46" y="182"/>
+    <use href="#via" x="101" y="191"/><use href="#via" x="220" y="179"/><use href="#via" x="221" y="167"/>
+    <use href="#via" x="226" y="137"/><use href="#via" x="218" y="72"/><use href="#via" x="217" y="51"/><use href="#via" x="205" y="39"/>
+  </g>
+  <path d="m60 125 62-31 62 29v11l-62 30-62-29Z" fill="var(--shadow)" stroke="var(--wire)" stroke-width="1.7"/>
+  <path d="m60 124 62-31 62 30-62 30Z" fill="var(--plane)" stroke="var(--wire)" stroke-width="1.7"/>
+  <path d="m68 123 54-26 54 26-54 26Z" fill="url(#pins)" stroke="var(--edge)" stroke-width="1.2"/>
+  <path fill="none" stroke="var(--edge)" stroke-width="2.5" d="m64 131 32 15m42 6 29-14"/>
+  <g fill="none" stroke="var(--wire)" stroke-width="2">
+    <path d="m77 135 3 1.5m2 1 3 1.5m2 1 3 1.5m2 1 3 1.5m2 1 3 1.5m2 1 3 1.5m2 1 3 1.5m2 1 3 1.5"/>
+  </g>
+  <use href="#tower" transform="translate(83 87) scale(.76 .62)"/>
+  <use href="#tower" transform="translate(119 57) scale(.95 1.16)"/>
+  <g stroke="var(--wire)" stroke-width="1.8" stroke-linejoin="round">
+    <path d="m99 45 16-8 15 7v77l-17 9-14-7Z" fill="var(--glass)"/>
+    <path d="m113 52 17-8v77l-17 9Z" fill="var(--shadow)"/>
+    <path d="m99 45 16-8 15 7-17 8Z" fill="var(--plane)"/>
+    <path fill="none" d="M103 51v40l5 8v15m-3-57v23m7-39V27l4-3v14"/>
+  </g>
+  <path fill="none" stroke="var(--edge)" stroke-width="2.8" d="m117 60 9-4m-9 9 9-4m-9 9 9-4m-9 9 9-4m-9 9 9-4m-9 9 9-4"/>
+  <path fill="none" stroke="var(--signal)" stroke-width="2" d="M116 31V15m2 85 7-3m-7 8 7-3m-7 8 7-3"/>
+  <circle cx="116" cy="13" r="2.8" fill="var(--edge)"/>
+  <use href="#tower" transform="translate(132 101) scale(.68 .49)"/>
+  <g fill="none" stroke="var(--wire)" stroke-width="1" opacity=".8">
+    <path d="M18 47V27l12-12h37m-45 30V29l10-10h20m95-3h29l10 10h32m-48 161h49l10-10"/>
+    <path d="M34 36h8m-4-4v8m154 50h8m-4-4v8m-35 93h8m-4-4v8"/>
+    <circle cx="204" cy="109" r="9" stroke-dasharray="17 5 7 4"/><path d="M189 109h8m14 0h8m-15-15v8m0 14v8"/>
+  </g>
+  <path fill="var(--edge)" d="M56 17h5l-4 6h-5Zm8 0h5l-4 6h-5Zm8 0h5l-4 6h-5Z"/>
+  <path fill="var(--signal)" d="M26 154h4l-4 6h-4Zm7 0h4l-4 6h-4Zm7 0h4l-4 6h-4Z"/>
+</svg>

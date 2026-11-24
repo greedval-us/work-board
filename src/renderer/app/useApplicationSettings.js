@@ -5,6 +5,7 @@ import { settingsService } from './services/SettingsService.js';
 
 export function useApplicationSettings({ database, canWrite, withOperation, touchData, error }) {
   const theme = ref(DEFAULT_SETTINGS.theme);
+  const appearanceStyle = ref(DEFAULT_SETTINGS.appearanceStyle);
   const typography = shallowRef(DEFAULT_SETTINGS.typography);
   const registryOptions = shallowRef(DEFAULT_SETTINGS.registryOptions);
   const executorContacts = shallowRef(DEFAULT_SETTINGS.executorContacts);
@@ -22,6 +23,7 @@ export function useApplicationSettings({ database, canWrite, withOperation, touc
 
   function applySettings(settings) {
     theme.value = settings.theme;
+    appearanceStyle.value = settings.appearanceStyle ?? DEFAULT_SETTINGS.appearanceStyle;
     typography.value = settings.typography ?? DEFAULT_SETTINGS.typography;
     registryOptions.value = settings.registryOptions ?? DEFAULT_SETTINGS.registryOptions;
     executorContacts.value = settings.executorContacts ?? DEFAULT_SETTINGS.executorContacts;
@@ -46,6 +48,10 @@ export function useApplicationSettings({ database, canWrite, withOperation, touc
 
   function setTheme(value) {
     return saveSettings(generation => settingsService.setTheme(value, generation));
+  }
+
+  function setAppearanceStyle(value) {
+    return saveSettings(generation => settingsService.setAppearanceStyle(value, generation));
   }
 
   function setTypography(value) {
@@ -75,7 +81,7 @@ export function useApplicationSettings({ database, canWrite, withOperation, touc
   }
 
   return {
-    theme, typography, registryOptions, executorContacts, office, saving, registryOptionsError, officeError, typographyError,
-    applySettings, setTheme, setTypography, setOffice, addRegistryOption, updateRegistryOption, removeRegistryOption,
+    theme, appearanceStyle, typography, registryOptions, executorContacts, office, saving, registryOptionsError, officeError, typographyError,
+    applySettings, setTheme, setAppearanceStyle, setTypography, setOffice, addRegistryOption, updateRegistryOption, removeRegistryOption,
   };
 }

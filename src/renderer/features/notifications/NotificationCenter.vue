@@ -2,7 +2,8 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, shallowRef, useId, useTemplateRef, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { isNavigationFailure, useRouter } from 'vue-router';
-import { ArrowUpRight, Bell, CheckCheck, RefreshCw, X } from 'lucide-vue-next';
+import { ArrowUpRight, CheckCheck, RefreshCw, X } from 'lucide-vue-next';
+import ActionIcon from '../../ui/ActionIcon.vue';
 import { formatDate } from '../../../shared/dates.js';
 import { notificationKey } from '../../../shared/notificationReference.js';
 import { groupNotifications, NOTIFICATION_GROUP_SIZE, UPCOMING_DEADLINES } from './notificationGroups.js';
@@ -145,7 +146,7 @@ onBeforeUnmount(() => {
     <button ref="bell" type="button" class="icon-button notification-bell" data-notification-action="toggle"
       :disabled="disabled" :aria-label="bellLabel" :title="bellLabel" :aria-expanded="open" :aria-controls="panelId"
       aria-haspopup="dialog" @click="togglePanel">
-      <Bell :size="18" aria-hidden="true" />
+      <ActionIcon name="notify" :size="18" />
       <span v-if="unreadCount" class="notification-count" aria-hidden="true">{{ badge }}</span>
       <span v-if="error || actionError" class="notification-error-indicator" aria-hidden="true">!</span>
     </button>
@@ -169,7 +170,7 @@ onBeforeUnmount(() => {
       <div class="notification-panel-content">
         <p v-if="loading && !items.length" class="notification-empty" role="status">Загружаем уведомления…</p>
         <div v-else-if="!items.length && !error" class="notification-empty">
-          <Bell :size="25" aria-hidden="true" /><h3>Ближайших напоминаний нет</h3><p>Здесь появятся незавершённые записи со сроком {{ UPCOMING_DEADLINES.toLowerCase() }}, сегодня или ранее.</p>
+          <ActionIcon name="notify" :size="25" /><h3>Ближайших напоминаний нет</h3><p>Здесь появятся незавершённые записи со сроком {{ UPCOMING_DEADLINES.toLowerCase() }}, сегодня или ранее.</p>
         </div>
         <template v-else-if="items.length">
           <section v-for="group in groups" :key="group.key" class="notification-group" :aria-labelledby="`${panelId}-${group.key}`">
@@ -190,7 +191,7 @@ onBeforeUnmount(() => {
     </section>
 
     <section v-if="popupVisible" class="notification-popup" :aria-labelledby="popupHeadingId">
-      <header><span class="notification-popup-icon"><Bell :size="19" aria-hidden="true" /></span><h2 :id="popupHeadingId">Напоминания о сроках</h2><button type="button" class="icon-button" aria-label="Закрыть напоминание" @click="acknowledgePopup"><X :size="16" aria-hidden="true" /></button></header>
+      <header><span class="notification-popup-icon"><ActionIcon name="notify" :size="19" /></span><h2 :id="popupHeadingId">Напоминания о сроках</h2><button type="button" class="icon-button" aria-label="Закрыть напоминание" @click="acknowledgePopup"><X :size="16" aria-hidden="true" /></button></header>
       <p class="notification-popup-summary" role="status">{{ popupSummary }}</p>
       <ul class="notification-popup-titles"><li v-for="item in popupItems.slice(0, popupTitleLimit)" :key="notificationKey(item)">{{ item.title }}</li></ul>
       <footer class="notification-popup-footer">

@@ -124,7 +124,7 @@
 .calendar-field > input, .calendar-field > textarea, .calendar-field > select { display: block; width: 100%; min-width: 0; min-height: 34px; margin-top: 4px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--grouped); color: var(--text); font: inherit; font-size: calc(13px + var(--app-font-offset)); font-weight: 400; }
 .calendar-field > :is(input, textarea, select):focus-visible { border-color: var(--accent); outline: 2px solid var(--accent-surface); outline-offset: 0; }
 .calendar-field > textarea { resize: vertical; min-height: 64px; line-height: 1.45; }
-.calendar-field input::placeholder, .calendar-field textarea::placeholder { color: var(--muted); opacity: .85; }
+.calendar-field input::placeholder, .calendar-field textarea::placeholder { color: var(--muted); opacity: 1; }
 .calendar-form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .calendar-task-recurrence { display: grid; gap: 10px; }
 .calendar-recurrence-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }

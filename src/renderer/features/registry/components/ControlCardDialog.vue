@@ -1,7 +1,8 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, shallowRef, useId, useTemplateRef, watch } from 'vue';
 import { storeToRefs } from 'pinia';
-import { Download, FileText, X } from 'lucide-vue-next';
+import { FileText, X } from 'lucide-vue-next';
+import ActionIcon from '../../../ui/ActionIcon.vue';
 import { CONTROL_CARD_OFFICE_LABEL, CONTROL_CARD_OPTION_LABELS } from '../../../../shared/constants/settings.js';
 import { CONTROL_CARD_FIELD_LIMITS, controlCardFields, executorContactFor } from '../../../../shared/controlCard.js';
 import { createDialogMotion } from '../../../ui/dialogMotion.js';
@@ -102,7 +103,7 @@ onBeforeUnmount(() => { motion.dispose(); report.reset(); });
           <ExportOpenWarning v-else-if="unopenedExportPath !== null" :message="notice" :file-path="unopenedExportPath" />
           <p v-else class="registry-control-card-notice" role="status">{{ notice }}</p>
           <button type="button" class="registry-button" :disabled="busy" @click="close">Закрыть</button>
-          <button type="submit" class="registry-button registry-button-primary registry-control-card-save" :disabled="busy"><Download :size="16" aria-hidden="true" />{{ exporting ? 'Сохранение…' : 'Сохранить Word' }}</button>
+          <button type="submit" class="registry-button registry-button-primary registry-control-card-save" :disabled="busy"><ActionIcon name="export" :size="16" />{{ exporting ? 'Сохранение…' : 'Сохранить Word' }}</button>
         </div>
       </form>
     </dialog>

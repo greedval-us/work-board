@@ -15,6 +15,20 @@ function find(node, predicate) {
   }
 }
 
+function compileComponent(component, fixtureKey, boundary) {
+  const filename = fileURLToPath(component);
+  const { descriptor } = parse(readFileSync(filename, 'utf8'), { filename });
+  const code = compileScript(descriptor, { id: fixtureKey, inlineTemplate: true }).content
+    .replace(/from\s+(['"])([^'"]+)\1/g, (_match, quote, path) => {
+      let resolved;
+      if (/useNotifications|appStore|^vue-router$/.test(path)) resolved = boundary;
+      else if (path.endsWith('.vue')) resolved = compileComponent(new URL(path, component), fixtureKey, boundary);
+      else resolved = path.startsWith('.') ? new URL(path, component).href : import.meta.resolve(path);
+      return `from ${quote}${resolved}${quote}`;
+    });
+  return `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
+}
+
 async function mountCenter(t, options = {}) {
   const component = new URL('../../src/renderer/features/notifications/NotificationCenter.vue', import.meta.url);
   assert.ok(existsSync(component), 'the header has a notification center');
@@ -34,15 +48,7 @@ async function mountCenter(t, options = {}) {
   const router = { async push(value) { calls.push(['navigate', value]); return options.navigate ? options.navigate() : options.navigationResult; } };
   globalThis[fixtureKey] = { store, appState, router };
   const boundary = `data:text/javascript;base64,${Buffer.from(`export const useNotifications = () => globalThis.${fixtureKey}.store; export const useAppStore = () => globalThis.${fixtureKey}.appState; export const useRouter = () => globalThis.${fixtureKey}.router; export const isNavigationFailure = result => Boolean(result);`).toString('base64')}`;
-  const filename = fileURLToPath(component);
-  const { descriptor } = parse(readFileSync(filename, 'utf8'), { filename });
-  const code = compileScript(descriptor, { id: fixtureKey, inlineTemplate: true }).content
-    .replace(/from\s+(['"])([^'"]+)\1/g, (_match, quote, path) => {
-      const resolved = /useNotifications|appStore|^vue-router$/.test(path) ? boundary
-        : path.startsWith('.') ? new URL(path, component).href : import.meta.resolve(path);
-      return `from ${quote}${resolved}${quote}`;
-    });
-  const { default: Center } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+  const { default: Center } = await import(compileComponent(component, fixtureKey, boundary));
   const listeners = new Map();
   const previousDocument = globalThis.document;
   const ownerDocument = {

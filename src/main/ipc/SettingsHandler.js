@@ -12,6 +12,10 @@ export class SettingsHandler {
         this.database.assertGeneration?.(payload?.generation);
         return this.settingsService.setTheme(payload?.theme);
       },
+      [channels.settings.setAppearanceStyle]: (payload) => {
+        this.database.assertGeneration(payload?.generation);
+        return this.settingsService.setAppearanceStyle(payload?.appearanceStyle);
+      },
       [channels.settings.setTypography]: (payload) => {
         this.database.assertGeneration(payload?.generation);
         return this.settingsService.setTypography(payload?.typography);

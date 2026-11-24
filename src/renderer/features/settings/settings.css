@@ -91,7 +91,7 @@
 .file-path { overflow-wrap: anywhere; user-select: text; }
 .save-status { color: var(--muted); font-size: calc(12px + var(--app-font-offset)); }
 
-.appearance-settings { container: appearance / inline-size; }
+.appearance-settings { position: relative; container: appearance / inline-size; }
 .appearance-settings .settings-glyph { background: var(--grouped); color: var(--text); }
 
 .theme-options {

@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue';
-import { ChevronRight, Database, FolderOpen, Plus } from 'lucide-vue-next';
+import { ChevronRight, Database } from 'lucide-vue-next';
+import ActionIcon from '../../ui/ActionIcon.vue';
 import { useAppStore } from '../../app/appStore.js';
 
 const app = useAppStore();
@@ -33,10 +34,10 @@ const fileName = computed(() => app.database?.filePath?.split(/[\\/]/).pop());
     </dl>
     <div class="storage-actions">
       <button type="button" class="storage-button" :disabled="busy" @click="app.selectDatabase('create')">
-        <Plus :size="16" aria-hidden="true" /><span>Создать<span class="sr-only">{{ app.database?.ready ? ' другую базу' : ' базу' }}</span></span>
+        <ActionIcon name="create" :size="16" /><span>Создать<span class="sr-only">{{ app.database?.ready ? ' другую базу' : ' базу' }}</span></span>
       </button>
       <button type="button" class="storage-button" :disabled="busy" @click="app.selectDatabase('open')">
-        <FolderOpen :size="16" aria-hidden="true" /><span>Открыть<span class="sr-only"> базу</span></span>
+        <ActionIcon name="open" :size="16" /><span>Открыть<span class="sr-only"> базу</span></span>
       </button>
     </div>
     <p v-if="app.databaseSwitching" class="storage-note" role="status">Выбор базы данных…</p>

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, shallowRef } from 'vue';
-import { ListTodo, Plus, RefreshCw, Repeat2 } from 'lucide-vue-next';
+import { ListTodo, RefreshCw, Repeat2 } from 'lucide-vue-next';
+import ActionIcon from '../../ui/ActionIcon.vue';
 import { DATE_LIMITS } from '../../../shared/constants/dates.js';
 import { formatDate, isDate } from '../../../shared/dates.js';
 import { TASK_PRIORITIES, TASK_PRIORITY } from '../../../shared/registry.js';
@@ -50,7 +51,7 @@ function changeCompletion(event, task) {
         <span v-if="ready && !loading && !error" class="tasks-count" :aria-label="`Задач в списке: ${visibleTasks.length}`">{{ visibleTasks.length }}</span>
       </div>
       <button v-if="ready" type="button" class="calendar-button calendar-button-primary" :disabled="app.databaseSwitching" @click="newTask">
-        <Plus :size="17" aria-hidden="true" /> Новая задача
+        <ActionIcon name="create" :size="17" /> Новая задача
       </button>
     </header>
 

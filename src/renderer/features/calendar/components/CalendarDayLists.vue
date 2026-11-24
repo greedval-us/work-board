@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue';
-import { ArrowUpRight, Check, FileText, Flag, ListTodo, Plus } from 'lucide-vue-next';
+import { ArrowUpRight, Check, FileText, Flag, ListTodo } from 'lucide-vue-next';
+import ActionIcon from '../../../ui/ActionIcon.vue';
 import { calendarDate, dayLabel } from '../../../ui/calendarDates.js';
 import { presentCalendarCheckpoints, presentCalendarRecords } from '../calendarRecords.js';
 
@@ -87,7 +88,7 @@ function toggleTask(event, item) {
         </div>
       </section>
       <section class="calendar-day-section" aria-labelledby="calendar-tasks-heading">
-        <div class="calendar-list-heading"><ListTodo :size="15" aria-hidden="true" /><h3 id="calendar-tasks-heading">Мои задачи</h3><span class="calendar-list-count" :aria-label="`Невыполненных задач: ${counts.activeTasks}`">{{ counts.activeTasks }}</span><span v-if="counts.completedTasks" class="calendar-completed-count" :aria-label="`Выполнено: ${counts.completedTasks}`" :title="`Выполнено: ${counts.completedTasks}`"><Check :size="12" aria-hidden="true" />{{ counts.completedTasks }}</span><button class="calendar-add-task" :disabled="disabled" aria-label="Добавить задачу на выбранный день" @click="emit('newTask')"><Plus :size="17" aria-hidden="true" /></button></div>
+        <div class="calendar-list-heading"><ListTodo :size="15" aria-hidden="true" /><h3 id="calendar-tasks-heading">Мои задачи</h3><span class="calendar-list-count" :aria-label="`Невыполненных задач: ${counts.activeTasks}`">{{ counts.activeTasks }}</span><span v-if="counts.completedTasks" class="calendar-completed-count" :aria-label="`Выполнено: ${counts.completedTasks}`" :title="`Выполнено: ${counts.completedTasks}`"><Check :size="12" aria-hidden="true" />{{ counts.completedTasks }}</span><button class="calendar-add-task" :disabled="disabled" aria-label="Добавить задачу на выбранный день" @click="emit('newTask')"><ActionIcon name="create" :size="17" /></button></div>
         <div class="calendar-list-body" tabindex="0" role="region" aria-label="Задачи на выбранный день">
         <p v-if="taskError" class="calendar-task-error" role="alert">{{ taskError }}</p>
         <p v-if="!taskRows.length" class="calendar-empty-list">Пока свободно. Добавьте задачу на этот день.</p>

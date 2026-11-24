@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 const emptyRegistryOptions = { documentType: [], source: [], executor: [], department: [], executorPhone: [], office: [] };
-const defaultSettings = { theme: 'light', typography: { fontFamily: 'inter', fontSize: 14 }, registryOptions: emptyRegistryOptions, executorContacts: [], office: '' };
+const defaultSettings = { theme: 'light', appearanceStyle: 'standard', typography: { fontFamily: 'inter', fontSize: 14 }, registryOptions: emptyRegistryOptions, executorContacts: [], office: '' };
 
 test('post-request background checks run only after trusted successful writes and cannot falsify a saved result', async () => {
   const handlers = new Map(); const calls = [];
@@ -82,6 +82,18 @@ test('typography requires a trusted sender, the active database and a valid sett
   assert.equal((await save(event, { ...payload, typography: { ...typography, fontSize: 100 } })).error.code, 'VALIDATION');
   assert.deepEqual(await handlers.get('settings:get')(event, { generation }), { ok: true, value: defaultSettings });
   assert.deepEqual(await save(event, payload), { ok: true, value: { ...defaultSettings, typography } });
+});
+
+test('appearance style writes reject stale databases and unknown styles before updating settings', async (t) => {
+  const { handlers, event, generation } = fixture(t);
+  const save = handlers.get('settings:set-appearance-style');
+  const payload = { appearanceStyle: 'witcher', generation };
+  assert.equal((await save(event, { ...payload, generation: generation - 1 })).error.code, 'DATABASE_CHANGED');
+  assert.deepEqual(await save(event, payload), { ok: true, value: { ...defaultSettings, appearanceStyle: 'witcher' } });
+  for (const appearanceStyle of ['dark', 'constructor', '', null, {}]) {
+    assert.equal((await save(event, { ...payload, appearanceStyle })).error.code, 'VALIDATION');
+  }
+  assert.equal((await handlers.get('settings:get')(event, { generation })).value.appearanceStyle, 'witcher');
 });
 
 test('adding a registry option over IPC requires a trusted sender and the active database generation', async (t) => {

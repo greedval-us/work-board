@@ -1,6 +1,7 @@
 <script setup>
 import { computed, shallowRef, useId, watch } from 'vue';
-import { ChevronDown, RotateCcw, SlidersHorizontal } from 'lucide-vue-next';
+import { ChevronDown, RotateCcw } from 'lucide-vue-next';
+import ActionIcon from '../../../ui/ActionIcon.vue';
 import { DATE_LIMITS } from '../../../../shared/constants/dates.js';
 import { ANALYTICS_PERIODS, applyAnalyticsPeriod } from '../analyticsFilters.js';
 
@@ -47,7 +48,7 @@ function preset(value) {
         </select>
       </label>
       <div class="analytics-filter-tools">
-        <button type="button" class="analytics-filter-toggle" :aria-expanded="expanded" :aria-controls="fieldsId" @click="expanded = !expanded"><SlidersHorizontal :size="15" aria-hidden="true" />Фильтры <span v-if="activeCount" class="analytics-filter-badge">{{ activeCount }}</span><span v-if="changed" class="analytics-filter-dirty" title="Есть неприменённые изменения" /><ChevronDown :size="14" class="analytics-filter-chevron" :class="{ 'analytics-filter-chevron-open': expanded }" aria-hidden="true" /></button>
+        <button type="button" class="analytics-filter-toggle" :aria-expanded="expanded" :aria-controls="fieldsId" @click="expanded = !expanded"><ActionIcon name="filter" :size="15" />Фильтры <span v-if="activeCount" class="analytics-filter-badge">{{ activeCount }}</span><span v-if="changed" class="analytics-filter-dirty" title="Есть неприменённые изменения" /><ChevronDown :size="14" class="analytics-filter-chevron" :class="{ 'analytics-filter-chevron-open': expanded }" aria-hidden="true" /></button>
         <div class="analytics-presets" role="group" aria-label="Период"><button v-for="period in periods" :key="period.value" type="button" :aria-pressed="activePeriod === period.value" :disabled="disabled" @click="preset(period.value)">{{ period.label }}</button></div>
       </div>
     </div>

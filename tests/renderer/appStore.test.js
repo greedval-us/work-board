@@ -32,6 +32,33 @@ test('theme changes only after persistence succeeds', async (t) => {
   assert.doesNotMatch(store.error, /Хранилище недоступно/);
 });
 
+test('appearance style follows the active database and changes only after a successful save', async t => {
+  const store = bridge(t, {
+    database: {
+      getStatus: async () => ({ ready: true, generation: 1 }),
+      open: async () => ({ cancelled: false, status: { ready: true, generation: 2 } }),
+    },
+    settings: {
+      get: async generation => generation === 1 ? { theme: 'dark', appearanceStyle: 'cyberpunk' } : { theme: 'system' },
+      setAppearanceStyle: async (appearanceStyle, generation) => {
+        assert.equal(generation, 2);
+        if (appearanceStyle === 'unknown') throw new Error('Не удалось сохранить стиль');
+        return { theme: 'system', appearanceStyle };
+      },
+    },
+  });
+  await store.initialize();
+  assert.equal(store.appearanceStyle, 'cyberpunk');
+  await store.selectDatabase('open');
+  assert.equal(store.appearanceStyle, 'standard');
+  assert.equal(await store.setAppearanceStyle('witcher'), true);
+  assert.equal(store.appearanceStyle, 'witcher');
+  assert.equal(await store.setAppearanceStyle('unknown'), false);
+  assert.equal(store.appearanceStyle, 'witcher');
+  assert.equal(store.theme, 'system');
+  assert.ok(store.error);
+});
+
 test('a settings save with no returned settings reports failure and preserves the loaded values', async (t) => {
   const store = bridge(t, { settings: {
     get: async () => ({ theme: 'dark', office: 'Архив' }),

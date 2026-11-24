@@ -14,7 +14,7 @@ const currentSchemaVersion = migrations.at(-1).version;
 
 const emptyRegistryOptions = { documentType: [], source: [], executor: [], department: [], executorPhone: [], office: [] };
 const defaultTypography = { fontFamily: 'inter', fontSize: 14 };
-const defaultSettings = { theme: 'light', typography: defaultTypography, registryOptions: emptyRegistryOptions, executorContacts: [], office: '' };
+const defaultSettings = { theme: 'light', appearanceStyle: 'standard', typography: defaultTypography, registryOptions: emptyRegistryOptions, executorContacts: [], office: '' };
 
 function settingsFor(database) {
   return new SettingsService(new SettingsRepository(database));
@@ -77,6 +77,24 @@ test('system theme is preserved when the database reopens', (t) => {
   database.close();
   database.open();
   assert.equal(settings.get().theme, 'system');
+});
+
+test('appearance styles persist independently of color mode and default to standard in older databases', (t) => {
+  const { database } = fixture(t);
+  database.open();
+  const settings = settingsFor(database);
+  settings.setTheme('system');
+  assert.equal(settings.get().appearanceStyle, 'standard');
+  for (const appearanceStyle of ['witcher', 'harry-potter', 'standard', 'cyberpunk', 'gzhel']) {
+    assert.deepEqual(settings.setAppearanceStyle(appearanceStyle), { ...defaultSettings, theme: 'system', appearanceStyle });
+  }
+  settings.setTheme('dark');
+  database.close();
+  database.open();
+  assert.deepEqual(settings.get(), { ...defaultSettings, theme: 'dark', appearanceStyle: 'gzhel' });
+
+  database.connection.prepare('UPDATE app_settings SET value = ? WHERE key = ?').run('unknown', 'appearanceStyle');
+  assert.deepEqual(settings.get(), { ...defaultSettings, theme: 'dark' });
 });
 
 test('invalid settings cannot modify persisted data', (t) => {

@@ -1,7 +1,8 @@
 <script setup>
 import { onBeforeUnmount, shallowRef, watch } from 'vue';
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from 'vue-router';
-import { CalendarDays, Plus, RefreshCw } from 'lucide-vue-next';
+import { CalendarDays, RefreshCw } from 'lucide-vue-next';
+import ActionIcon from '../../ui/ActionIcon.vue';
 import PageHeading from '../../ui/PageHeading.vue';
 import MonthCalendar from './components/MonthCalendar.vue';
 import CalendarDayLists from './components/CalendarDayLists.vue';
@@ -44,7 +45,7 @@ onBeforeUnmount(unregister);
     <div class="calendar-page-heading">
       <PageHeading title="Календарь и задачи" />
       <button v-if="ready" class="calendar-button calendar-button-primary" :disabled="app.databaseSwitching" @click="newTask">
-        <Plus :size="17" aria-hidden="true" /> Новая задача
+        <ActionIcon name="create" :size="17" /> Новая задача
       </button>
     </div>
 

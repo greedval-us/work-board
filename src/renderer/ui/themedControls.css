@@ -1,0 +1,42 @@
+/* Frames for section pictograms also appear on the notification and storage badges. */
+:root[data-appearance-style='gzhel'] :is(.settings-glyph, .storage-symbol, .notification-popup-icon, .empty-icon) {
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  color: var(--accent);
+  background: var(--panel);
+  box-shadow: inset 0 0 0 2px var(--panel), inset 0 0 0 3px var(--ornament-ink);
+}
+:root[data-appearance-style='harry-potter'] :is(.settings-glyph, .storage-symbol, .notification-popup-icon, .empty-icon) {
+  border: 1px solid var(--ornament-ink);
+  border-radius: 45% 45% 5px 5px;
+  color: var(--accent);
+  background: var(--accent-surface);
+}
+:root[data-appearance-style='witcher'] :is(.settings-glyph, .storage-symbol, .notification-popup-icon, .empty-icon) {
+  border: 1px solid var(--ornament-ink);
+  border-radius: 4px 4px 45% 45%;
+  color: var(--accent);
+  background: var(--grouped);
+}
+:root[data-appearance-style='cyberpunk'] :is(.settings-glyph, .storage-symbol, .notification-popup-icon, .empty-icon) {
+  border: 1px solid var(--accent);
+  border-radius: 2px 9px;
+  color: var(--accent);
+  background: var(--grouped);
+  box-shadow: inset -2px 0 var(--ornament-ink);
+}
+:root[data-appearance-style='cyberpunk'] :is(.registry-button-primary, .calendar-button-primary, .analytics-button-primary) {
+  border-radius: 2px 9px;
+  box-shadow: 2px 2px var(--ornament-ink);
+}
+:root[data-appearance-style='witcher'] :is(.registry-button-primary, .calendar-button-primary, .analytics-button-primary) {
+  border-radius: 3px;
+  border-inline: 3px double currentColor;
+}
+:root[data-appearance-style='harry-potter'] :is(.registry-button-primary, .calendar-button-primary, .analytics-button-primary) {
+  border-radius: 9px 3px;
+  border-color: var(--ornament-ink);
+}
+:root[data-appearance-style='gzhel'] :is(.registry-button-primary, .calendar-button-primary, .analytics-button-primary) {
+  border-radius: 16px;
+}

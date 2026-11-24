@@ -1,6 +1,7 @@
 <script setup>
 import { nextTick, onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'vue';
-import { Bell, LockKeyhole } from 'lucide-vue-next';
+import { LockKeyhole } from 'lucide-vue-next';
+import ActionIcon from '../ui/ActionIcon.vue';
 import { APP_LOCK_PASSWORD_MAX_LENGTH } from '../../shared/appLock.js';
 import { NOTIFICATION_CHECK_INTERVAL_MS } from '../../shared/constants/notifications.js';
 import { errorMessage } from '../infrastructure/errorMessage.js';
@@ -84,7 +85,7 @@ onBeforeUnmount(() => {
           </button>
         </form>
         <div class="app-lock-notification" role="status">
-          <template v-if="pendingNotifications"><Bell :size="16" aria-hidden="true" /> Новое уведомление</template>
+          <template v-if="pendingNotifications"><ActionIcon name="notify" :size="16" /> Новое уведомление</template>
         </div>
       </template>
       <template v-else>

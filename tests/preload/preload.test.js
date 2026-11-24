@@ -11,6 +11,7 @@ test('bridge exposes named operations and sends only their explicit payloads', a
   await api.database.getStatus();
   await api.settings.get(1);
   assert.deepEqual(await api.settings.setTheme('dark', 1), { ok: true, value: 'ok' });
+  await api.settings.setAppearanceStyle('witcher', 1);
   const typography = { fontFamily: 'system', fontSize: 15 };
   await api.settings.setTypography(typography, 1);
   await api.settings.setOffice('Приёмная', 1);
@@ -33,6 +34,7 @@ test('bridge exposes named operations and sends only their explicit payloads', a
   await api.notifications.acknowledge({ generation: 1, items: [{ id: 'task:1', occurrence: '2026-11-12:2026-11-12' }], read: true });
   assert.deepEqual(calls, [
     ['app:get-info'], ['database:get-status'], ['settings:get', { generation: 1 }], ['settings:set-theme', { theme: 'dark', generation: 1 }],
+    ['settings:set-appearance-style', { appearanceStyle: 'witcher', generation: 1 }],
     ['settings:set-typography', { typography, generation: 1 }],
     ['settings:set-office', { office: 'Приёмная', generation: 1 }],
     ['settings:add-registry-option', { field: 'source', value: 'Канцелярия', generation: 1 }],

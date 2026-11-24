@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 200">
+  <style>
+    :root { --ink: #3c4844; --shadow: #475951; --steel: #84958a; --silver: #d7dfd1; --light: #eff2e4; --ember: #a65231 }
+    @media (prefers-color-scheme: dark) {
+      :root { --ink: #a7b3a8; --shadow: #34433d; --steel: #788d80; --silver: #b8c8b8; --light: #e0e7d4; --ember: #e9a279 }
+    }
+  </style>
+  <defs>
+    <pattern id="etch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(36)">
+      <path stroke="var(--ink)" stroke-width=".85" d="M0 0v4"/>
+    </pattern>
+    <g id="link" fill="none" stroke="var(--ink)" stroke-width="1.6">
+      <rect x="-3" y="-7" width="6" height="14" rx="3"/><path d="M-1-4v6" stroke="var(--steel)" stroke-width=".8"/>
+    </g>
+    <g id="rune" fill="none" stroke="var(--ember)" stroke-linejoin="miter" stroke-width="1.5">
+      <path d="M-2 4v-9l5 4-5 2"/>
+    </g>
+    <g id="twig" fill="none" stroke="var(--ink)" stroke-width="1.25">
+      <path d="M0 0v-8m0 4-3-3m3 5 3-4"/>
+    </g>
+  </defs>
+  <g opacity=".82">
+    <use href="#link" transform="translate(69 10) rotate(-59)"/><use href="#link" transform="translate(78 16) rotate(-54)"/>
+    <use href="#link" transform="translate(87 22) rotate(-57)"/><use href="#link" transform="translate(96 28) rotate(-56)"/>
+    <use href="#link" transform="translate(105 34) rotate(-55)"/><use href="#link" transform="translate(174 9) rotate(57)"/>
+    <use href="#link" transform="translate(165 15) rotate(56)"/><use href="#link" transform="translate(156 21) rotate(55)"/>
+    <use href="#link" transform="translate(147 27) rotate(57)"/><use href="#link" transform="translate(138 33) rotate(56)"/>
+  </g>
+  <g fill="none" stroke="var(--ink)">
+    <path opacity=".5" stroke-width=".85" d="M19 102h29m145 0h28m-201 6h17m166 0h17M47 71l-6-4m155 4 6-4M47 136l-6 4m155-4 6 4"/>
+    <circle cx="121" cy="104" r="74" stroke-width="1" stroke-dasharray="66 11 13 5 39 11" opacity=".7"/>
+    <circle cx="121" cy="104" r="70" stroke-width="1.8"/>
+    <circle cx="121" cy="104" r="66" stroke-width="1" stroke-dasharray="1.5 2.7"/>
+    <circle cx="121" cy="104" r="55.5" stroke-width=".95"/>
+  </g>
+  <g transform="translate(121 104)">
+    <use href="#rune" transform="rotate(-102) translate(0 -60)"/><use href="#twig" transform="rotate(-83) translate(0 -57)"/>
+    <use href="#rune" transform="rotate(-58) translate(0 -60)"/><use href="#twig" transform="rotate(-36) translate(0 -57)"/>
+    <use href="#rune" transform="rotate(31) translate(0 -60)"/><use href="#twig" transform="rotate(52) translate(0 -57)"/>
+    <use href="#rune" transform="rotate(78) translate(0 -60)"/><use href="#twig" transform="rotate(103) translate(0 -57)"/>
+    <use href="#rune" transform="rotate(128) translate(0 -60)"/><use href="#twig" transform="rotate(155) translate(0 -57)"/>
+    <use href="#rune" transform="rotate(-156) translate(0 -60)"/><use href="#twig" transform="rotate(-132) translate(0 -57)"/>
+  </g>
+  <path fill="var(--steel)" stroke="var(--ink)" stroke-width="1.6" d="m113 37 8-11 8 11-8 9Zm-3 133 11 17 11-17-11 5Z"/>
+  <path fill="var(--light)" d="m118 36 3-5 3 5-3 3Zm3 142v5l4-7Z"/>
+  <!-- The facets follow the brow, cheek and ruff of a wolf in profile. -->
+  <g stroke-linejoin="round">
+    <path fill="var(--shadow)" stroke="var(--ink)" stroke-width="2.4" d="m65 131 9-17-7 3 12-22-3-13 15 4-5-40 25 20 16-24 8 29 11 9 4 7 27 5-7 14-18 6-9-2 6 9 19-5-11 16-19 3-12-9-15 24-5-9-13 17-4-17-13 10 4-23Z"/>
+    <path fill="var(--silver)" d="m89 51 9 29 10-10Zm23 20 14-22 4 23-8-7Zm-29 17 14 2-16 14 5-10Zm17-5 15-10 14-1 12 9-19-6Zm10 5 12-11 17 6-13-1Zm18-1 10-3 9 7-14 2Zm-43 30 13-20 21-10-12 13Zm-1 14 4-11 21-18-9 13Zm23-9 6-16 18-13-9 15Zm19-10 13-11 18-2-13 5Zm7 10 6-11 7 12 13-4-6 7-12 2Z"/>
+    <path fill="var(--steel)" d="m93 58 13 12-6 6Zm26 9 7-13 2 13-5-6Zm12 28 16-5 24 5-11 6-9-2-12 1Zm-29 22 15-12-11 22-12 14Zm14-1 14-11-8 14-11 17Z"/>
+    <path fill="var(--light)" d="m126 87 11-2 4 3-9 1Zm23 5 16 2-5 2-12-1Zm-5 13 7-3-3 9Zm9-2 9-1-5 6Z"/>
+    <path fill="var(--ember)" d="m131 88 7-1-4 3-3 1Z"/>
+    <g fill="none" stroke="var(--light)" stroke-linecap="round">
+      <path stroke-width="1.25" d="m88 53 5 27m19-10 12-21m-25 45 13-10m-28 36 10-17m6 28 8-18m-22 23 3-13m25 6 7-13m30-25 13 3"/>
+      <path stroke-width=".85" d="m80 114 6-10m21-23 7-5m13-1 9 4m-40 27 7-9m12 22 7-10m2-18 6-5m22 30 7-3"/>
+    </g>
+  </g>
+  <path d="m70 122 10-11-4 10 11-13-6 19-7 8 2-8Zm25 11 11-17-5 19-6 9Z" fill="url(#etch)"/>
+  <g fill="var(--ember)"><path d="m47 99 4 5-4 5-3-5Zm148 0 4 5-4 5-3-5Z"/><circle cx="121" cy="163" r="1.8"/></g>
+</svg>

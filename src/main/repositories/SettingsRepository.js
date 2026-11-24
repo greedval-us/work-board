@@ -1,10 +1,11 @@
-import { DEFAULT_SETTINGS } from '../../shared/constants/settings.js';
+import { APP_APPEARANCE_STYLES, DEFAULT_SETTINGS } from '../../shared/constants/settings.js';
 import { normalizeSearch } from '../../shared/registry.js';
 import { validateTheme, validateTypography } from '../../shared/settings.js';
 import { ValidationError } from '../../shared/errors.js';
 
 const registryOptionKey = field => `registryOptions.${field}`;
 const EXECUTOR_CONTACTS_KEY = 'executorContacts';
+const APPEARANCE_STYLE_KEY = 'appearanceStyle';
 const TYPOGRAPHY_KEY = 'typography';
 const OFFICE_KEY = 'office';
 const INSTRUCTION_OPTION_COLUMNS = Object.freeze({
@@ -58,17 +59,21 @@ export class SettingsRepository {
       if (matchingIndex === -1) registryOptions.office.unshift(office);
       else office = registryOptions.office[matchingIndex];
     }
+    const appearanceStyle = settings.get(APPEARANCE_STYLE_KEY);
     return {
-      theme: validateTheme(settings.get('theme') ?? DEFAULT_SETTINGS.theme), registryOptions,
+      theme: validateTheme(settings.get('theme') ?? DEFAULT_SETTINGS.theme),
+      appearanceStyle: Object.hasOwn(APP_APPEARANCE_STYLES, appearanceStyle) ? appearanceStyle : DEFAULT_SETTINGS.appearanceStyle,
+      registryOptions,
       typography: readTypography(settings.get(TYPOGRAPHY_KEY)),
       executorContacts: readExecutorContacts(settings.get(EXECUTOR_CONTACTS_KEY)),
       office,
     };
   }
 
-  saveAppearance({ theme, typography }) {
+  saveAppearance({ theme, appearanceStyle, typography }) {
     return this.database.transaction(() => {
       if (theme !== undefined) this.#set('theme', theme);
+      if (appearanceStyle !== undefined) this.#set(APPEARANCE_STYLE_KEY, appearanceStyle);
       if (typography !== undefined) this.#set(TYPOGRAPHY_KEY, JSON.stringify(typography));
       return this.get();
     });

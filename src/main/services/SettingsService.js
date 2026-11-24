@@ -1,4 +1,4 @@
-import { CONTROL_CARD_OPTION_LABELS, REGISTRY_OPTION_LABELS } from '../../shared/constants/settings.js';
+import { APP_APPEARANCE_STYLES, CONTROL_CARD_OPTION_LABELS, REGISTRY_OPTION_LABELS } from '../../shared/constants/settings.js';
 import { validateOffice, validateRegistryOption, validateTheme, validateTypography } from '../../shared/settings.js';
 import { ValidationError } from '../../shared/errors.js';
 import { validateEnum, validateRecord, validateText } from '../../shared/validation.js';
@@ -50,6 +50,11 @@ export class SettingsService {
   get() { return this.repository.get(); }
 
   setTheme(value) { return this.repository.saveAppearance({ theme: validateTheme(value) }); }
+
+  setAppearanceStyle(value) {
+    const appearanceStyle = validateEnum(value, APP_APPEARANCE_STYLES, 'Стиль оформления');
+    return this.repository.saveAppearance({ appearanceStyle });
+  }
 
   setTypography(value) { return this.repository.saveAppearance({ typography: validateTypography(value) }); }
 

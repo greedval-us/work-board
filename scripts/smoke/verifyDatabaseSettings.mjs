@@ -4,6 +4,7 @@ import path from 'node:path';
 import { nativeTheme } from 'electron';
 import { APP_FONT_SIZE_LIMITS, DEFAULT_SETTINGS } from '../../src/shared/constants/settings.js';
 import { createSmokeForms } from './forms.mjs';
+import { verifyAppearanceStyles } from './verifyAppearanceStyles.mjs';
 
 export async function verifyDatabaseSettings(driver, fixture, { generation, created }) {
   const { js, api, wait, click, navigate, fill, openFilters, geometry, resize, resizeDefault, screenshot } = driver;
@@ -41,6 +42,7 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
   assert.deepEqual((await api('settings', 'get', generation)).typography, largeTypography);
   await resize(720, 540);
   await js("document.querySelector('#appearance-title').scrollIntoView({ block: 'start' })");
+  assert.equal(await js('window.scrollY'), 0, 'The settings panel scrolls independently of compact navigation');
   assert.equal(await js(`['.main-content', '.settings-page'].some(selector => {
     const element = document.querySelector(selector);
     return element.scrollWidth > element.clientWidth;
@@ -59,9 +61,15 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
     await setSystemAppearance('dark');
     await click('Системная', '.theme-option');
     await wait(`document.querySelector('.theme-option[value=system]')?.matches(':enabled[aria-pressed=true]') && ${appearance} === 'dark'`);
+    await verifyAppearanceStyles(driver, 'dark');
 
     await setSystemAppearance('light');
     await wait(`${appearance} === 'light'`);
+    assert.equal(await js('document.documentElement.dataset.appearanceStyle'), 'gzhel');
+    await verifyAppearanceStyles(driver, 'light');
+    await js("document.querySelector('.appearance-settings').scrollIntoView({ block: 'start' })");
+    assert.equal(await js('window.scrollY'), 0, 'Scrolling appearance settings must keep the window navigation in place');
+    await screenshot('settings-gzhel-light.png');
     await setSystemAppearance('dark');
     await wait(`${appearance} === 'dark'`);
     assert.equal((await api('settings', 'get', generation)).theme, 'system');
@@ -194,6 +202,8 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
   const next = await api('database', 'getStatus');
   assert.notEqual(next.generation, generation);
   const nextSettings = await api('settings', 'get', next.generation);
+  assert.equal(nextSettings.appearanceStyle, 'standard');
+  await wait("document.documentElement.dataset.appearanceStyle === 'standard'");
   assert.deepEqual(nextSettings.typography, defaultTypography);
   await waitForTypography(defaultTypography);
   assert.deepEqual(nextSettings.registryOptions, { documentType: [], source: [], executor: [], department: [], executorPhone: [], office: [] });
@@ -209,6 +219,8 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
   await wait("document.querySelector('.file-path')?.textContent.includes('selected-controls.sqlite')");
   const reopened = await api('database', 'getStatus');
   const reopenedSettings = await api('settings', 'get', reopened.generation);
+  assert.equal(reopenedSettings.appearanceStyle, 'gzhel');
+  await wait("document.documentElement.dataset.appearanceStyle === 'gzhel'");
   assert.deepEqual(reopenedSettings.typography, largeTypography);
   await waitForTypography(largeTypography);
   await applyTypography(defaultTypography);

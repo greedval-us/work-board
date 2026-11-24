@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, shallowRef, useId, useTemplateRef } from 'vue';
-import { RotateCcw, SlidersHorizontal, X } from 'lucide-vue-next';
+import { RotateCcw, X } from 'lucide-vue-next';
+import ActionIcon from '../../../ui/ActionIcon.vue';
 import { CHECKPOINT_FILTER_LABELS } from '../../../../shared/registry.js';
 import { INSTRUCTION_OPTION_LABELS } from '../../../../shared/constants/settings.js';
 import { REGISTRY_FILTER_LIMITS } from '../inputLimits.js';
@@ -97,7 +98,7 @@ onBeforeUnmount(() => {
         <span v-for="condition in appliedConditions" :key="condition.key" class="registry-filter-chip" :title="condition.detail">{{ condition.label }}</span>
       </div>
       <span v-if="props.changed" class="registry-draft-label" title="Изменения фильтров ещё не применены"><span class="registry-draft-dot" aria-hidden="true" /><span>Не применено</span></span>
-      <button ref="toggle" type="button" class="registry-button registry-filter-toggle" :class="{ 'registry-filter-toggle-active': appliedConditions.length }" :popovertarget="nativePopover ? panelId : undefined" :aria-controls="panelId" :aria-expanded="expanded" :title="appliedConditions.length ? summary : undefined" :disabled="props.disabled" @click="toggleFallback"><SlidersHorizontal :size="15" aria-hidden="true" />Фильтры<span v-if="appliedConditions.length" class="registry-filter-count">{{ appliedConditions.length }}</span></button>
+      <button ref="toggle" type="button" class="registry-button registry-filter-toggle" :class="{ 'registry-filter-toggle-active': appliedConditions.length }" :popovertarget="nativePopover ? panelId : undefined" :aria-controls="panelId" :aria-expanded="expanded" :title="appliedConditions.length ? summary : undefined" :disabled="props.disabled" @click="toggleFallback"><ActionIcon name="filter" :size="15" />Фильтры<span v-if="appliedConditions.length" class="registry-filter-count">{{ appliedConditions.length }}</span></button>
       <button v-if="appliedConditions.length || props.changed" type="button" class="registry-button registry-filter-reset" :disabled="props.disabled" aria-label="Сбросить фильтры" title="Сбросить фильтры" @click="reset"><RotateCcw :size="15" aria-hidden="true" /></button>
     </div>
     <Teleport to="body" :disabled="nativePopover">

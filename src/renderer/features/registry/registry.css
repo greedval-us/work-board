@@ -40,7 +40,7 @@
 .registry-field { display: flex; flex-direction: column; gap: 7px; min-width: 0; color: var(--text); font-size: calc(12px + var(--app-font-offset)); }
 .registry-field > span { font-weight: 500; }
 .registry-field input, .registry-field select, .registry-field textarea, .registry-page-size select { width: 100%; min-width: 0; min-height: 40px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 11px; background: var(--panel); color: var(--text); font: inherit; line-height: 1.5; box-shadow: var(--control-shadow); }
-.registry-field input::placeholder, .registry-field textarea::placeholder { color: var(--muted); opacity: .85; }
+.registry-field input::placeholder, .registry-field textarea::placeholder { color: var(--muted); opacity: 1; }
 .registry-field textarea { resize: vertical; min-height: 80px; }
 .registry-field input[type='date'] { min-height: 40px; }
 .registry-filter-panel .registry-field { gap: 5px; font-size: calc(11px + var(--app-font-offset)); }
@@ -150,6 +150,7 @@
 .registry-setup-link { display: inline-block; color: var(--accent); }
 .registry-setup-link:hover { text-decoration: underline; }
 .registry-empty-art { display: block; width: 108px; max-height: 76px; margin-bottom: 6px; object-fit: contain; user-select: none; }
+.registry-theme-art { height: 76px; background: var(--theme-art) center / contain no-repeat; }
 .registry-empty-symbol { display: grid; place-items: center; width: 50px; height: 50px; margin-bottom: 5px; border-radius: 15px; background: var(--accent-surface); color: var(--accent); }
 .registry-empty h2 { font-size: calc(17px + var(--app-font-offset)); font-weight: 600; letter-spacing: -.025em; }
 .registry-empty p { max-width: 47ch; color: var(--muted); font-size: calc(12px + var(--app-font-offset)); }
