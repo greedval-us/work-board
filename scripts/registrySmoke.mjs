@@ -3,11 +3,14 @@ import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { app, dialog, ipcMain } from 'electron';
 import { createWindow } from '../src/main/desktop/createWindow.js';
+import { saveStartupAppearance } from '../src/main/desktop/startupAppearance.js';
 import { createApplicationServices } from '../src/main/createApplicationServices.js';
 import { startDesktopApplication } from '../src/main/desktop/startDesktopApplication.js';
 import log from '../src/main/runtime/logger.js';
 import { PROJECT_ROOT } from './lib/runtime.mjs';
 import { DesktopSmokeDriver } from './lib/DesktopSmokeDriver.mjs';
+import { deferred } from './lib/deferred.mjs';
+import { verifyStartup } from './smoke/verifyStartup.mjs';
 import { createSmokeFixture } from './smoke/fixture.mjs';
 import { setupRegistry } from './smoke/setupRegistry.mjs';
 import { verifyRegistry } from './smoke/verifyRegistry.mjs';
@@ -27,7 +30,9 @@ const SMOKE_TIMEOUT_MS = 80_000;
 const userData = process.env.WORK_BOARD_SMOKE_USER_DATA;
 if (!userData) throw new Error('Run npm run test:desktop.');
 app.setPath('userData', userData);
+saveStartupAppearance(userData, { theme: 'dark', appearanceStyle: 'witcher' });
 const fixture = createSmokeFixture(userData, dialog);
+const continueStartup = deferred();
 const timeout = setTimeout(() => { console.error('Registry desktop smoke timed out.'); app.exit(1); }, SMOKE_TIMEOUT_MS);
 const output = process.env.WORK_BOARD_SMOKE_OUTPUT ?? path.join(PROJECT_ROOT, 'output');
 mkdirSync(output, { recursive: true });
@@ -35,8 +40,11 @@ mkdirSync(output, { recursive: true });
 app.once('browser-window-created', (_event, window) => {
   const driver = new DesktopSmokeDriver(window, { output });
   driver.prepare();
+  const shown = new Promise(resolve => window.once('show', resolve));
   window.webContents.once('did-finish-load', async () => {
     try {
+      await shown;
+      await verifyStartup(driver, userData, continueStartup);
       const initial = await setupRegistry(driver, fixture);
       await verifyRegistry(driver, fixture, initial);
       await verifyControlCard(driver, fixture, initial);
@@ -66,7 +74,10 @@ app.once('browser-window-created', (_event, window) => {
 
 // Keep fallback/in-app scenarios; native delivery and tray have a separate smoke.
 startDesktopApplication({ app, dialog, ipcMain, createWindow,
-  createServices: options => createApplicationServices({ ...options, openPath: fixture.openPath }),
+  createServices: async options => {
+    await continueStartup.promise;
+    return createApplicationServices({ ...options, openPath: fixture.openPath });
+  },
   createTray: () => { throw new Error('Tray unavailable in fallback smoke scenario.'); },
   buildMenu: template => template, logger: { error: (...args) => {
     if (args.some(value => value?.message === 'Tray unavailable in fallback smoke scenario.')) return;

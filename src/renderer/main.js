@@ -9,9 +9,12 @@ import './ui/themedControls.css';
 import './ui/motion.css';
 import './features/notifications/notifications.css';
 
-const app = createApp(App);
-const pinia = createPinia();
-app.use(pinia).use(router);
-const removeErrorHandling = installErrorHandling({ app, errors: useErrorStore(pinia) });
-app.mount('#app');
-if (import.meta.hot) import.meta.hot.dispose(removeErrorHandling);
+export async function mountApplication() {
+  const app = createApp(App);
+  const pinia = createPinia();
+  app.use(pinia).use(router);
+  const removeErrorHandling = installErrorHandling({ app, errors: useErrorStore(pinia) });
+  if (import.meta.hot) import.meta.hot.dispose(removeErrorHandling);
+  await router.isReady();
+  app.mount('#app');
+}

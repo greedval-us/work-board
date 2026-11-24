@@ -6,9 +6,25 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'%HMR_CONNECT_SOURCE%; object-src 'none'; base-uri 'none'; form-action 'none'" />
     <title>Work Board</title>
     <link rel="icon" type="image/svg+xml" href="../public/icons/app.svg" />
+    <link rel="stylesheet" href="./startup.css" />
   </head>
   <body>
+    <div id="startup-screen">
+      <div class="startup-content">
+        <div class="startup-art" aria-hidden="true">
+          <img src="/icons/app-128.png" width="84" height="84" alt="" />
+        </div>
+        <div class="startup-details">
+          <h1 class="startup-name">Work Board</h1>
+          <p id="startup-message" role="status">Подготавливаем приложение…</p>
+          <div class="startup-track" role="progressbar" aria-labelledby="startup-message">
+            <span class="startup-signal"></span>
+          </div>
+          <button id="startup-retry" type="button" hidden>Повторить</button>
+        </div>
+      </div>
+    </div>
     <div id="app"></div>
-    <script type="module" src="./main.js"></script>
+    <script type="module" src="./startup.js"></script>
   </body>
 </html>

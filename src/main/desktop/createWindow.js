@@ -1,7 +1,8 @@
-import { app, BrowserWindow, Menu } from 'electron';
+import { app, BrowserWindow, Menu, nativeTheme } from 'electron';
 import { appPath } from '../runtime/appPaths.js';
 import { DEV_SERVER } from '../../shared/constants/runtime.js';
 import { WINDOW_OPTIONS } from './windowOptions.js';
+import { readWindowAppearance } from './startupAppearance.js';
 
 export function createWindow() {
   const window = new BrowserWindow({
@@ -19,16 +20,24 @@ export function createWindow() {
   window.webContents.on('will-attach-webview', (event) => event.preventDefault());
   window.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
   window.webContents.session.setPermissionCheckHandler(() => false);
-  window.once('ready-to-show', () => window.show());
 
   const devUrl = !app.isPackaged && process.env.WORK_BOARD_DEV_SERVER_URL;
   if (devUrl && devUrl !== DEV_SERVER.URL) {
     window.destroy();
     throw new Error(`Недопустимый адрес Vite. Ожидается ${DEV_SERVER.URL}.`);
   }
-  const loaded = devUrl
-    ? window.loadURL(devUrl)
-    : window.loadFile(appPath('build/renderer/index.html'));
+  const loaded = readWindowAppearance(app.getPath('userData')).then(({ theme, appearanceStyle }) => {
+    if (window.isDestroyed()) return;
+    const dark = theme === 'system' ? nativeTheme.shouldUseDarkColors : theme === 'dark';
+    window.setBackgroundColor(dark ? '#1c1d21' : '#f8f9fb');
+    const query = { theme, style: appearanceStyle };
+    if (devUrl) {
+      const url = new URL(devUrl);
+      url.search = new URLSearchParams(query).toString();
+      return window.loadURL(url.href);
+    }
+    return window.loadFile(appPath('build/renderer/index.html'), { query });
+  });
   if (devUrl && process.env.WORK_BOARD_DEVTOOLS === '1') window.webContents.openDevTools({ mode: 'detach' });
   return { window, loaded };
 }

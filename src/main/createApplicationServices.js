@@ -19,6 +19,8 @@ import { NotificationStateRepository } from './repositories/NotificationStateRep
 import { NotificationService } from './services/NotificationService.js';
 import { NativeNotificationScheduler } from './desktop/notifications/NativeNotificationScheduler.js';
 import { AppLockService } from './services/AppLockService.js';
+import { readCachedAppearance, readDatabaseAppearance, saveStartupAppearance } from './desktop/startupAppearance.js';
+import { startupAppearance } from '../shared/startupAppearance.js';
 
 const LOCK_CHECK_INTERVAL_MS = 1_000;
 
@@ -32,6 +34,7 @@ export function createApplicationServices({ app, ipcMain, dialog, getWindow, ope
   let lockCheck;
   let lockEnabled;
   let appLock;
+  let appearance = startupAppearance();
   try {
     const userData = app.getPath('userData');
     appLock = new AppLockService({ filePath: path.join(userData, 'app-lock.json'), now,
@@ -53,6 +56,17 @@ export function createApplicationServices({ app, ipcMain, dialog, getWindow, ope
     lockEnabled = appLock.getStatus().enabled;
     const location = new DatabaseLocation({ userData, database });
     location.restore();
+    function refreshAppearance() {
+      try {
+        if (!database.connectionState.ready) {
+          appearance = readCachedAppearance(userData) ?? startupAppearance();
+          return;
+        }
+        appearance = readDatabaseAppearance(database.connection);
+        saveStartupAppearance(userData, appearance);
+      } catch (error) { logger.error('Cannot refresh startup appearance.', error); }
+    }
+    refreshAppearance();
     const instructions = new InstructionRepository(database);
     const tasks = new TaskRepository(database);
     const settings = new SettingsRepository(database);
@@ -86,7 +100,7 @@ export function createApplicationServices({ app, ipcMain, dialog, getWindow, ope
       selection: new DatabaseSelectionService({ database, location, dialog, getWindow, assertUnlocked }),
       exportService: new ExcelExportService({ database, instructions, dialog, getWindow, openPath, assertUnlocked }),
       controlCardExport: new ControlCardExportService({ database, instructions, settings, dialog, getWindow, openPath, assertUnlocked }),
-      getWindow, logger, onDataChanged: () => reminderScheduler?.check(),
+      getWindow, logger, onDataChanged: () => reminderScheduler?.check(), onAppearanceChanged: refreshAppearance,
     });
     ipc.init();
   } catch (cause) {
@@ -97,6 +111,7 @@ export function createApplicationServices({ app, ipcMain, dialog, getWindow, ope
     throw cause;
   }
   return {
+    getStartupAppearance() { return appearance; },
     getAppLockStatus() { return appLock.getStatus(); },
     startNotifications() { return reminderScheduler?.start() ?? false; },
     checkNotifications() { reminderScheduler?.check(); },

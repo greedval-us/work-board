@@ -12,6 +12,22 @@ function rendererDriver(state) {
   });
 }
 
+test('desktop smoke leaves the startup show callback in place and shows the window without focus', async () => {
+  const webContents = Object.assign(new EventEmitter(), { setBackgroundThrottling() {} });
+  const window = Object.assign(new EventEmitter(), {
+    webContents, setOpacity() {}, setSkipTaskbar() {}, setIgnoreMouseEvents() {},
+    show: () => assert.fail('Smoke window took focus.'),
+    showInactive() { this.emit('show'); },
+  });
+  let shown = false;
+  window.once('show', () => { shown = true; });
+  new DesktopSmokeDriver(window).prepare();
+  window.once('ready-to-show', () => window.show());
+  await Promise.resolve();
+  window.emit('ready-to-show');
+  assert.equal(shown, true);
+});
+
 test('desktop smoke records renderer failures from both Electron console event formats', async () => {
   const webContents = Object.assign(new EventEmitter(), { setBackgroundThrottling() {} });
   const window = Object.assign(new EventEmitter(), {

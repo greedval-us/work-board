@@ -7,6 +7,7 @@ test('bridge exposes named operations and sends only their explicit payloads', a
   const api = createPreloadApis({ invoke: async (...args) => { calls.push(args); return { ok: true, value: 'ok' }; } });
   assert.deepEqual(Object.keys(api).sort(), ['analytics', 'app', 'appLock', 'calendar', 'database', 'instructions', 'notifications', 'settings', 'tasks']);
   assert.equal(api.invoke, undefined);
+  await api.app.whenReady();
   await api.app.getInfo();
   await api.database.getStatus();
   await api.settings.get(1);
@@ -33,7 +34,7 @@ test('bridge exposes named operations and sends only their explicit payloads', a
   await api.notifications.list({ generation: 1 });
   await api.notifications.acknowledge({ generation: 1, items: [{ id: 'task:1', occurrence: '2026-11-12:2026-11-12' }], read: true });
   assert.deepEqual(calls, [
-    ['app:get-info'], ['database:get-status'], ['settings:get', { generation: 1 }], ['settings:set-theme', { theme: 'dark', generation: 1 }],
+    ['app:when-ready'], ['app:get-info'], ['database:get-status'], ['settings:get', { generation: 1 }], ['settings:set-theme', { theme: 'dark', generation: 1 }],
     ['settings:set-appearance-style', { appearanceStyle: 'witcher', generation: 1 }],
     ['settings:set-typography', { typography, generation: 1 }],
     ['settings:set-office', { office: 'Приёмная', generation: 1 }],
@@ -98,6 +99,10 @@ test('native notification subscription strips the Electron event and unsubscribe
   const api = createPreloadApis({
     on: (channel, handler) => listeners.set(channel, handler),
     removeListener: (channel, handler) => { assert.equal(listeners.get(channel), handler); listeners.delete(channel); },
+    send(channel) {
+      assert.equal(channel, 'notifications:listening');
+      assert.ok(listeners.has('notifications:open'));
+    },
   });
   const dispose = api.notifications.onOpen(payload => received.push(payload));
   assert.equal(listeners.size, 1);

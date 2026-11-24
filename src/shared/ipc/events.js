@@ -4,5 +4,10 @@ export const IPC_EVENTS = Object.freeze({
   appLockStatusChanged: 'app-lock:status-changed',
 });
 
-// One-way input from the isolated preload, outside the page's desktop API.
-export const IPC_SIGNALS = Object.freeze({ appActivity: 'app-lock:activity' });
+// Bootstrap is available before the database-backed request handlers exist.
+export const STARTUP_CHANNEL = 'app:when-ready';
+
+// One-way input from the isolated preload.
+export const IPC_SIGNALS = Object.freeze({
+  appActivity: 'app-lock:activity', notificationListening: 'notifications:listening',
+});

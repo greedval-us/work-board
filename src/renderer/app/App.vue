@@ -25,6 +25,7 @@ const mainContent = useTemplateRef('mainContent');
 const navigationToggle = useTemplateRef('navigationToggle');
 const sidebarFrame = useTemplateRef('sidebarFrame');
 const workspaceMounted = shallowRef(false);
+const startupFinished = shallowRef(false);
 const locking = shallowRef(false);
 const route = useRoute();
 const databaseName = computed(() => store.database?.ready ? store.database.filePath?.split(/[\\/]/).pop() : '');
@@ -107,6 +108,11 @@ watch(() => appLock.blocked, blocked => {
     });
   }
 }, { immediate: true, flush: 'sync' });
+watch(() => appLock.blocked ? (appLock.status || appLock.error) : (store.initialized || store.error), ready => {
+  if (!ready || startupFinished.value) return;
+  startupFinished.value = true;
+  document.getElementById('startup-screen')?.remove();
+}, { immediate: true });
 onMounted(() => {
   syncDay();
   window.addEventListener('focus', syncDay);
@@ -130,7 +136,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="workspaceMounted" class="app-shell" :inert="appLock.blocked" :aria-hidden="appLock.blocked || undefined"
+  <div v-if="workspaceMounted && startupFinished" class="app-shell" :inert="appLock.blocked" :aria-hidden="appLock.blocked || undefined"
     @keydown.esc="closeNavigation(true)" @keydown.tab="containNavigationFocus">
     <a href="#main-content" class="skip-link" @click.prevent="mainContent?.focus()">Перейти к содержимому</a>
     <Transition name="navigation-shade">
@@ -189,5 +195,5 @@ onBeforeUnmount(() => {
       </main>
     </div>
   </div>
-  <AppLockScreen v-if="appLock.blocked" />
+  <AppLockScreen v-if="startupFinished && appLock.blocked" />
 </template>

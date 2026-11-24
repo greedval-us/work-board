@@ -12,6 +12,11 @@ module.exports = {
     if (context.electronPlatformName === 'win32') {
       const { editWindowsResources } = await import('./scripts/windowsResources.mjs');
       editWindowsResources(context);
+      const portable = context.targets.find(target => target.name === 'portable');
+      if (portable) {
+        const { configurePortableSplash } = await import('./scripts/portableSplashTarget.mjs');
+        configurePortableSplash(portable);
+      }
     }
   },
   win: { target: ['nsis', 'portable'], icon: 'src/public/icons/app.ico', signAndEditExecutable: false },

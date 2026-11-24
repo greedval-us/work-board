@@ -48,7 +48,7 @@ function verifyDirectory(relative) {
   }
 }
 for (const directory of PACKAGED_DIRECTORIES) verifyDirectory(directory);
-if (legacy) verifyFile('build/legacy/main.cjs');
+if (legacy) verifyDirectory('build/legacy');
 assert.equal(JSON.parse(asar.extractFile(archive, path.normalize('node_modules/exceljs/package.json'))).version, metadata.dependencies.exceljs);
 if (legacy) {
   const { dependencies } = readProjectMetadata(path.join(root, 'packaging/legacy'));

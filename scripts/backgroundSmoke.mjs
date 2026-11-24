@@ -56,7 +56,7 @@ void runtime.ready.then(async () => {
   const window = runtime.getWindow();
   const { js, api, wait, navigate, fill, click } = driver;
   window.showInactive();
-  await wait("Boolean(document.querySelector('.notification-bell:enabled')) && !document.querySelector('[aria-busy=true]')");
+  await wait("Boolean(document.querySelector('.notification-bell:enabled')) && !document.querySelector('[aria-busy=true], #startup-screen')");
   const generation = (await api('database', 'getStatus')).generation;
   assert.equal(runtime.getServices().getNotificationStatus().mode, 'system');
   assert.equal(tray.isDestroyed(), false);

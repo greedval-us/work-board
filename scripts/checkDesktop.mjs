@@ -6,38 +6,35 @@ import {
   runProcess, TemporaryDirectory, writeElectronEntry,
 } from './lib/runtime.mjs';
 
-const SMOKE_TIMEOUT_MS = 90_000;
-const temporary = new TemporaryDirectory('work-board-smoke-');
+async function runSmoke(entry, timeoutMs, devServerUrl) {
+  const profile = new TemporaryDirectory(`work-board-${entry}-`);
+  try {
+    writeElectronEntry(profile.directory, readProjectMetadata(), path.join(root, 'scripts', `${entry}.mjs`));
+    return await runProcess(electron, [profile.directory], {
+      cwd: root, stdio: 'inherit', timeoutMs, label: entry,
+      env: createElectronEnvironment({ overrides: { WORK_BOARD_SMOKE_USER_DATA: profile.directory }, devServerUrl }),
+    });
+  } finally { profile.remove(); }
+}
+
 let devServer;
 try {
-  writeElectronEntry(temporary.directory, readProjectMetadata(), path.join(root, 'scripts', 'registrySmoke.mjs'));
   if (process.argv.includes('--dev')) {
     const { createServer } = await import('vite');
     devServer = await createServer({ configFile: path.join(root, 'vite.config.js') });
     await devServer.listen();
   }
-  process.exitCode = process.argv.includes('--background-only') ? 0 : await runProcess(electron, [temporary.directory], {
-    cwd: root, stdio: 'inherit', timeoutMs: SMOKE_TIMEOUT_MS, label: 'Desktop smoke',
-    env: createElectronEnvironment({
-      overrides: { WORK_BOARD_SMOKE_USER_DATA: temporary.directory },
-      devServerUrl: devServer ? DEV_SERVER.URL : undefined,
-    }),
-  });
-  if (process.exitCode === 0 && process.platform === 'win32') {
-    const background = new TemporaryDirectory('work-board-background-smoke-');
-    try {
-      writeElectronEntry(background.directory, readProjectMetadata(), path.join(root, 'scripts', 'backgroundSmoke.mjs'));
-      process.exitCode = await runProcess(electron, [background.directory], {
-        cwd: root, stdio: 'inherit', timeoutMs: 45_000, label: 'Background desktop smoke',
-        env: createElectronEnvironment({ overrides: { WORK_BOARD_SMOKE_USER_DATA: background.directory },
-          devServerUrl: devServer ? DEV_SERVER.URL : undefined }),
-      });
-    } finally { background.remove(); }
+  const scenarios = process.argv.includes('--background-only') ? [] : [
+    ['startupThemesSmoke', 50_000], ['registrySmoke', 90_000],
+  ];
+  if (process.platform === 'win32') scenarios.push(['backgroundSmoke', 45_000]);
+  for (const [entry, timeoutMs] of scenarios) {
+    process.exitCode = await runSmoke(entry, timeoutMs, devServer ? DEV_SERVER.URL : undefined);
+    if (process.exitCode !== 0) break;
   }
 } catch (error) {
   console.error(error);
   process.exitCode = 1;
 } finally {
-  try { await devServer?.close(); }
-  finally { temporary.remove(); }
+  await devServer?.close();
 }

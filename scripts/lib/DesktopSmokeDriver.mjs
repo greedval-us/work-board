@@ -73,8 +73,8 @@ export class DesktopSmokeDriver {
   prepare = () => {
     const window = this.window;
     window.webContents.setBackgroundThrottling(false);
-    queueMicrotask(() => window.removeAllListeners('ready-to-show'));
-    // CSS transitions need a live compositor without intercepting user input.
+    // Exercise the real ready-to-show lifecycle without taking focus from the user.
+    window.show = () => window.showInactive();
     window.setOpacity(0);
     window.setSkipTaskbar(true);
     window.setIgnoreMouseEvents(true);

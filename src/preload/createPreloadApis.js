@@ -1,5 +1,5 @@
 import { IPC_CHANNELS as channels } from '../shared/ipc/channels.js';
-import { IPC_EVENTS } from '../shared/ipc/events.js';
+import { IPC_EVENTS, IPC_SIGNALS, STARTUP_CHANNEL } from '../shared/ipc/events.js';
 import { APP_LOCK_TIMEOUT_MINUTES } from '../shared/appLock.js';
 
 // Keep results as plain envelopes: Error custom fields do not survive contextBridge.
@@ -8,7 +8,10 @@ export function createPreloadApis(ipcRenderer) {
   const payloadMethods = namespace => Object.fromEntries(Object.entries(namespace)
     .map(([method, channel]) => [method, payload => ipcRenderer.invoke(channel, payload)]));
   return {
-    app: { getInfo: () => ipcRenderer.invoke(channels.app.getInfo) },
+    app: {
+      whenReady: () => ipcRenderer.invoke(STARTUP_CHANNEL),
+      getInfo: () => ipcRenderer.invoke(channels.app.getInfo),
+    },
     appLock: {
       getStatus: () => ipcRenderer.invoke(channels.appLock.getStatus),
       configure: payload => ipcRenderer.invoke(channels.appLock.configure, payload),
@@ -58,6 +61,7 @@ export function createPreloadApis(ipcRenderer) {
           if (Number.isSafeInteger(payload?.generation) && payload.generation >= 0) callback({ generation: payload.generation });
         };
         ipcRenderer.on(IPC_EVENTS.notificationOpen, listener);
+        ipcRenderer.send(IPC_SIGNALS.notificationListening);
         return () => ipcRenderer.removeListener(IPC_EVENTS.notificationOpen, listener);
       },
     },

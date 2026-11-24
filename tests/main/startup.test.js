@@ -110,34 +110,105 @@ test('locked in-app reminders reveal availability and pending native file dialog
   assert.deepEqual(await invoke('app-lock:has-pending-notifications'), { ok: true, value: false });
 });
 
-test('native notification clicks restore the window and defer opening until unlock', async () => {
+function desktopFixture(createServices) {
   const app = Object.assign(new EventEmitter(), {
-    setName() {}, requestSingleInstanceLock: () => true, whenReady: async () => {},
+    setName() {}, requestSingleInstanceLock: () => true, whenReady: async () => {}, quit() {},
+  });
+  const handlers = new Map();
+  const ipcMain = Object.assign(new EventEmitter(), {
+    handle: (channel, handler) => handlers.set(channel, handler), removeHandler: channel => handlers.delete(channel),
   });
   const messages = [];
-  const webContents = Object.assign(new EventEmitter(), { send: (...args) => messages.push(args) });
-  let restored = false;
+  const webContents = Object.assign(new EventEmitter(), { mainFrame: {}, send: (...args) => messages.push(args) });
   const window = Object.assign(new EventEmitter(), {
-    webContents, isDestroyed: () => false, isMinimized: () => false,
-    show() { restored = true; }, focus() {},
+    webContents, isDestroyed: () => false, isMinimized: () => false, shows: 0,
+    show() { this.shows++; this.emit('focus'); }, focus() {},
   });
+  const errors = [];
+  const desktop = startDesktopApplication({ app, ipcMain, platform: 'linux',
+    logger: { error: (...args) => errors.push(args) }, dialog: { showErrorBox() {} },
+    createWindow: () => ({ window, loaded: Promise.resolve() }), createServices,
+  });
+  const event = { sender: webContents, senderFrame: webContents.mainFrame };
+  return { app, desktop, window, errors, messages, event, handlers, ipcMain };
+}
+
+test('first paint and service initialization precede renderer access to the workspace', async () => {
+  const initializing = Promise.withResolvers();
+  const initialized = Promise.withResolvers();
+  let serviceCalls = 0;
+  const f = desktopFixture(() => { serviceCalls++; initializing.resolve(); return initialized.promise; });
+  await Promise.resolve();
+  assert.equal(f.desktop.getWindow(), f.window);
+  f.app.emit('second-instance');
+  assert.equal(f.window.shows, 0);
+  const whenReady = f.handlers.get('app:when-ready');
+  await assert.rejects(whenReady({ ...f.event, senderFrame: {} }));
+  assert.equal(serviceCalls, 0);
+  let released = false;
+  const boot = whenReady(f.event).then(() => { released = true; });
+  f.window.emit('ready-to-show');
+  await initializing.promise;
+  assert.equal(f.window.shows, 1);
+  assert.equal(released, false);
+  const appearance = { theme: 'dark', appearanceStyle: 'witcher' };
+  const services = { startNotifications() {}, getAppLockStatus() {}, getStartupAppearance: () => appearance, shutdown() {} };
+  initialized.resolve(services);
+  await boot;
+  assert.deepEqual(await whenReady(f.event), appearance);
+  assert.equal(f.desktop.getServices(), services);
+  f.app.emit('will-quit');
+  assert.equal(f.handlers.has('app:when-ready'), false);
+});
+
+test('quitting during deferred initialization shuts down the newly created services', async () => {
+  const initialized = Promise.withResolvers();
+  const f = desktopFixture(() => initialized.promise);
+  await Promise.resolve();
+  f.window.emit('ready-to-show');
+  await Promise.resolve();
+  f.app.emit('before-quit');
+  f.app.emit('will-quit');
+  let shutdowns = 0;
+  initialized.resolve({ shutdown() { shutdowns++; } });
+  await f.desktop.ready;
+  assert.equal(shutdowns, 1);
+  assert.equal(f.desktop.getServices(), undefined);
+  assert.deepEqual(f.errors, []);
+});
+
+test('a failed service startup rejects the renderer handshake', async () => {
+  const f = desktopFixture(() => { throw new Error('cannot initialize services'); });
+  await Promise.resolve();
+  const boot = f.handlers.get('app:when-ready')(f.event);
+  f.window.emit('ready-to-show');
+  await assert.rejects(boot, /Не удалось открыть Work Board/);
+  assert.equal(f.errors.length, 1);
+});
+
+test('native notification clicks wait for both the renderer subscription and unlock', async () => {
   let callbacks;
   let locked = true;
-  const desktop = startDesktopApplication({ app, platform: 'linux',
-    createWindow: () => ({ window, loaded: Promise.resolve() }),
-    createServices(options) {
-      callbacks = options;
-      return { startNotifications() {}, getAppLockStatus: () => ({ locked }) };
-    },
+  const f = desktopFixture(options => {
+    callbacks = options;
+    return { startNotifications() {}, getAppLockStatus: () => ({ locked }) };
   });
-  await desktop.ready;
+  await Promise.resolve();
+  f.window.emit('ready-to-show');
+  await f.desktop.ready;
   await callbacks.onNotificationOpen({ generation: 3, items: [{ title: 'Скрытое название' }] });
-  assert.equal(restored, true);
-  assert.deepEqual(messages, []);
+  assert.equal(f.window.shows, 2);
+  assert.deepEqual(f.messages, []);
 
   locked = false;
   const status = { enabled: true, locked, timeoutMinutes: 5 };
   callbacks.onAppLockStatusChange(status);
   await Promise.resolve();
-  assert.deepEqual(messages, [['app-lock:status-changed', status], ['notifications:open', { generation: 3 }]]);
+  assert.deepEqual(f.messages, [['app-lock:status-changed', status]]);
+  f.ipcMain.emit('notifications:listening', { ...f.event, senderFrame: {} });
+  await Promise.resolve();
+  assert.equal(f.messages.length, 1);
+  f.ipcMain.emit('notifications:listening', f.event);
+  await Promise.resolve();
+  assert.deepEqual(f.messages, [['app-lock:status-changed', status], ['notifications:open', { generation: 3 }]]);
 });

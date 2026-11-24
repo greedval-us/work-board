@@ -3,6 +3,18 @@ import { getEventListeners } from 'node:events';
 import { test } from 'node:test';
 import { effectScope, nextTick, reactive } from 'vue';
 import { useAppearance } from '../../src/renderer/app/useAppearance.js';
+import { appearanceFromSearch, applyStartupAppearance } from '../../src/shared/startupAppearance.js';
+
+test('the startup frame honors explicit modes independently of the operating system', () => {
+  const root = { dataset: {} };
+  for (const [theme, systemDark, resolved] of [
+    ['light', true, 'light'], ['dark', false, 'dark'], ['system', true, 'dark'], ['system', false, 'light'],
+  ]) {
+    applyStartupAppearance(root, appearanceFromSearch(`?theme=${theme}&style=cyberpunk`), systemDark);
+    assert.deepEqual(root.dataset, { startupTheme: theme, appearanceStyle: 'cyberpunk', appearance: resolved });
+  }
+  assert.deepEqual(appearanceFromSearch('?theme=unknown&style=__proto__'), { theme: 'light', appearanceStyle: 'standard' });
+});
 
 function setup(t, theme, matches) {
   const preference = new EventTarget();

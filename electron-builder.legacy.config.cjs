@@ -9,7 +9,7 @@ module.exports = {
     output: 'release/legacy-win32',
     buildResources: path.join(__dirname, 'src/public'),
   },
-  files: [...base.files, 'build/legacy/main.cjs'],
+  files: [...base.files, 'build/legacy/*.cjs'],
   asarUnpack: ['node_modules/better-sqlite3/build/Release/*.node'],
   // prepareLegacyWindows installs the pinned Electron ABI 110 / ia32 prebuild.
   npmRebuild: false,

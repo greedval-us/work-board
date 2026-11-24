@@ -1,11 +1,14 @@
 import { ref, shallowRef } from 'vue';
 import { DEFAULT_SETTINGS, INSTRUCTION_OPTION_LABELS } from '../../shared/constants/settings.js';
+import { startupAppearance } from '../../shared/startupAppearance.js';
 import { errorMessage } from '../infrastructure/errorMessage.js';
 import { settingsService } from './services/SettingsService.js';
 
 export function useApplicationSettings({ database, canWrite, withOperation, touchData, error }) {
-  const theme = ref(DEFAULT_SETTINGS.theme);
-  const appearanceStyle = ref(DEFAULT_SETTINGS.appearanceStyle);
+  const root = globalThis.document?.documentElement?.dataset;
+  const initial = startupAppearance({ theme: root?.startupTheme, appearanceStyle: root?.appearanceStyle });
+  const theme = ref(initial.theme);
+  const appearanceStyle = ref(initial.appearanceStyle);
   const typography = shallowRef(DEFAULT_SETTINGS.typography);
   const registryOptions = shallowRef(DEFAULT_SETTINGS.registryOptions);
   const executorContacts = shallowRef(DEFAULT_SETTINGS.executorContacts);
