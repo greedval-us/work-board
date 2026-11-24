@@ -25,6 +25,8 @@ export function createNotificationsStore({
     const saving = computed(() => pendingWrites.value > 0);
     const unreadCount = computed(() => items.value.filter(item => item.unread).length);
     const ready = computed(() => Boolean(app.database?.ready) && !app.databaseSwitching);
+    const paused = computed(() => Boolean(app.workspaceLocked));
+    const available = computed(() => ready.value && !paused.value);
     const generation = computed(() => app.database?.generation);
     const requests = createRequestChannel();
     const shown = new Set();
@@ -33,8 +35,9 @@ export function createNotificationsStore({
     let consumers = 0;
     let popupWrite = false;
     let pendingSystemGeneration = null;
-    const keyFor = () => JSON.stringify([generation.value, app.revision]);
-    const current = (ticket, key) => !disposed && ready.value && ticket?.isCurrent() && key === keyFor();
+    let lockVersion = 0;
+    const keyFor = () => JSON.stringify([generation.value, app.revision, lockVersion]);
+    const current = (ticket, key) => !disposed && available.value && ticket?.isCurrent() && key === keyFor();
 
     function applySnapshot(value) {
       delivery.value = value.delivery ?? { mode: 'in-app', error: '' };
@@ -52,22 +55,22 @@ export function createNotificationsStore({
     // Writes are serialized, while reads wait for the outstanding receipt writes.
     // Acknowledgement snapshots cannot overwrite a newer record revision.
     function acknowledge(selected, flags) {
-      if (!ready.value || disposed || !selected.length) return Promise.resolve(false);
+      if (!available.value || disposed || !selected.length) return Promise.resolve(false);
       const source = generation.value;
       const requested = selected.map(notificationReference);
       pendingWrites.value++;
       const operation = queue.then(async () => {
-        if (disposed || !ready.value || generation.value !== source) return false;
+        if (disposed || !available.value || generation.value !== source) return false;
         const key = keyFor();
         requests.invalidate();
         loading.value = false;
         requestError.value = '';
         try {
           const value = await app.withOperation(() => service.acknowledge({ generation: source, items: requested, ...flags }));
-          if (!disposed && ready.value && key === keyFor()) applySnapshot(value);
+          if (!disposed && available.value && key === keyFor()) applySnapshot(value);
           return true;
         } catch (cause) {
-          if (!disposed && ready.value && key === keyFor()) {
+          if (!disposed && available.value && key === keyFor()) {
             requestError.value = errorMessage(cause, 'Не удалось сохранить состояние уведомлений. Повторите попытку.');
           }
           return false;
@@ -95,7 +98,7 @@ export function createNotificationsStore({
 
     async function refresh() {
       await queue;
-      if (disposed || !ready.value) return false;
+      if (disposed || !available.value) return false;
       const key = keyFor();
       const ticket = requests.issue(key);
       const source = generation.value;
@@ -119,15 +122,23 @@ export function createNotificationsStore({
       loading.value = false;
       requestError.value = '';
       if (databaseChanged) { items.value = []; today.value = ''; popup.value = null; shown.clear(); delivery.value = { mode: 'in-app', error: '' }; }
-      if (consumers && ready.value) void refresh();
+      if (consumers && available.value) void refresh();
     }
-    watch([generation, ready], () => {
-      invalidate(true);
-      if (ready.value && pendingSystemGeneration !== null) {
+    function resumeSystemOpen() {
+      if (available.value && pendingSystemGeneration !== null) {
         const source = pendingSystemGeneration;
         pendingSystemGeneration = null;
         void openFromSystem({ generation: source });
       }
+    }
+    watch([generation, ready], () => {
+      invalidate(true);
+      resumeSystemOpen();
+    }, { flush: 'sync' });
+    watch(paused, () => {
+      lockVersion++;
+      invalidate();
+      resumeSystemOpen();
     }, { flush: 'sync' });
     watch(() => app.revision, () => invalidate(), { flush: 'sync' });
     onScopeDispose(() => { disposed = true; requests.dispose(); shown.clear(); });
@@ -142,17 +153,20 @@ export function createNotificationsStore({
     const markAllRead = () => acknowledge(items.value.filter(item => item.unread), { read: true });
     const dismissPopup = () => { popup.value = null; };
     async function openFromSystem({ generation: source } = {}) {
-      if (!disposed && Number.isSafeInteger(source) && !app.database && !app.initialized && !app.databaseSwitching) {
+      if (disposed || !Number.isSafeInteger(source)) return false;
+      if (paused.value || (!app.database && !app.initialized && !app.databaseSwitching)) {
         pendingSystemGeneration = source;
         return true;
       }
-      if (disposed || !ready.value || generation.value !== source) return false;
+      if (!available.value || generation.value !== source) return false;
       await refresh();
-      if (disposed || !ready.value || generation.value !== source) return false;
+      if (disposed || generation.value !== source) return false;
+      if (paused.value) { pendingSystemGeneration = source; return true; }
+      if (!available.value) return false;
       openRequest.value++;
       return true;
     }
-    return { items, today, loading, error, popup, saving, unreadCount, openRequest, refresh, acquire, markRead, markAllRead, dismissPopup, openFromSystem };
+    return { items, today, loading, error, popup, saving, unreadCount, openRequest, paused, refresh, acquire, markRead, markAllRead, dismissPopup, openFromSystem };
   });
 }
 

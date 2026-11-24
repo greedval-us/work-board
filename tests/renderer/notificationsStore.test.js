@@ -200,6 +200,30 @@ test('native click requests the bell only for the current database and leaves un
   assert.equal(await store.openFromSystem({ generation: 1 }), false);
 });
 
+test('a locked workspace pauses reminder details and defers opening the notification center', async t => {
+  const previous = Promise.withResolvers();
+  const item = reminder({ popupPending: false });
+  let reads = 0;
+  const { app, store } = setup(t, {
+    list: () => ++reads === 1 ? previous.promise : Promise.resolve(snapshot([item])),
+  });
+  const old = store.refresh();
+  await setImmediate();
+  app.workspaceLocked = true;
+  const open = store.openFromSystem({ generation: 1 });
+  const lockedRead = store.refresh();
+  await setImmediate();
+  previous.resolve(snapshot([reminder({ title: 'Устаревшая запись' })]));
+  await Promise.all([old, open, lockedRead]);
+  assert.equal(reads, 1);
+  assert.deepEqual(store.items, []);
+  assert.equal(store.openRequest, 0);
+  app.workspaceLocked = false;
+  await setImmediate();
+  assert.deepEqual(store.items, [item]);
+  assert.equal(store.openRequest, 1);
+});
+
 for (const selectedGeneration of [1, 2]) test(`a native click during bootstrap is deferred and checked against generation ${selectedGeneration}`, async t => {
   const { app, store } = setup(t, { list: async () => ({ ...snapshot([]), delivery: { mode: 'system', error: '' } }) });
   app.database = null; app.initialized = false;

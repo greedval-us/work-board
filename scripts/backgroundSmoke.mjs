@@ -23,8 +23,17 @@ const output = process.env.WORK_BOARD_SMOKE_OUTPUT ?? path.join(PROJECT_ROOT, 'o
 const wake = new EventEmitter();
 const notifications = [];
 const errors = [];
+let clockOffset = 0;
 let trayMenu; let tray; let driver;
 const timeout = setTimeout(() => { console.error('Background smoke timed out.'); app.exit(1); }, 35_000);
+
+function addExternalTask(title) {
+  const external = new DatabaseService({ filePath });
+  external.open();
+  try { new TaskRepository(external).create({ title, date: localDate() }); }
+  finally { external.close(); }
+}
+
 app.once('browser-window-created', (_event, window) => {
   driver = new DesktopSmokeDriver(window, { output }); driver.prepare();
 });
@@ -32,7 +41,7 @@ const runtime = startDesktopApplication({ app, dialog, ipcMain, createWindow,
   logger: { error: (...args) => { errors.push(args); console.error(...args); } },
   createTray: () => { tray = new Tray(path.join(PROJECT_ROOT, 'build/renderer/icons/app.ico')); return tray; },
   buildMenu: template => { trayMenu = template; return Menu.buildFromTemplate(template); },
-  createServices: options => createApplicationServices({ ...options, nativeNotifications: {
+  createServices: options => createApplicationServices({ ...options, now: () => Date.now() + clockOffset, nativeNotifications: {
     isSupported: () => true, powerMonitor: wake,
     createNotification: options => {
       const native = new EventEmitter(); native.options = options;
@@ -66,8 +75,7 @@ void runtime.ready.then(async () => {
   window.close();
   assert.equal(window.isDestroyed(), false); assert.equal(window.isVisible(), false);
   // An external database edit and OS resume reach main without any renderer refresh.
-  const external = new DatabaseService({ filePath }); external.open();
-  new TaskRepository(external).create({ title: 'Срок при закрытом окне', date: localDate() }); external.close();
+  addExternalTask('Срок при закрытом окне');
   wake.emit('resume');
   assert.equal(notifications.length, 2);
   assert.equal(notifications[1].state.visible, false);
@@ -77,10 +85,58 @@ void runtime.ready.then(async () => {
   await driver.screenshot('windows-background-notifications.png');
   await js("document.querySelector('[aria-label=\"Закрыть уведомления\"]').click()");
 
+  const password = 'smoke-dedicated-profile';
+  const timeoutMinutes = 5;
+  const lockSettings = '[aria-labelledby=app-lock-settings-title]';
+  const unlock = async () => {
+    await fill('input[name=unlock-password]', { 0: password });
+    await click('Разблокировать', '.app-lock-unlock-form button');
+    await wait("!document.querySelector('.app-lock-screen[open]')");
+  };
+  await navigate('/settings', 'Настройки');
+  await click('Установить пароль', `${lockSettings} button`);
+  const options = await js("[...document.querySelectorAll('[name=app-lock-timeout] option')].map(option => option.textContent)");
+  assert.deepEqual(options, ['5 минут', '1 час', '3 часа']);
+  await fill('input[name=new-password]', { 0: password });
+  await fill('input[name=confirm-password]', { 0: password });
+  await click('Сохранить', `${lockSettings} button`);
+  await wait(`document.querySelector('${lockSettings}')?.textContent.includes('Установлен')`);
+  assert.deepEqual(await api('appLock', 'getStatus'), { enabled: true, locked: false, timeoutMinutes });
+  window.close();
+  assert.equal(window.isVisible(), false);
+  clockOffset += timeoutMinutes * 60_000;
+  await wait("Boolean(document.querySelector('.app-lock-screen[open] input[name=unlock-password]'))");
+  assert.ok(notifications.every(notification => notification.closed));
+
+  const lockedTitle = 'Срок, полученный при блокировке';
+  addExternalTask(lockedTitle);
+  wake.emit('resume');
+  assert.equal(notifications.length, 3);
+  const privateNotification = notifications[2];
+  assert.deepEqual(privateNotification.options, { title: 'Work Board', body: 'Новое уведомление' });
+  assert.equal(privateNotification.state.visible, false);
+  privateNotification.emit('click');
+  assert.equal(window.isVisible(), true);
+  assert.equal(await js("getComputedStyle(document.querySelector('.app-shell')).visibility"), 'hidden');
+  assert.equal(await js("Boolean(document.querySelector('.notification-panel'))"), false);
+  assert.doesNotMatch(await js("document.querySelector('.app-lock-screen[open]').innerText"), new RegExp(lockedTitle));
+
+  await unlock();
+  await wait(`document.querySelector('.notification-panel')?.textContent.includes(${JSON.stringify(lockedTitle)})`);
+  const lockedReminder = (await api('notifications', 'list', { generation })).items.find(item => item.title === lockedTitle);
+  assert.equal(lockedReminder.unread, true);
+  assert.equal(lockedReminder.popupPending, false);
+  await js("document.querySelector('[aria-label=\"Закрыть уведомления\"]').click()");
+
   await navigate('/calendar', 'Календарь и задачи');
   await click('Новая задача', '.calendar-page-heading button');
   await wait("Boolean(document.querySelector('.calendar-task-dialog[open]'))");
   await fill('[name=task-title]', { 0: 'Черновик перед выходом' });
+  await api('appLock', 'lock');
+  await wait("document.activeElement?.getAttribute('name') === 'unlock-password'");
+  assert.equal(await js("getComputedStyle(document.querySelector('.calendar-task-dialog')).visibility"), 'hidden');
+  await unlock();
+  assert.equal(await js("getComputedStyle(document.querySelector('.calendar-task-dialog')).visibility"), 'visible');
   window.close(); assert.equal(window.isVisible(), false); assert.equal(window.isDestroyed(), false);
   trayMenu.find(item => item.label === 'Открыть Work Board').click();
   assert.equal(window.isVisible(), true);
@@ -97,7 +153,7 @@ void runtime.ready.then(async () => {
     assert.equal(tray.isDestroyed(), true);
     assert.equal(wake.listenerCount('resume'), 0);
     clearTimeout(timeout);
-    console.log('Background Electron smoke passed: minimize, close-to-tray, main-only delivery, click restore, daily dedupe, draft retention, guarded Exit and cleanup. Native OS delivery adapter was injected; no test toasts were published.');
+    console.log('Background Electron smoke passed: tray delivery, click restore, automatic lock, private notifications, deferred opening, draft retention and guarded Exit. Native OS delivery adapter was injected; no test toasts were published.');
   });
   trayMenu.find(item => item.label === 'Выход').click();
   await wait("Boolean(document.querySelector('.calendar-confirm-dialog[open]'))");

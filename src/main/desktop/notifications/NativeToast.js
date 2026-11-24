@@ -4,7 +4,8 @@ const SHOW_TIMEOUT_MS = 15_000;
 const PREVIEW_ITEM_LIMIT = 3;
 const PREVIEW_TITLE_LIMIT = 120;
 
-function notificationOptions(items) {
+function notificationOptions(items, redacted) {
+  if (redacted) return { title: 'Work Board', body: 'Новое уведомление' };
   const lines = items.slice(0, PREVIEW_ITEM_LIMIT).map(item => {
     const title = item.title.replace(/\s+/g, ' ').slice(0, PREVIEW_TITLE_LIMIT);
     return `${formatDate(item.date)}: ${title}`;
@@ -25,9 +26,9 @@ export class NativeToast {
     Object.assign(this, { createNotification, timers, logger });
   }
 
-  show(items, { onShow, onClick, onFailure }) {
+  show(items, { redacted, onShow, onClick, onFailure }) {
     try {
-      this.#native = this.createNotification(notificationOptions(items));
+      this.#native = this.createNotification(notificationOptions(items, redacted));
       this.#listeners = {
         show: () => {
           if (this.#shown || this.#disposed) return;

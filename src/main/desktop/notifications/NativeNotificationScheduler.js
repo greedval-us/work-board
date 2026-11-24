@@ -24,8 +24,10 @@ export class NativeNotificationScheduler {
   #wake = () => this.check();
 
   constructor({ database, notifications, createNotification, isSupported, onOpen,
-    powerMonitor = null, logger = console, timers = globalThis, now = Date.now }) {
-    Object.assign(this, { database, notifications, createNotification, isSupported, onOpen, powerMonitor, logger, timers, now });
+    powerMonitor = null, logger = console, timers = globalThis, now = Date.now,
+    isAppLocked = () => false, hidePreviews = () => false }) {
+    Object.assign(this, { database, notifications, createNotification, isSupported, onOpen,
+      powerMonitor, logger, timers, now, isAppLocked, hidePreviews });
   }
 
   getStatus() { return { mode: this.#running ? 'system' : 'in-app', error: STATUS_ERRORS[this.#errorKind] ?? '' }; }
@@ -49,6 +51,15 @@ export class NativeNotificationScheduler {
     this.powerMonitor?.removeListener('resume', this.#wake);
     this.powerMonitor?.removeListener('unlock-screen', this.#wake);
     this.#clearScope();
+  }
+
+  onAppLock() {
+    const replaceAt = this.now();
+    for (const delivery of this.#deliveries) {
+      if (!delivery.redacted) this.#dispose(delivery, replaceAt);
+    }
+    this.#lastCheck = null;
+    this.check();
   }
 
   check() {
@@ -78,8 +89,9 @@ export class NativeNotificationScheduler {
         if (delivery.items.some(item => !currentKeys.has(notificationKey(item)))) this.#dispose(delivery);
       }
       this.#saveShownReceipts(snapshot.items, generation);
+      const redacted = this.isAppLocked() || this.hidePreviews();
       const pending = this.#attempts.due(snapshot.items, this.now());
-      if (pending.length) this.#show(pending, generation, snapshot.today);
+      if (pending.length) this.#show(pending, generation, snapshot.today, redacted);
       if (!this.#attempts.hasPendingWork(snapshot.items)) {
         this.#lastCheck = { generation, today, external, local };
       }
@@ -90,13 +102,14 @@ export class NativeNotificationScheduler {
     finally { this.#checking = false; }
   }
 
-  #show(items, generation, today) {
+  #show(items, generation, today, redacted) {
     const toast = new NativeToast({ createNotification: this.createNotification, timers: this.timers, logger: this.logger });
-    const delivery = { generation, today, items: items.map(notificationReference), clicked: false, toast };
+    const delivery = { generation, today, items: items.map(notificationReference), clicked: false, toast, redacted };
     this.#attempts.begin(items, this.now());
     this.#deliveries.add(delivery);
     while (this.#deliveries.size > MAX_RETAINED_NOTIFICATIONS) this.#dispose(this.#deliveries.values().next().value);
     toast.show(items, {
+      redacted,
       onShow: () => this.#onShow(delivery),
       onClick: () => this.#onClick(delivery),
       onFailure: error => this.#fail(delivery, error),
@@ -162,9 +175,9 @@ export class NativeNotificationScheduler {
     this.logger.error(message, error);
   }
 
-  #dispose(delivery) {
+  #dispose(delivery, replaceAt) {
     if (!this.#deliveries.delete(delivery)) return;
-    this.#attempts.release(delivery.items);
+    this.#attempts.release(delivery.items, replaceAt);
     delivery.toast.dispose();
   }
 

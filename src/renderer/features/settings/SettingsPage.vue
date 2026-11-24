@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import PageHeading from '../../ui/PageHeading.vue';
 import AppearanceSettings from './AppearanceSettings.vue';
+import AppLockSettings from './AppLockSettings.vue';
 import RegistryOptionsSettings from './RegistryOptionsSettings.vue';
 import StorageSettings from './StorageSettings.vue';
 import { useAppStore } from '../../app/appStore.js';
@@ -20,6 +21,7 @@ const disabled = computed(() => !store.database?.ready || store.loading || store
     <div class="settings-layout">
       <div class="settings-preferences">
         <StorageSettings />
+        <AppLockSettings />
         <AppearanceSettings :theme="store.theme" :typography="store.typography" :typography-error="store.typographyError"
           :disabled="disabled" @change="store.setTheme" @change-typography="store.setTypography" />
       </div>

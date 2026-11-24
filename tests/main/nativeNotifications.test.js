@@ -41,7 +41,7 @@ class Clock {
   }
 }
 
-function fixture(t, { supported = true, ready = true } = {}) {
+function fixture(t, { supported = true, ready = true, locked = false, hidePreviews = false } = {}) {
   const directory = mkdtempSync(path.join(tmpdir(), 'work-board-native-notifications-'));
   const firstPath = path.join(directory, 'first.sqlite');
   const database = new DatabaseService({ filePath: firstPath });
@@ -56,7 +56,7 @@ function fixture(t, { supported = true, ready = true } = {}) {
   const powerMonitor = new EventEmitter();
   const scheduler = new NativeNotificationScheduler({
     database, notifications: service, timers: clock, now: clock.now, powerMonitor,
-    isSupported: () => supported,
+    isSupported: () => supported, isAppLocked: () => locked, hidePreviews: () => hidePreviews,
     createNotification(options) {
       const native = new EventEmitter();
       Object.assign(native, { options, showCount: 0, closeCount: 0,
@@ -69,7 +69,11 @@ function fixture(t, { supported = true, ready = true } = {}) {
   });
   t.after(() => { scheduler.stop(); database.close(); rmSync(directory, { recursive: true, force: true }); });
   const task = changes => tasks.create({ title: 'Подготовить доклад', date: '2026-11-12', ...changes });
-  return { database, directory, firstPath, tasks, task, service, clock, shown, opened, errors, powerMonitor, scheduler };
+  const setLocked = value => {
+    locked = value;
+    if (locked) scheduler.onAppLock();
+  };
+  return { database, directory, firstPath, tasks, task, service, clock, shown, opened, errors, powerMonitor, scheduler, setLocked };
 }
 
 test('native reminders aggregate pending deadlines and persist popup delivery only after show', t => {
@@ -99,6 +103,68 @@ test('native clicks survive toast timeout in Action Center and keep reminders un
   assert.deepEqual(f.opened, [{ generation: 1, today: '2026-11-12', items: [{ id: item.id, occurrence: item.occurrence }] }]);
   assert.equal(f.service.list().items[0].unread, true);
   assert.equal(f.scheduler.getStatus().error, '');
+});
+
+test('locked native reminders conceal all previews but remain clickable and unread', t => {
+  const f = fixture(t, { locked: true });
+  f.task(); f.task({ title: 'Проверить отчёт', date: '2026-11-11' });
+  f.scheduler.start();
+  assert.deepEqual(f.shown[0].options, { title: 'Work Board', body: 'Новое уведомление' });
+  f.shown[0].emit('show'); f.shown[0].emit('click');
+  assert.ok(f.service.list().items.every(item => !item.popupPending && item.unread));
+  assert.equal(f.opened[0].items.length, 2);
+
+  f.setLocked(false);
+  f.task({ title: 'Открыто после разблокировки' }); f.scheduler.check();
+  assert.match(f.shown[1].options.body, /Открыто после разблокировки/);
+});
+
+test('locking removes detailed toasts and immediately replaces only pending deliveries', t => {
+  const f = fixture(t);
+  const displayed = f.task();
+  f.scheduler.start();
+  const old = f.shown[0];
+  const acknowledge = t.mock.method(f.service, 'acknowledge', () => { throw new Error('database temporarily busy'); });
+  old.emit('show'); old.emit('close');
+  const pending = f.task({ title: 'Ещё в очереди' });
+  f.scheduler.check();
+  const queued = f.shown[1];
+  acknowledge.mock.restore();
+
+  f.setLocked(true);
+  assert.equal(old.closeCount, 1);
+  assert.equal(queued.closeCount, 1);
+  old.emit('click'); queued.emit('show');
+  assert.deepEqual(f.opened, []);
+  const items = f.service.list().items;
+  assert.equal(items.find(item => item.recordId === displayed.id).popupPending, false);
+  assert.equal(items.find(item => item.recordId === pending.id).popupPending, true);
+  assert.equal(f.shown.length, 3);
+  assert.deepEqual(f.shown[2].options, { title: 'Work Board', body: 'Новое уведомление' });
+  f.shown[2].emit('show'); f.shown[2].emit('click');
+  assert.equal(f.opened[0].items.length, 1);
+});
+
+test('lock redaction does not use up the final retry for a failed native delivery', t => {
+  const f = fixture(t);
+  f.task(); f.scheduler.start();
+  f.shown[0].emit('show');
+  f.shown[0].emit('failed', {}, 'late failure');
+  f.clock.advance(60_000); f.shown[1].emit('failed', {}, 'denied');
+  f.clock.advance(60_000);
+
+  f.setLocked(true);
+  assert.equal(f.shown[2].closeCount, 1);
+  assert.deepEqual(f.shown[3].options, { title: 'Work Board', body: 'Новое уведомление' });
+  f.shown[3].emit('failed', {}, 'denied');
+  f.clock.advance(5 * 60_000);
+  assert.equal(f.shown.length, 4);
+});
+
+test('native previews can be hidden even while unlocked on legacy Windows', t => {
+  const f = fixture(t, { hidePreviews: true });
+  f.task(); f.scheduler.start();
+  assert.deepEqual(f.shown[0].options, { title: 'Work Board', body: 'Новое уведомление' });
 });
 
 test('native scheduler keeps checking without a window and resumes when a database becomes ready', t => {

@@ -1,5 +1,10 @@
 export const IPC_CHANNELS = Object.freeze({
   app: Object.freeze({ getInfo: 'app:get-info' }),
+  appLock: Object.freeze({
+    getStatus: 'app-lock:get-status', configure: 'app-lock:configure',
+    lock: 'app-lock:lock', unlock: 'app-lock:unlock',
+    hasPendingNotifications: 'app-lock:has-pending-notifications',
+  }),
   database: Object.freeze({ getStatus: 'database:get-status', create: 'database:create', open: 'database:open' }),
   settings: Object.freeze({
     get: 'settings:get',

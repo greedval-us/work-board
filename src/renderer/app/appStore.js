@@ -18,6 +18,7 @@ export const useAppStore = defineStore('app', () => {
   const revision = ref(0);
   const pendingOperations = ref(0);
   const databaseSwitching = ref(false);
+  const workspaceLocked = ref(false);
   const unsavedGuards = new Set();
   const initialization = createSingleFlight();
   const { applySettings, ...settings } = useApplicationSettings({
@@ -30,18 +31,22 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function loadApplication() {
-    if (databaseSwitching.value || settings.saving.value) return;
+    if (workspaceLocked.value || databaseSwitching.value || settings.saving.value) return;
     loading.value = true;
     error.value = '';
     try {
       const [appInfo, status] = await Promise.all([appService.getInfo(), appService.getDatabaseStatus()]);
+      if (workspaceLocked.value) return;
       const savedSettings = status.ready ? await settingsService.get(status.generation) : DEFAULT_SETTINGS;
+      if (workspaceLocked.value) return;
       info.value = appInfo;
       database.value = status;
       applySettings(savedSettings);
       initialized.value = true;
     } catch (cause) {
-      error.value = errorMessage(cause, 'Не удалось загрузить локальные данные.');
+      if (!workspaceLocked.value && cause?.code !== ERROR_CODES.APPLICATION_LOCKED) {
+        error.value = errorMessage(cause, 'Не удалось загрузить локальные данные.');
+      }
     } finally { loading.value = false; }
   }
 
@@ -106,7 +111,7 @@ export const useAppStore = defineStore('app', () => {
   }
 
   return {
-    ...settings, info, database, loading, initialized, error, revision, pendingOperations, databaseSwitching, initialize,
+    ...settings, info, database, loading, initialized, error, revision, pendingOperations, databaseSwitching, workspaceLocked, initialize,
     touchData, withOperation, selectDatabase,
     registerUnsavedGuard, resolveUnsavedChanges, prepareToClose,
     hasUnsavedGuards: () => unsavedGuards.size > 0,

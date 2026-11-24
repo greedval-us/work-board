@@ -6,8 +6,8 @@ import { AppError } from '../errors/AppError.js';
 import { createControlCardDocument } from '../exports/word/ControlCardDocument.js';
 
 export class ControlCardExportService {
-  constructor({ database, instructions, settings, dialog, getWindow, openPath }) {
-    Object.assign(this, { database, instructions, settings, dialog, getWindow, openPath });
+  constructor({ database, instructions, settings, dialog, getWindow, openPath, assertUnlocked = () => {} }) {
+    Object.assign(this, { database, instructions, settings, dialog, getWindow, openPath, assertUnlocked });
   }
 
   async export({ id, generation, fields }) {
@@ -27,13 +27,17 @@ export class ControlCardExportService {
       filters: [{ name: 'Документ Word', extensions: ['docx'] }],
       properties: ['createDirectory', 'showOverwriteConfirmation'],
     });
+    this.assertUnlocked();
     if (result.canceled || !result.filePath) return { cancelled: true };
     this.database.assertGeneration(generation);
     const selected = result.filePath.toLowerCase().endsWith('.docx') ? result.filePath : `${result.filePath}.docx`;
     const contents = await createControlCardDocument({ fields: values, marks, recordId: record.id });
     const filePath = await writeAtomicFile(selected, contents, {
       getDatabasePaths: () => [this.database.filePath],
-      assertCurrent: () => this.database.assertGeneration(generation),
+      assertCurrent: () => {
+        this.assertUnlocked();
+        this.database.assertGeneration(generation);
+      },
     });
     const opened = await openSavedFile(filePath, this.openPath);
     return { cancelled: false, filePath, opened };

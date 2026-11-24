@@ -1,7 +1,8 @@
 import { AppError } from '../errors/AppError.js';
 import { publicError } from '../errors/publicError.js';
+import { ERROR_CODES } from '../../shared/errors.js';
 
-export function registerIpcHandlers({ ipcMain, requests, isTrusted, logger, onSuccess }) {
+export function registerIpcHandlers({ ipcMain, requests, isTrusted, logger, authorize, onSuccess }) {
   const registered = [];
   const unregister = () => {
     for (const channel of registered.splice(0)) ipcMain.removeHandler(channel);
@@ -12,6 +13,7 @@ export function registerIpcHandlers({ ipcMain, requests, isTrusted, logger, onSu
         try {
           // Authorization must happen before payload validation or data access.
           if (!isTrusted(event)) throw new AppError('Недопустимый источник запроса.', 'PERMISSION_DENIED');
+          authorize?.(channel);
           const value = await handler(...args);
           // A background observer must never turn a committed write into a failed IPC result.
           try { onSuccess?.(channel); }
@@ -20,7 +22,7 @@ export function registerIpcHandlers({ ipcMain, requests, isTrusted, logger, onSu
         }
         catch (error) {
           const failure = publicError(error);
-          logger.error('IPC request failed', { channel, code: failure.code }, error);
+          if (failure.code !== ERROR_CODES.APPLICATION_LOCKED) logger.error('IPC request failed', { channel, code: failure.code }, error);
           return { ok: false, error: failure };
         }
       });

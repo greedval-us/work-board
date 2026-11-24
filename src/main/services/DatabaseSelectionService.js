@@ -3,7 +3,9 @@ import { AppError } from '../errors/AppError.js';
 
 export class DatabaseSelectionService {
   #selecting = false;
-  constructor({ database, location, dialog, getWindow }) { Object.assign(this, { database, location, dialog, getWindow }); }
+  constructor({ database, location, dialog, getWindow, assertUnlocked = () => {} }) {
+    Object.assign(this, { database, location, dialog, getWindow, assertUnlocked });
+  }
   create() { return this.select('create'); }
   open() { return this.select('open'); }
 
@@ -16,10 +18,12 @@ export class DatabaseSelectionService {
       let filePath;
       if (mode === 'create') {
         const result = await this.dialog.showSaveDialog(this.getWindow(), { ...options, defaultPath: 'work-board.sqlite', properties: ['createDirectory'] });
+        this.assertUnlocked();
         if (result.canceled || !result.filePath) return { cancelled: true, status: this.database.getStatus() };
         filePath = path.extname(result.filePath) ? result.filePath : `${result.filePath}.sqlite`;
       } else {
         const result = await this.dialog.showOpenDialog(this.getWindow(), { ...options, properties: ['openFile'] });
+        this.assertUnlocked();
         if (result.canceled || !result.filePaths?.length) return { cancelled: true, status: this.database.getStatus() };
         filePath = result.filePaths[0];
       }

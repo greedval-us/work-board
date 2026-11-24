@@ -8,7 +8,10 @@ export function startDesktopApplication({ app, dialog, ipcMain, createWindow, cr
   let mainWindow = null;
   let loaded = Promise.resolve();
   let services;
-  const lifecycle = new WindowLifecycle({ app, getWindow: () => mainWindow, createTray, buildMenu, logger, platform });
+  let pendingNotificationOpen = null;
+  const lifecycle = new WindowLifecycle({ app, getWindow: () => mainWindow, createTray, buildMenu, logger, platform,
+    beforeRestore: () => services?.getAppLockStatus(),
+  });
 
   function failStartup(error) {
     logger.error('Failed to start Work Board:', error);
@@ -23,6 +26,7 @@ export function startDesktopApplication({ app, dialog, ipcMain, createWindow, cr
     loaded = created.loaded;
     const window = mainWindow;
     lifecycle.attachWindow(window);
+    window.on('focus', () => services.getAppLockStatus());
     window.on('closed', () => { if (mainWindow === window) mainWindow = null; });
     loaded.catch(failStartup);
     return window;
@@ -33,10 +37,30 @@ export function startDesktopApplication({ app, dialog, ipcMain, createWindow, cr
     return lifecycle.restoreWindow();
   }
 
-  async function onNotificationOpen({ generation }) {
-    const window = restoreWindow();
+  async function flushNotificationOpen() {
+    const request = pendingNotificationOpen;
+    if (!request || services.getAppLockStatus().locked) return;
     await loaded;
-    if (window && !window.isDestroyed()) window.webContents.send(IPC_EVENTS.notificationOpen, { generation });
+    if (pendingNotificationOpen !== request || services.getAppLockStatus().locked) return;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      pendingNotificationOpen = null;
+      mainWindow.webContents.send(IPC_EVENTS.notificationOpen, request);
+    }
+  }
+
+  function onNotificationOpen({ generation }) {
+    pendingNotificationOpen = { generation };
+    restoreWindow();
+    return flushNotificationOpen();
+  }
+
+  function onAppLockStatusChange(status) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IPC_EVENTS.appLockStatusChanged, status);
+    }
+    if (!status.locked) {
+      void flushNotificationOpen().catch(error => logger.error('Cannot open native notification.', error));
+    }
   }
 
   app.on('before-quit', () => lifecycle.beforeQuit());
@@ -48,7 +72,9 @@ export function startDesktopApplication({ app, dialog, ipcMain, createWindow, cr
   else {
     app.on('second-instance', () => { if (mainWindow) restoreWindow(); });
     ready = app.whenReady().then(() => {
-      services = createServices({ app, ipcMain, dialog, getWindow: () => mainWindow, logger, onNotificationOpen });
+      services = createServices({ app, ipcMain, dialog, getWindow: () => mainWindow, logger,
+        onNotificationOpen, onAppLockStatusChange,
+      });
       openWindow();
       lifecycle.initializeTray();
       services.startNotifications();

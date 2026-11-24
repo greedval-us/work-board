@@ -26,7 +26,7 @@ const actionError = shallowRef('');
 let pendingSystemOpen = false;
 const visibleCounts = shallowRef({});
 const popupTitleLimit = 2;
-const disabled = computed(() => !app.database?.ready || app.databaseSwitching);
+const disabled = computed(() => !app.database?.ready || app.databaseSwitching || app.workspaceLocked);
 const busy = computed(() => disabled.value || saving.value || navigating.value);
 const badge = computed(() => unreadCount.value > 99 ? '99+' : String(unreadCount.value));
 const bellLabel = computed(() => `${unreadCount.value ? `Уведомления: непрочитанных ${unreadCount.value}` : 'Уведомления'}${error.value || actionError.value ? '. Не удалось обновить уведомления' : ''}`);

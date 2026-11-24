@@ -1,23 +1,31 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, shallowRef, useTemplateRef } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { PanelLeftClose, PanelLeftOpen, Sun, Moon, RefreshCw, ChevronRight, HardDrive } from 'lucide-vue-next';
+import { PanelLeftClose, PanelLeftOpen, Sun, Moon, RefreshCw, ChevronRight, HardDrive, LockKeyhole } from 'lucide-vue-next';
 import { localDate } from '../../shared/dates.js';
 import AppSidebar from './AppSidebar.vue';
+import AppLockScreen from './AppLockScreen.vue';
+import { useAppLockStore } from './appLockStore.js';
 import { useAppStore } from './appStore.js';
 import { useAppearance } from './useAppearance.js';
 import { useErrorStore } from './errorStore.js';
 import ErrorBoundary from './ErrorBoundary.vue';
 import NotificationCenter from '../features/notifications/NotificationCenter.vue';
+import { useNotificationsStore } from '../features/notifications/notificationsStore.js';
+import { subscribeNotificationOpen } from '../features/notifications/NotificationService.js';
 
 const store = useAppStore();
+const appLock = useAppLockStore();
 const errors = useErrorStore();
+const notifications = useNotificationsStore();
 const compactQuery = window.matchMedia('(max-width: 1079px)');
 const compact = shallowRef(compactQuery.matches);
 const collapsed = shallowRef(compact.value);
 const mainContent = useTemplateRef('mainContent');
 const navigationToggle = useTemplateRef('navigationToggle');
 const sidebarFrame = useTemplateRef('sidebarFrame');
+const workspaceMounted = shallowRef(false);
+const locking = shallowRef(false);
 const route = useRoute();
 const databaseName = computed(() => store.database?.ready ? store.database.filePath?.split(/[\\/]/).pop() : '');
 const storageLabel = computed(() => store.database?.ready ? 'Подключена' : 'Не выбрана');
@@ -25,6 +33,9 @@ const navigationLabel = computed(() => collapsed.value ? 'Развернуть �
 const currentDay = shallowRef(new Date());
 const dayFormatter = new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: 'numeric', month: 'long' });
 let dayTimer;
+let unsubscribeLock;
+let unsubscribeNotificationOpen;
+let focusBeforeLock;
 function syncDay() {
   const now = new Date();
   currentDay.value = now;
@@ -72,15 +83,44 @@ function beforeUnload(event) {
     event.returnValue = '';
   }
 }
+async function lockApplication() {
+  if (locking.value) return;
+  locking.value = true;
+  try { await appLock.lock(); }
+  catch (cause) { if (!appLock.blocked) errors.report(cause); }
+  finally { locking.value = false; }
+}
+watch(() => appLock.blocked, blocked => {
+  if (blocked && workspaceMounted.value) focusBeforeLock = document.activeElement;
+  document.documentElement.toggleAttribute('data-app-lock-blocked', blocked);
+  store.workspaceLocked = blocked;
+  if (blocked) return;
+  workspaceMounted.value = true;
+  if (!store.initialized) void store.initialize();
+  if (focusBeforeLock) {
+    const previous = focusBeforeLock;
+    focusBeforeLock = undefined;
+    nextTick(() => {
+      if (appLock.blocked) return;
+      if (previous.isConnected) previous.focus();
+      else mainContent.value?.focus();
+    });
+  }
+}, { immediate: true, flush: 'sync' });
 onMounted(() => {
   syncDay();
   window.addEventListener('focus', syncDay);
   compactQuery.addEventListener('change', resizeNavigation);
-  store.initialize();
-  window.__workBoardConfirmClose = () => store.prepareToClose();
+  unsubscribeNotificationOpen = subscribeNotificationOpen(payload => { void notifications.openFromSystem(payload); });
+  unsubscribeLock = appLock.subscribe();
+  void appLock.initialize();
+  window.__workBoardConfirmClose = () => !appLock.blocked && store.prepareToClose();
   window.addEventListener('beforeunload', beforeUnload);
 });
 onBeforeUnmount(() => {
+  unsubscribeLock?.();
+  unsubscribeNotificationOpen?.();
+  document.documentElement.removeAttribute('data-app-lock-blocked');
   clearTimeout(dayTimer);
   window.removeEventListener('focus', syncDay);
   compactQuery.removeEventListener('change', resizeNavigation);
@@ -90,7 +130,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="app-shell" @keydown.esc="closeNavigation(true)" @keydown.tab="containNavigationFocus">
+  <div v-if="workspaceMounted" class="app-shell" :inert="appLock.blocked" :aria-hidden="appLock.blocked || undefined"
+    @keydown.esc="closeNavigation(true)" @keydown.tab="containNavigationFocus">
     <a href="#main-content" class="skip-link" @click.prevent="mainContent?.focus()">Перейти к содержимому</a>
     <Transition name="navigation-shade">
       <button v-if="compact && !collapsed" class="sidebar-backdrop" type="button" tabindex="-1" aria-label="Закрыть меню" @click="closeNavigation(true)" />
@@ -112,6 +153,10 @@ onBeforeUnmount(() => {
         <div class="sidebar-tools">
           <time class="toolbar-date" :datetime="localDate(currentDay)">{{ dayFormatter.format(currentDay) }}</time>
           <NotificationCenter />
+          <button v-if="appLock.status?.enabled" type="button" class="icon-button" :disabled="locking"
+            aria-label="Заблокировать приложение" title="Заблокировать приложение" @click="lockApplication">
+            <LockKeyhole :size="16" aria-hidden="true" />
+          </button>
           <button type="button" class="icon-button theme-toggle" :disabled="!store.database?.ready || store.saving || store.databaseSwitching"
             :aria-label="appearanceLabel" :title="appearanceLabel" @click="toggleAppearance">
             <Transition name="theme-symbol" mode="out-in"><component :is="isDark ? Sun : Moon" :size="16" aria-hidden="true" /></Transition>
@@ -144,4 +189,5 @@ onBeforeUnmount(() => {
       </main>
     </div>
   </div>
+  <AppLockScreen v-if="appLock.blocked" />
 </template>

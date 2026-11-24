@@ -1,5 +1,6 @@
 export const ERROR_CODES = Object.freeze({
   APPLICATION: 'APPLICATION',
+  APPLICATION_LOCKED: 'APPLICATION_LOCKED',
   VALIDATION: 'VALIDATION',
   DATABASE_REQUIRED: 'DATABASE_REQUIRED',
   DATABASE_CHANGED: 'DATABASE_CHANGED',
@@ -19,6 +20,7 @@ export const ERROR_CODES = Object.freeze({
 
 const messages = Object.freeze({
   APPLICATION: 'Не удалось выполнить действие.',
+  APPLICATION_LOCKED: 'Приложение заблокировано. Введите пароль, чтобы продолжить.',
   VALIDATION: 'Проверьте введённые данные.',
   DATABASE_REQUIRED: 'База данных не открыта. Создайте или выберите базу в настройках.',
   DATABASE_CHANGED: 'Активная база изменилась. Обновите данные и повторите действие.',

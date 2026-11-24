@@ -5,7 +5,7 @@ import { createPreloadApis } from '../../src/preload/createPreloadApis.js';
 test('bridge exposes named operations and sends only their explicit payloads', async () => {
   const calls = [];
   const api = createPreloadApis({ invoke: async (...args) => { calls.push(args); return { ok: true, value: 'ok' }; } });
-  assert.deepEqual(Object.keys(api).sort(), ['analytics', 'app', 'calendar', 'database', 'instructions', 'notifications', 'settings', 'tasks']);
+  assert.deepEqual(Object.keys(api).sort(), ['analytics', 'app', 'appLock', 'calendar', 'database', 'instructions', 'notifications', 'settings', 'tasks']);
   assert.equal(api.invoke, undefined);
   await api.app.getInfo();
   await api.database.getStatus();
@@ -48,6 +48,33 @@ test('bridge exposes named operations and sends only their explicit payloads', a
     ['notifications:list', { generation: 1 }],
     ['notifications:acknowledge', { generation: 1, items: [{ id: 'task:1', occurrence: '2026-11-12:2026-11-12' }], read: true }],
   ]);
+});
+
+test('app lock bridge sends named requests and forwards only public status fields', async () => {
+  const calls = [];
+  const listeners = new Map();
+  const { appLock } = createPreloadApis({
+    invoke: async (...args) => calls.push(args),
+    on: (channel, listener) => listeners.set(channel, listener),
+    removeListener: (channel, listener) => { assert.equal(listeners.get(channel), listener); listeners.delete(channel); },
+  });
+  await appLock.getStatus();
+  await appLock.configure({ password: 'test password', timeoutMinutes: 60 });
+  await appLock.lock();
+  await appLock.unlock({ password: 'test password' });
+  await appLock.hasPendingNotifications();
+  assert.deepEqual(calls, [
+    ['app-lock:get-status'], ['app-lock:configure', { password: 'test password', timeoutMinutes: 60 }],
+    ['app-lock:lock'], ['app-lock:unlock', { password: 'test password' }], ['app-lock:has-pending-notifications'],
+  ]);
+  const received = [];
+  const unsubscribe = appLock.onStatusChanged(status => received.push(status));
+  const deliver = listeners.get('app-lock:status-changed');
+  deliver({}, { enabled: true, locked: true, timeoutMinutes: 5, private: 'omitted' });
+  deliver({}, { enabled: true, locked: true, timeoutMinutes: 1 });
+  assert.deepEqual(received, [{ enabled: true, locked: true, timeoutMinutes: 5 }]);
+  unsubscribe();
+  assert.equal(listeners.size, 0);
 });
 
 test('bridge keeps failure envelopes as plain data across the isolated-world boundary', async () => {

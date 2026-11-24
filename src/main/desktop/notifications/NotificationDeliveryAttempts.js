@@ -5,7 +5,7 @@ const MAX_ATTEMPTS = 3;
 
 function canRetry(item, attempt) {
   return attempt && attempt.count < MAX_ATTEMPTS
-    && (attempt.state === 'failed' || (attempt.state === 'released' && item.popupPending));
+    && (attempt.state === 'retry' || (attempt.state === 'released' && item.popupPending));
 }
 
 // Tracks delivery separately from persisted receipts for the current database and day.
@@ -35,19 +35,31 @@ export class NotificationDeliveryAttempts {
     }
   }
 
-  #setState(items, state, previousState) {
+  #setState(items, state) {
     for (const item of items) {
       const attempt = this.#entries.get(notificationKey(item));
-      if (attempt && (!previousState || attempt.state === previousState)) attempt.state = state;
+      if (attempt) attempt.state = state;
     }
   }
 
   shown(items) { this.#setState(items, 'shown'); }
 
   // Windows can reject a toast after accepting it, even after a receipt was saved.
-  failed(items) { this.#setState(items, 'failed'); }
+  failed(items) { this.#setState(items, 'retry'); }
 
-  release(items) { this.#setState(items, 'released', 'pending'); }
+  release(items, replaceAt) {
+    for (const item of items) {
+      const attempt = this.#entries.get(notificationKey(item));
+      if (attempt?.state !== 'pending') continue;
+      if (replaceAt === undefined) attempt.state = 'released';
+      else {
+        // Replacing a preview for privacy is not a delivery failure.
+        attempt.state = 'retry';
+        attempt.count--;
+        attempt.nextAt = replaceAt;
+      }
+    }
+  }
 
   receipts(items) {
     return items.filter(item => item.popupPending && this.#entries.get(notificationKey(item))?.state === 'shown')

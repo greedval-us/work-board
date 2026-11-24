@@ -33,14 +33,14 @@ function outputPath(filePath, databasePaths) {
   return destination;
 }
 
-export async function writeAtomicFile(filePath, contents, { getDatabasePaths = () => [], assertCurrent = () => {} } = {}) {
+export async function writeAtomicFile(filePath, contents, { getDatabasePaths = () => [], assertCurrent = () => {}, mode } = {}) {
   const destination = outputPath(filePath, getDatabasePaths());
   const temporary = path.join(path.dirname(destination), `.${randomUUID()}.tmp`);
   let handle;
   let owned = false;
   try {
     // Reserve the path first: failed exclusive creation must never clean someone else's file.
-    handle = await filesystem.open(temporary, 'wx');
+    handle = await filesystem.open(temporary, 'wx', mode);
     owned = true;
     await handle.close();
     handle = null;

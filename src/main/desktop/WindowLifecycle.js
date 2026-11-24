@@ -1,6 +1,6 @@
 export class WindowLifecycle {
-  constructor({ app, getWindow, createTray, buildMenu, logger = console, platform = process.platform }) {
-    Object.assign(this, { app, getWindow, createTray, buildMenu, logger, platform });
+  constructor({ app, getWindow, createTray, buildMenu, beforeRestore, logger = console, platform = process.platform }) {
+    Object.assign(this, { app, getWindow, createTray, buildMenu, beforeRestore, logger, platform });
     this.tray = null;
     this.quitting = false;
   }
@@ -34,6 +34,7 @@ export class WindowLifecycle {
   restoreWindow() {
     const window = this.getWindow();
     if (!window || window.isDestroyed()) return null;
+    this.beforeRestore?.();
     if (window.isMinimized()) window.restore();
     window.show();
     window.focus();

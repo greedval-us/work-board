@@ -13,6 +13,8 @@ startDesktopApplication({
   createTray: () => new Tray(icon), buildMenu: template => Menu.buildFromTemplate(template),
   createServices: options => createApplicationServices({ ...options,
     openPath: filePath => shell.openPath(filePath),
+    // Electron 22 cannot reliably remove an expired preview from Windows Action Center.
+    hideLegacyNotificationPreviews: process.versions.electron.split('.')[0] === '22',
     nativeNotifications: process.platform === 'win32' ? {
       createNotification: options => new Notification({ ...options, icon }),
       isSupported: () => Notification.isSupported(), powerMonitor,

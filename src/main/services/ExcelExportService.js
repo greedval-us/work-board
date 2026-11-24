@@ -4,8 +4,8 @@ import { openSavedFile } from '../files/openSavedFile.js';
 import { createRegistryWorkbook } from '../exports/excel/RegistryWorkbook.js';
 
 export class ExcelExportService {
-  constructor({ database, instructions, dialog, getWindow, openPath }) {
-    Object.assign(this, { database, instructions, dialog, getWindow, openPath });
+  constructor({ database, instructions, dialog, getWindow, openPath, assertUnlocked = () => {} }) {
+    Object.assign(this, { database, instructions, dialog, getWindow, openPath, assertUnlocked });
   }
 
   async export(request) {
@@ -24,11 +24,13 @@ export class ExcelExportService {
       filters: [{ name: 'Книга Excel', extensions: ['xlsx'] }],
       properties: ['createDirectory', 'showOverwriteConfirmation'],
     });
+    this.assertUnlocked();
     if (result.canceled || !result.filePath) return { cancelled: true, count: rows.length };
     const selected = result.filePath.toLowerCase().endsWith('.xlsx') ? result.filePath : `${result.filePath}.xlsx`;
     const workbook = createRegistryWorkbook({ rows, request: normalized, exportedAt });
     const filePath = await writeAtomicFile(selected, Buffer.from(await workbook.xlsx.writeBuffer()), {
       getDatabasePaths: () => [snapshotDatabasePath, this.database.filePath],
+      assertCurrent: this.assertUnlocked,
     });
     const opened = await openSavedFile(filePath, this.openPath);
     return { cancelled: false, filePath, count: rows.length, opened };
