@@ -2,7 +2,7 @@ import { onScopeDispose } from 'vue';
 import { createRequestChannel } from '../../../infrastructure/requestScope.js';
 
 // Capture the ticket before queueing the read, even when the same key is selected again.
-export function createRegistryRead(staleResult) {
+export function createControlRead(staleResult) {
   const channel = createRequestChannel();
   let ticket;
 

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseService } from '../../src/main/database/DatabaseService.js';
 import { InstructionRepository } from '../../src/main/repositories/InstructionRepository.js';
+import { PlanRepository } from '../../src/main/repositories/PlanRepository.js';
 import { TaskRepository } from '../../src/main/repositories/TaskRepository.js';
 import { NotificationStateRepository } from '../../src/main/repositories/NotificationStateRepository.js';
 import { NotificationService } from '../../src/main/services/NotificationService.js';
@@ -14,6 +15,7 @@ import { SettingsRepository } from '../../src/main/repositories/SettingsReposito
 import { SettingsService } from '../../src/main/services/SettingsService.js';
 import { CalendarService } from '../../src/main/services/CalendarService.js';
 import { RecordService } from '../../src/main/services/RecordService.js';
+import { PlanningService } from '../../src/main/services/PlanningService.js';
 
 function fixture(t) {
   const directory = mkdtempSync(path.join(tmpdir(), 'work-board-notifications-'));
@@ -22,19 +24,53 @@ function fixture(t) {
   database.open();
   t.after(() => { database.close(); rmSync(directory, { recursive: true, force: true }); });
   const instructions = new InstructionRepository(database);
+  const plans = new PlanRepository(database);
+  const settings = new SettingsRepository(database);
   const tasks = new TaskRepository(database);
   let today = '2026-11-12';
   const service = new NotificationService({
-    instructions, tasks, repository: new NotificationStateRepository(database), today: () => today,
+    instructions, tasks, plans, isPlanningEnabled: () => settings.isPlanningEnabled(),
+    repository: new NotificationStateRepository(database), today: () => today,
   });
   const instruction = changes => instructions.create({
     controlDate: '2026-10-01', instructionNumber: '12/А', title: 'Указание',
     executor: 'Иванов', deadline: '2026-11-12', ...changes,
   });
-  return { database, directory, filePath, instructions, tasks, service, instruction, setToday: value => { today = value; } };
+  return { database, directory, filePath, instructions, tasks, plans, service, instruction, setToday: value => { today = value; } };
 }
 
 const reference = item => ({ id: item.id, occurrence: item.occurrence });
+
+test('planning reminders keep separate receipts and follow moves, marks, closure and the planning setting', t => {
+  const { database, plans, instruction, service } = fixture(t);
+  const settings = new SettingsRepository(database);
+  const original = instruction({ controlSchedule: { frequency: 'custom', customDates: ['2026-11-12'] } });
+  const row = plans.create({ ...original, planItem: 'п. 3', extendedUntil: '2026-11-15' });
+  database.connection.prepare('UPDATE plans SET created_at = ? WHERE id = ?').run(original.createdAt, row.id);
+  assert.deepEqual(service.list().items.map(item => item.kind), ['checkpoint', 'instruction']);
+  settings.savePlanningEnabled(true);
+  const all = service.list().items;
+  assert.equal(new Set(all.map(item => item.id)).size, 4);
+  const due = all.find(item => item.kind === 'plan');
+  const checkpoint = all.find(item => item.kind === 'planCheckpoint');
+  assert.deepEqual([due.date, checkpoint.date, checkpoint.planItem], ['2026-11-15', '2026-11-12', 'п. 3']);
+  assert.equal(due.recordId, original.id);
+  service.acknowledge({ items: [due, checkpoint], read: true, popup: true });
+  settings.savePlanningEnabled(false);
+  service.acknowledge({ items: [], read: true });
+  assert.ok(service.list().items.every(item => item.unread && item.popupPending));
+  settings.savePlanningEnabled(true);
+  assert.ok(service.list().items.filter(item => item.planItem).every(item => !item.unread && !item.popupPending));
+  plans.update(row.id, { controlSchedule: { ...row.controlSchedule, moves: [{ from: '2026-11-12', to: '2026-11-13' }] } });
+  const moved = service.list().items.find(item => item.kind === 'planCheckpoint');
+  assert.equal(moved.id, checkpoint.id);
+  assert.equal(moved.date, '2026-11-13');
+  assert.equal(moved.popupPending, true);
+  plans.update(row.id, { controlSchedule: { ...plans.get(row.id).controlSchedule, marks: [{ date: moved.date, text: 'Исполнено' }] } });
+  assert.equal(service.list().items.some(item => item.kind === 'planCheckpoint'), false);
+  plans.closeControl(row.id);
+  assert.deepEqual(service.list().items.map(item => item.kind), ['checkpoint', 'instruction']);
+});
 
 test('closing a control via IPC removes its deadline and checkpoints from the calendar and reminders', async t => {
   const { database, instructions, tasks, service, instruction } = fixture(t);
@@ -92,6 +128,36 @@ test('notifications include overdue and the inclusive three-day horizon using th
   assert.ok(result.items.every(item => item.unread && item.popupPending));
   assert.equal(result.items[0].occurrence, '2026-11-11:2026-11-12');
   assert.equal(result.items[0].instructionNumber, '12/А');
+});
+
+test('enabling planning and mutating plan rows refreshes reminders immediately through IPC', async t => {
+  const f = fixture(t);
+  const handlers = new Map();
+  const window = { isDestroyed: () => false, webContents: { mainFrame: {} } };
+  const snapshots = [];
+  const manager = new IPCManager({
+    ipcMain: { handle: (name, fn) => handlers.set(name, fn), removeHandler: name => handlers.delete(name) },
+    database: f.database, appService: {}, settingsService: new SettingsService(new SettingsRepository(f.database)),
+    recordServices: { plans: new PlanningService({ database: f.database, repository: f.plans }) },
+    getWindow: () => window, onDataChanged: () => snapshots.push(f.service.list().items.map(item => item.date)),
+  });
+  manager.init();
+  t.after(() => manager.shutdown());
+  const event = { sender: window.webContents, senderFrame: window.webContents.mainFrame };
+  async function invoke(channel, payload) {
+    const result = await handlers.get(channel)(event, { ...payload, generation: f.database.connectionState.generation });
+    assert.equal(result.ok, true);
+    return result.value;
+  }
+  await invoke('settings:set-planning-enabled', { planningEnabled: true });
+  const [item] = await invoke('plans:create', { rows: [{ title: 'План', controlDate: '2026-11-01',
+    deadline: '2026-11-13', instructionNumber: '12', executor: 'Отдел' }] });
+  await invoke('plans:update', { id: item.id, data: { extendedUntil: '2026-11-14' } });
+  await invoke('settings:set-planning-enabled', { planningEnabled: false });
+  await invoke('settings:set-planning-enabled', { planningEnabled: true });
+  await invoke('plans:close-control', { id: item.id });
+  await invoke('plans:remove', { id: item.id });
+  assert.deepEqual(snapshots, [[], ['2026-11-13'], ['2026-11-14'], [], ['2026-11-14'], [], []]);
 });
 
 test('recurring tasks count each date in the calendar and acknowledge or complete it independently', t => {

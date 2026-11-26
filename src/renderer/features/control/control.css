@@ -8,6 +8,8 @@
 .registry-toolbar .page-heading h1 { white-space: nowrap; }
 .registry-toolbar > .registry-actions { flex-shrink: 0; flex-wrap: nowrap; gap: 8px; }
 .registry-actions { flex-wrap: wrap; }
+.control-views { display: flex; flex: none; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; }
+.control-scope-switch { display: inline-flex; align-items: center; gap: 3px; padding: 3px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
 .registry-button { display: inline-flex; justify-content: center; align-items: center; gap: 7px; min-height: 32px; padding: 6px 11px; border: 1px solid var(--border); border-radius: 9px; color: var(--text); background: var(--panel); box-shadow: var(--control-shadow); font: inherit; font-size: calc(12px + var(--app-font-offset)); font-weight: 550; line-height: 1.35; white-space: nowrap; }
 .registry-button:hover { background: var(--raised); }
 .registry-button-primary { border-color: transparent; color: var(--on-accent); background: var(--accent); }
@@ -64,7 +66,7 @@
 .registry-error-banner .registry-inline-action { color: var(--error); }
 .registry-table-scroll { flex: 1; min-width: 0; min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--raised) transparent; scroll-padding: 45px 8px 10px; }
 .registry-table-scroll:focus-visible { outline-offset: -3px; }
-.registry-table-scroll-wide { overflow-x: auto; }
+.registry-table-scroll-wide, .registry-table-scroll:has(> [data-custom-widths]) { overflow-x: auto; }
 .registry-table { --registry-action-width: 0px; width: 100%; min-width: 0; table-layout: fixed; border-collapse: separate; border-spacing: 0; text-align: left; font-size: calc(11px + var(--app-font-offset)); }
 .registry-table-wide { min-width: 1800px; }
 .registry-table-with-actions { --registry-action-width: 42px; }
@@ -162,7 +164,7 @@
 .registry-dialog::backdrop { background: rgb(12 17 26 / .42); backdrop-filter: blur(5px); }
 .registry-dialog .registry-button { min-height: 33px; padding: 5px 11px; }
 .registry-instruction-dialog { width: 980px; }
-:is(.registry-instruction-dialog, .registry-control-card-dialog)[open] { display: flex; flex-direction: column; overflow: hidden; }
+.registry-instruction-dialog[open] { display: flex; flex-direction: column; overflow: hidden; }
 .registry-dialog-header { flex: none; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
 .registry-dialog-symbol { display: grid; flex: none; place-items: center; width: 37px; height: 37px; border-radius: 11px; color: var(--accent); background: var(--accent-surface); }
 .registry-dialog-intro { flex: 1; min-width: 0; }
@@ -180,7 +182,7 @@
 .registry-options-hint a { color: var(--accent); text-decoration: underline; }
 .registry-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; gap: 9px 12px; min-width: 0; border: 0; margin: 0; padding: 0; }
 .registry-instruction-columns { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); align-items: start; gap: 20px; }
-.registry-form-grid legend, .registry-control-card-group legend { margin: 0 0 10px; padding: 0; color: var(--text); font-size: calc(14px + var(--app-font-offset)); font-weight: 625; letter-spacing: -.025em; }
+.registry-form-grid legend { margin: 0 0 10px; padding: 0; color: var(--text); font-size: calc(14px + var(--app-font-offset)); font-weight: 625; letter-spacing: -.025em; }
 .registry-instruction-control { min-width: 0; padding-left: 20px; border-left: 1px solid var(--border); }
 .registry-dialog .registry-field { gap: 4px; }
 .registry-dialog .registry-field :is(input, select, textarea) { min-height: 33px; padding: 5px 9px; border-radius: 8px; background: var(--panel); }
@@ -196,19 +198,11 @@
 .registry-dialog-actions .registry-delete-button + .registry-unsaved-label { margin-right: 0; }
 .registry-confirm-dialog { width: 480px; }
 .registry-confirm-content { padding: 22px; }
+.registry-confirm-choices { display: grid; gap: 7px; margin-top: 16px; }
+.registry-confirm-choices .registry-button { justify-content: flex-start; min-width: 0; white-space: normal; overflow-wrap: anywhere; text-align: left; }
 .registry-confirm-content h2 { margin: 0 0 10px; font-size: calc(21px + var(--app-font-offset)); font-weight: 600; letter-spacing: -.035em; }
 .registry-confirm-content p { color: var(--muted); font-size: calc(13px + var(--app-font-offset)); overflow-wrap: anywhere; }
 .registry-confirm-actions { gap: 8px; }
-.registry-control-card-dialog { width: 960px; }
-.registry-control-card-form { display: flex; flex-direction: column; min-height: 0; }
-.registry-control-card-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 18px 24px; }
-.registry-control-card-group { min-width: 0; margin: 0; padding: 0; border: 0; }
-.registry-control-card-group legend { width: 100%; padding-bottom: 5px; border-bottom: 1px solid var(--border); }
-.registry-control-card-actions { gap: 8px; }
-.registry-control-card-actions > .registry-export-warning { flex: 1 1 100%; }
-.registry-control-card-notice, .registry-control-card-error { flex: 1 1 185px; margin: 0; font-size: calc(12px + var(--app-font-offset)); overflow-wrap: anywhere; }
-.registry-control-card-notice { color: var(--registry-success); }
-.registry-control-card-error { color: var(--error); }
 .registry-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 @media (min-width: 841px) {
   .registry-instruction-body { display: flex; flex-direction: column; overflow: hidden; }
@@ -217,12 +211,12 @@
   .registry-instruction-document { padding-left: 2px; }
 }
 @media (min-width: 621px) and (max-width: 840px) {
-  .registry-instruction-columns, .registry-control-card-body { column-gap: 14px; }
+  .registry-instruction-columns { column-gap: 14px; }
   .registry-instruction-control { padding-left: 14px; }
   .registry-form-grid { column-gap: 8px; }
 }
 @media (max-height: 390px) {
-  :is(.registry-instruction-dialog, .registry-control-card-dialog)[open] { display: block; overflow: auto; }
+  .registry-instruction-dialog[open] { display: block; overflow: auto; }
 }
 @container (max-width: 1390px) {
   .registry-table:not(.registry-table-wide) :is([data-column='incomingNumber'], [data-column='source'], [data-column='summary'], [data-column='executionMark'], [data-column='controlFrequency']) { display: none; }
@@ -289,7 +283,7 @@
   .registry-filter-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .registry-filter-footer { align-items: flex-start; }
   .registry-filter-footer > .registry-actions { margin-left: auto; }
-  .registry-instruction-columns, .registry-control-card-body, .registry-form-grid { grid-template-columns: minmax(0, 1fr); }
+  .registry-instruction-columns, .registry-form-grid { grid-template-columns: minmax(0, 1fr); }
   .registry-instruction-control { padding: 14px 0 0; border: 0; border-top: 1px solid var(--border); }
   .registry-field-wide { grid-column: auto; }
   .registry-dialog-header, .registry-dialog-body, .registry-dialog-actions { padding-inline: 18px; }

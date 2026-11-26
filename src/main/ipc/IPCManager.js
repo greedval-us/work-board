@@ -15,9 +15,10 @@ const APPEARANCE_CHANGE_CHANNELS = new Set([
 const REMINDER_CHANGE_CHANNELS = new Set([
   IPC_CHANNELS.database.create, IPC_CHANNELS.database.open,
   IPC_CHANNELS.instructions.closeControl,
+  IPC_CHANNELS.plans.closeControl, IPC_CHANNELS.settings.setPlanningEnabled,
   IPC_CHANNELS.tasks.setOccurrenceCompleted,
   IPC_CHANNELS.tasks.moveOccurrence,
-  ...['instructions', 'tasks'].flatMap(entity => ['create', 'update', 'remove'].map(method => IPC_CHANNELS[entity][method])),
+  ...['instructions', 'plans', 'tasks'].flatMap(entity => ['create', 'update', 'remove'].map(method => IPC_CHANNELS[entity][method])),
 ]);
 
 export class IPCManager {

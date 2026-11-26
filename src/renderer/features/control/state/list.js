@@ -1,9 +1,9 @@
 import { computed, reactive, shallowRef } from 'vue';
-import { emptyFilters, INSTRUCTION_COLUMNS, localDate, REGISTRY_DEFAULT_SORT, REGISTRY_PAGINATION } from '../../../../shared/registry.js';
+import { emptyFilters, localDate, REGISTRY_DEFAULT_SORT, REGISTRY_PAGINATION } from '../../../../shared/registry.js';
 import { errorMessage } from '../../../infrastructure/errorMessage.js';
-import { createRegistryRead } from './read.js';
+import { createControlRead } from './read.js';
 
-export function createRegistryList({ app, service, now, closed, ready, error }) {
+export function createControlList({ app, service, now, closed, ready, error, columns, messages }) {
   const draftFilters = reactive(emptyFilters());
   const appliedFilters = shallowRef(emptyFilters());
   const today = shallowRef(localDate(now()));
@@ -18,7 +18,7 @@ export function createRegistryList({ app, service, now, closed, ready, error }) 
   const pageCount = computed(() => Math.max(REGISTRY_PAGINATION.DEFAULT_PAGE, Math.ceil(total.value / pageSize.value)));
   const hasAppliedFilters = computed(() => Object.values(appliedFilters.value).some(Boolean));
   const filtersChanged = computed(() => Object.keys(draftFilters).some(key => draftFilters[key] !== appliedFilters.value[key]));
-  const requests = createRegistryRead(false);
+  const requests = createControlRead(false);
   let loadedKey = null;
 
   function query() {
@@ -83,7 +83,7 @@ export function createRegistryList({ app, service, now, closed, ready, error }) 
       } catch (cause) {
         if (isCurrent()) {
           loadedKey = null;
-          error.value = errorMessage(cause, 'Не удалось загрузить реестр. Повторите попытку.');
+          error.value = errorMessage(cause, messages.loadError);
         }
         return false;
       } finally {
@@ -125,7 +125,7 @@ export function createRegistryList({ app, service, now, closed, ready, error }) 
   }
 
   function changeSort(field) {
-    if (!INSTRUCTION_COLUMNS.some(column => column.key === field)) return false;
+    if (!columns.some(column => column.key === field)) return false;
     sort.value = { field, direction: sort.value.field === field && sort.value.direction === 'asc' ? 'desc' : 'asc' };
     page.value = REGISTRY_PAGINATION.DEFAULT_PAGE;
     return refresh();

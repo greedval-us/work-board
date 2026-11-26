@@ -7,6 +7,8 @@ import path from 'node:path';
 import { DatabaseService } from '../../src/main/database/DatabaseService.js';
 import { InstructionRepository } from '../../src/main/repositories/InstructionRepository.js';
 import { TaskRepository } from '../../src/main/repositories/TaskRepository.js';
+import { PlanRepository } from '../../src/main/repositories/PlanRepository.js';
+import { SettingsRepository } from '../../src/main/repositories/SettingsRepository.js';
 import { NotificationStateRepository } from '../../src/main/repositories/NotificationStateRepository.js';
 import { NotificationService } from '../../src/main/services/NotificationService.js';
 import { NativeNotificationScheduler } from '../../src/main/desktop/notifications/NativeNotificationScheduler.js';
@@ -48,8 +50,10 @@ function fixture(t, { supported = true, ready = true, locked = false, hidePrevie
   if (ready) database.open();
   const clock = new Clock();
   const tasks = new TaskRepository(database);
+  const plans = new PlanRepository(database);
+  const settings = new SettingsRepository(database);
   const service = new NotificationService({
-    instructions: new InstructionRepository(database), tasks,
+    instructions: new InstructionRepository(database), tasks, plans, isPlanningEnabled: () => settings.isPlanningEnabled(),
     repository: new NotificationStateRepository(database), today: () => localDate(new Date(clock.time)),
   });
   const shown = [], opened = [], errors = [];
@@ -73,8 +77,29 @@ function fixture(t, { supported = true, ready = true, locked = false, hidePrevie
     locked = value;
     if (locked) scheduler.onAppLock();
   };
-  return { database, directory, firstPath, tasks, task, service, clock, shown, opened, errors, powerMonitor, scheduler, setLocked };
+  return { database, directory, firstPath, tasks, task, plans, settings, service, clock, shown, opened, errors, powerMonitor, scheduler, setLocked };
 }
+
+test('system delivery follows the planning switch and removes a disabled plan from Windows notifications', t => {
+  const f = fixture(t);
+  f.plans.create({ title: 'Проверки', planItem: 'Аудит склада', controlDate: '2026-11-01',
+    deadline: '2026-11-12', instructionNumber: '12', executor: 'Отдел' });
+  f.scheduler.start();
+  assert.equal(f.shown.length, 0);
+  f.settings.savePlanningEnabled(true);
+  f.scheduler.check();
+  assert.equal(f.shown.length, 1);
+  assert.match(f.shown[0].options.body, /Аудит склада/);
+  f.shown[0].emit('show');
+  f.settings.savePlanningEnabled(false);
+  f.scheduler.check();
+  assert.equal(f.shown[0].closeCount, 1);
+  f.shown[0].emit('click');
+  assert.deepEqual(f.opened, []);
+  f.settings.savePlanningEnabled(true);
+  f.scheduler.check();
+  assert.equal(f.shown.length, 1);
+});
 
 test('native reminders aggregate pending deadlines and persist popup delivery only after show', t => {
   const f = fixture(t);

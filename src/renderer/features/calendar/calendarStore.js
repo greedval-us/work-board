@@ -16,6 +16,8 @@ export function createCalendarStore({ id = 'calendar', getApp = useAppStore, ser
     const selectedDate = shallowRef(date);
     const monthDays = shallowRef([]);
     const instructions = shallowRef([]);
+    const plans = shallowRef([]);
+    const planCheckpoints = shallowRef([]);
     const tasks = shallowRef([]);
     const checkpoints = shallowRef([]);
     const taskError = shallowRef('');
@@ -24,11 +26,13 @@ export function createCalendarStore({ id = 'calendar', getApp = useAppStore, ser
     const generation = computed(() => app.database?.generation);
     let consumers = 0;
 
-    const keyFor = (value) => JSON.stringify([generation.value, app.revision, value]);
+    const keyFor = (value) => JSON.stringify([generation.value, app.revision, app.planningEnabled, value]);
     function setDay(value = {}) {
       instructions.value = value.instructions ?? [];
       tasks.value = value.tasks ?? [];
       checkpoints.value = value.checkpoints ?? [];
+      plans.value = app.planningEnabled ? value.plans ?? [] : [];
+      planCheckpoints.value = app.planningEnabled ? value.planCheckpoints ?? [] : [];
     }
 
     // Month and day share cache/request rules, but only day clears on loading.
@@ -157,14 +161,14 @@ export function createCalendarStore({ id = 'calendar', getApp = useAppStore, ser
     function selectDate(value) { selectedDate.value = value; month.value = value.slice(0, 7); }
     function changeMonth(delta) { month.value = moveMonth(month.value, delta); selectedDate.value = `${month.value}-01`; }
 
-    watch([() => app.database?.ready, () => app.database?.generation, () => app.revision], (value, previous) => {
+    watch([() => app.database?.ready, () => app.database?.generation, () => app.revision, () => app.planningEnabled], (value, previous) => {
       invalidate(value[0] !== previous[0] || value[1] !== previous[1]);
     }, { flush: 'sync' });
     watch(month, () => { if (consumers > 0) void fetchMonth(); });
     watch(selectedDate, () => { if (consumers > 0) void fetchDay(); });
 
     return {
-      month, selectedDate, monthDays, instructions, tasks, checkpoints, ready, generation,
+      month, selectedDate, monthDays, instructions, tasks, checkpoints, plans, planCheckpoints, ready, generation,
       monthLoading, dayLoading, monthError, dayError, taskError, busyTaskId,
       acquire, fetchMonth, fetchDay, refresh, selectDate, changeMonth, saveTask, removeTask, moveTaskOccurrence, toggleTask,
     };

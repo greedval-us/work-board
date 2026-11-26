@@ -1,0 +1,24 @@
+.column-resize-handle {
+  position: absolute;
+  z-index: 1;
+  inset: 0 0 0 auto;
+  width: 9px;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+}
+.column-resize-handle::after {
+  content: '';
+  position: absolute;
+  inset: 22% 1px 22% auto;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--border);
+}
+.column-resize-handle:is(:hover, :focus-visible, :active)::after {
+  inset-block: 8%;
+  background: var(--accent);
+}
+.column-resize-handle:focus-visible { outline-offset: -2px; }
+table[data-custom-widths] { min-width: 0; table-layout: fixed; }
+table[data-custom-widths] :is(th, td) { overflow: hidden; }

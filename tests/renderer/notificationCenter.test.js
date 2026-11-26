@@ -120,6 +120,23 @@ test('cancelled navigation keeps the panel open and reminders unread', async t =
   assert.equal(element('toggle').props['aria-expanded'], true);
 });
 
+for (const kind of ['plan', 'planCheckpoint']) test(`${kind} opens the planning card and identifies the plan item`, async t => {
+  const { root, element, calls, appState } = await mountCenter(t, {
+    items: [{ id: 'plan-reminder', kind, recordId: 4, date: '2026-11-12', title: 'Проверки', planItem: 'Пункт 3', unread: true }],
+  });
+  appState.planningEnabled = true;
+  await element('toggle').props.onClick();
+  await nextTick();
+  assert.ok(find(root, node => node.text?.includes('Пункт 3')));
+  await element('open-item').props.onClick();
+  const { name, query } = calls[0][1];
+  assert.equal(name, 'PlanningControl');
+  assert.equal(query.plan, 4);
+  assert.equal(query.checkpoint, kind === 'planCheckpoint' ? '2026-11-12' : undefined);
+  assert.ok(query.notification);
+  assert.equal(calls[1][0], 'read');
+});
+
 test('opening the popup acknowledges only its presentation and focuses the notification list', async t => {
   const { element, calls, ownerDocument, appState } = await mountCenter(t, { popup: true });
   await element('show-list').props.onClick();

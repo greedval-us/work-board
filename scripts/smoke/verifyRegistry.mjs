@@ -4,6 +4,29 @@ import ExcelJS from 'exceljs';
 import { formatDate } from '../../src/shared/registry.js';
 import { chooseExcelReport, createSmokeForms } from './forms.mjs';
 
+const resizeColumn = '.registry-table thead th[data-column=title]';
+const resizeHandle = `${resizeColumn} [role=separator]`;
+const columnWidth = `document.querySelector('${resizeColumn}').getBoundingClientRect().width`;
+
+async function verifyColumnDrag({ window, js, wait, pressKey }) {
+  const original = await js(columnWidth);
+  const point = await js(`(() => {
+    const r = document.querySelector('${resizeHandle}').getBoundingClientRect();
+    return { x: Math.floor(r.x + r.width / 2), y: Math.floor(r.y + r.height / 2) };
+  })()`);
+  const send = event => window.webContents.sendInputEvent(event);
+  send({ type: 'mouseMove', ...point });
+  send({ type: 'mouseDown', ...point, button: 'left', clickCount: 1 });
+  send({ type: 'mouseMove', x: point.x + 48, y: point.y, modifiers: ['leftbuttondown'] });
+  send({ type: 'mouseUp', x: point.x + 48, y: point.y, button: 'left', clickCount: 1 });
+  const dragged = Math.round(original) + 48;
+  await wait(`Math.abs(${columnWidth} - ${dragged}) < 1 && document.activeElement.matches('${resizeHandle}')`);
+  await pressKey('Right');
+  await wait(`Math.abs(${columnWidth} - ${dragged + 8}) < 1`);
+  assert.equal(await js(`document.querySelector('${resizeColumn}').getAttribute('aria-sort')`), 'none');
+  return dragged + 8;
+}
+
 export async function verifyRegistry(driver, fixture, { generation, created, overdueTextColor }) {
   const { window, js, api, wait, click, fill, openFilters, pressKey, verifyEntrance, resize, resizeDefault, resizeSweep, screenshot } = driver;
   const { exportFile, shortExportFile, openRequests, today, originalDeadline, firstCheckpointMark, nextCheckpointCell, nextCheckpointTime, controlFrequencyCell, dailyControl, customControl, registrySelections, historicalDocumentType } = fixture;
@@ -42,6 +65,7 @@ export async function verifyRegistry(driver, fixture, { generation, created, ove
   await changeSort('documentType', 'descending', `(${firstDocumentType}) === ${JSON.stringify(registrySelections.documentType)}`);
   await changeSort('controlDate', 'ascending');
   await changeSort('controlDate', 'descending');
+  const savedWidth = await verifyColumnDrag(driver);
 
   const documentTypeFilter = '[data-filter=documentType]';
   await openFilters();
@@ -64,6 +88,10 @@ export async function verifyRegistry(driver, fixture, { generation, created, ove
   await click('Применить', '.registry-filters button');
   await wait("document.querySelector('.registry-count')?.textContent === '27'");
 
+  // The edit removed the final row of the filtered table and unmounted it.
+  await wait(`Math.abs(${columnWidth} - ${savedWidth}) < 1`);
+  await js(`document.querySelector('${resizeHandle}').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))`);
+  await wait("!document.querySelector('.registry-table').hasAttribute('data-custom-widths')");
   await screenshot('registry-light.png');
   await resizeSweep('registry');
   await js("document.querySelector('.registry-column-toggle').click()");

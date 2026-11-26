@@ -12,6 +12,25 @@ const reminder = (overrides = {}) => ({
   date: day, title: 'Подготовить отчёт', unread: true, popupPending: true, ...overrides,
 });
 const snapshot = items => ({ today: day, items });
+
+test('disabling planning removes visible plan popups while keeping other reminders', async t => {
+  const task = reminder();
+  const plan = reminder({ kind: 'plan', id: 'plan:1:created' });
+  const items = [task, plan];
+  const { app, store } = setup(t, {
+    list: async () => snapshot(items),
+    acknowledge: async () => snapshot(items.map(item => ({ ...item, popupPending: false }))),
+  });
+  app.planningEnabled = true;
+  await store.refresh();
+  await setImmediate();
+  assert.deepEqual(store.popup.items.map(item => item.kind), ['task', 'plan']);
+  app.planningEnabled = false;
+  assert.deepEqual(store.items.map(item => item.kind), ['task']);
+  assert.deepEqual(store.popup.items.map(item => item.kind), ['task']);
+  await store.refresh();
+  assert.equal(store.unreadCount, 1);
+});
 function setup(t, service, options = {}) {
   const app = reactive({ database: { ready: true, generation: 1 }, revision: 0, databaseSwitching: false,
     pendingOperations: 0,

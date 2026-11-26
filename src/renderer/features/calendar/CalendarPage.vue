@@ -16,7 +16,7 @@ const app = useAppStore();
 const route = useRoute();
 const calendar = useCalendar();
 const {
-  today, month, selectedDate, grid, instructions, tasks, checkpoints, ready, generation,
+  today, month, selectedDate, grid, instructions, tasks, checkpoints, plans, planCheckpoints, ready, generation,
   monthLoading, dayLoading, monthError, dayError, taskError, busyTaskId,
 } = calendar;
 const editing = shallowRef(null);
@@ -64,11 +64,12 @@ onBeforeUnmount(unregister);
       </div>
       <div class="calendar-layout">
         <MonthCalendar
-          :month="month" :days="grid" :selected-date="selectedDate" :today="today" :loading="monthLoading"
+          :month="month" :days="grid" :selected-date="selectedDate" :today="today" :loading="monthLoading" :planning-enabled="app.planningEnabled"
           @change-month="calendar.changeMonth" @select-date="calendar.selectDate" @today="calendar.goToday"
         />
         <CalendarDayLists
           :date="selectedDate" :instructions="instructions" :tasks="tasks" :checkpoints="checkpoints" :today="today" :loading="dayLoading"
+          :plans="plans" :plan-checkpoints="planCheckpoints"
           :error="dayError" :task-error="navigationError || taskError" :busy-task-id="busyTaskId" :disabled="app.databaseSwitching"
           @new-task="newTask" @open-task="editTask" @toggle-task="calendar.toggleTask" @retry="calendar.fetchDay"
         />

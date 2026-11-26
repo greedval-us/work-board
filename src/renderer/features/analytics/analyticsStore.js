@@ -2,20 +2,21 @@ import { defineStore } from 'pinia';
 import { computed, onScopeDispose, reactive, shallowRef, watch } from 'vue';
 import { localDate } from '../../../shared/registry.js';
 import { emptyAnalyticsFilters, normalizeAnalyticsFilters } from '../../../shared/analytics.js';
-import { analyticsService } from './AnalyticsService.js';
+import { analyticsService, planningAnalyticsService } from './AnalyticsService.js';
 import { errorMessage } from '../../infrastructure/errorMessage.js';
 import { createRequestChannel } from '../../infrastructure/requestScope.js';
 import { useAppStore } from '../../app/appStore.js';
 import { initialAnalyticsFilters } from './analyticsFilters.js';
 
-export function createAnalyticsStore({ getApp = useAppStore, service = analyticsService, initialDate = localDate } = {}) {
-  return defineStore('analytics', () => {
+export function createAnalyticsStore({ getApp = useAppStore, planning = false,
+  service = planning ? planningAnalyticsService : analyticsService, initialDate = localDate } = {}) {
+  return defineStore(planning ? 'planningAnalytics' : 'analytics', () => {
     const app = getApp();
-    const initial = initialAnalyticsFilters(initialDate());
+    const initial = planning ? emptyAnalyticsFilters() : initialAnalyticsFilters(initialDate());
     const draftFilters = reactive({ ...initial }); const appliedFilters = shallowRef({ ...initial });
     const data = shallowRef(null); const loading = shallowRef(false); const error = shallowRef(''); const filterError = shallowRef('');
     const executorOptions = shallowRef([]);
-    const ready = computed(() => Boolean(app.database?.ready));
+    const ready = computed(() => Boolean(app.database?.ready && (!planning || app.planningEnabled)));
     const filtersChanged = computed(() => JSON.stringify(draftFilters) !== JSON.stringify(appliedFilters.value));
     const requests = createRequestChannel();
     let loadedKey; let consumers = 0;
@@ -38,7 +39,8 @@ export function createAnalyticsStore({ getApp = useAppStore, service = analytics
           if (!accepts() || !matchesSelection()) return false;
           const result = await service.summary(request);
           if (!result || !accepts() || !matchesSelection()) return false;
-          if (result.instructions) page = result.instructions.page;
+          const details = planning ? result.plans : result.instructions;
+          if (details) page = details.page;
           loadedKey = keyFor();
           executorOptions.value = result.executorOptions ?? executorOptions.value;
           data.value = result;
@@ -75,7 +77,7 @@ export function createAnalyticsStore({ getApp = useAppStore, service = analytics
       return refresh({ keepData: true });
     }
     function acquire() { consumers++; void refresh(); let released = false; return () => { if (!released) { consumers--; released = true; } }; }
-    watch([() => app.database?.generation, () => app.database?.ready, () => app.revision], ([generation, databaseReady], [previousGeneration, previousReady]) => {
+    watch([() => app.database?.generation, ready, () => app.revision], ([generation, databaseReady], [previousGeneration, previousReady]) => {
       requests.invalidate(); loadedKey = undefined; data.value = null; error.value = ''; loading.value = false;
       if (generation !== previousGeneration || databaseReady !== previousReady) {
         draftFilters.executor = '';
@@ -93,3 +95,4 @@ export function createAnalyticsStore({ getApp = useAppStore, service = analytics
   });
 }
 export const useAnalyticsStore = createAnalyticsStore();
+export const usePlanningAnalyticsStore = createAnalyticsStore({ planning: true });

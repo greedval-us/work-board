@@ -5,6 +5,6 @@ export {
 export {
   getControlWeekday, isScheduledDate, isValidControlDayOfMonth, isValidControlDayOfWeek, isValidControlMonthOfYear, supportsControlDayOfMonth,
 } from './controlSchedule/recurrence.js';
-export { getNextControlCheckpoint, listControlCheckpoints } from './controlSchedule/checkpoints.js';
+export { getNextControlCheckpoint, iterateControlCheckpoints, listControlCheckpoints } from './controlSchedule/checkpoints.js';
 export { moveControlCheckpoint } from './controlSchedule/moveCheckpoint.js';
 export { controlPeriodForDate, isControlPeriodOverridden } from './controlSchedule/periods.js';

@@ -9,7 +9,8 @@ const APPEARANCE_STYLE_KEY = 'appearanceStyle';
 const TYPOGRAPHY_KEY = 'typography';
 const PLANNING_ENABLED_KEY = 'planningEnabled';
 const OFFICE_KEY = 'office';
-const INSTRUCTION_OPTION_COLUMNS = Object.freeze({
+const readPlanningEnabled = value => value === undefined ? DEFAULT_SETTINGS.planningEnabled : value === 'true';
+const CONTROL_OPTION_COLUMNS = Object.freeze({
   documentType: ['document_type', 'document_type_search'],
   source: ['source'],
   executor: ['executor', 'executor_search'],
@@ -66,7 +67,7 @@ export class SettingsRepository {
       appearanceStyle: Object.hasOwn(APP_APPEARANCE_STYLES, appearanceStyle) ? appearanceStyle : DEFAULT_SETTINGS.appearanceStyle,
       registryOptions,
       typography: readTypography(settings.get(TYPOGRAPHY_KEY)),
-      planningEnabled: (settings.get(PLANNING_ENABLED_KEY) ?? String(DEFAULT_SETTINGS.planningEnabled)) === 'true',
+      planningEnabled: readPlanningEnabled(settings.get(PLANNING_ENABLED_KEY)),
       executorContacts: readExecutorContacts(settings.get(EXECUTOR_CONTACTS_KEY)),
       office,
     };
@@ -79,6 +80,11 @@ export class SettingsRepository {
       if (typography !== undefined) this.#set(TYPOGRAPHY_KEY, JSON.stringify(typography));
       return this.get();
     });
+  }
+
+  isPlanningEnabled() {
+    const row = this.database.connection.prepare('SELECT value FROM app_settings WHERE key = ?').get(PLANNING_ENABLED_KEY);
+    return readPlanningEnabled(row?.value);
   }
 
   savePlanningEnabled(planningEnabled) {
@@ -98,18 +104,21 @@ export class SettingsRepository {
       }
       if (executorContacts !== undefined) this.#set(EXECUTOR_CONTACTS_KEY, JSON.stringify(executorContacts));
       if (office !== undefined) this.#set(OFFICE_KEY, office);
-      if (renamedOption) this.#renameInstructionOption(renamedOption);
+      if (renamedOption) this.#renameControlOption(renamedOption);
       return { ...settings, ...changes, registryOptions: { ...settings.registryOptions, ...registryOptions } };
     });
   }
 
-  #renameInstructionOption({ field, previousValue, value }) {
-    if (previousValue === value || !Object.hasOwn(INSTRUCTION_OPTION_COLUMNS, field)) return;
-    const columns = INSTRUCTION_OPTION_COLUMNS[field];
+  #renameControlOption({ field, previousValue, value }) {
+    if (previousValue === value || !Object.hasOwn(CONTROL_OPTION_COLUMNS, field)) return;
+    const columns = CONTROL_OPTION_COLUMNS[field];
     const assignments = columns.map(column => `${column} = ?`).join(', ');
     const values = columns.length === 2 ? [value, normalizeSearch(value)] : [value];
-    this.database.connection.prepare(`UPDATE instructions SET ${assignments}, updated_at = ? WHERE ${columns[0]} = ?`)
-      .run(...values, new Date().toISOString(), previousValue);
+    const updatedAt = new Date().toISOString();
+    for (const table of ['instructions', 'plans']) {
+      this.database.connection.prepare(`UPDATE ${table} SET ${assignments}, updated_at = ? WHERE ${columns[0]} = ?`)
+        .run(...values, updatedAt, previousValue);
+    }
   }
 
   #set(key, value) {

@@ -3,12 +3,15 @@ import { DatabaseService } from './database/DatabaseService.js';
 import { DatabaseLocation } from './database/DatabaseLocation.js';
 import { SettingsRepository } from './repositories/SettingsRepository.js';
 import { InstructionRepository } from './repositories/InstructionRepository.js';
+import { PlanRepository } from './repositories/PlanRepository.js';
 import { TaskRepository } from './repositories/TaskRepository.js';
 import { SettingsService } from './services/SettingsService.js';
 import { AppService } from './services/AppService.js';
 import { DatabaseSelectionService } from './services/DatabaseSelectionService.js';
 import { CalendarService } from './services/CalendarService.js';
 import { ExcelExportService } from './services/ExcelExportService.js';
+import { PLANNING_REPORT } from './exports/excel/workbookConfig.js';
+import { PlanningService } from './services/PlanningService.js';
 import { ControlCardExportService } from './services/ControlCardExportService.js';
 import { IPCManager } from './ipc/IPCManager.js';
 import { AnalyticsService } from './services/AnalyticsService.js';
@@ -68,10 +71,12 @@ export function createApplicationServices({ app, ipcMain, dialog, getWindow, ope
     }
     refreshAppearance();
     const instructions = new InstructionRepository(database);
+    const plans = new PlanRepository(database);
     const tasks = new TaskRepository(database);
     const settings = new SettingsRepository(database);
+    const isPlanningEnabled = () => settings.isPlanningEnabled();
     const assertUnlocked = () => appLock.assertUnlocked();
-    const notifications = new NotificationService({ instructions, tasks,
+    const notifications = new NotificationService({ instructions, tasks, plans, isPlanningEnabled,
       repository: new NotificationStateRepository(database),
       getDeliveryStatus: () => reminderScheduler?.getStatus() ?? { mode: 'in-app', error: '' },
     });
@@ -82,13 +87,16 @@ export function createApplicationServices({ app, ipcMain, dialog, getWindow, ope
     });
     const recordServices = {
       [ENTITY_TYPES.INSTRUCTIONS]: new RecordService({ database, repository: instructions }),
+      [ENTITY_TYPES.PLANS]: new PlanningService({ database, repository: plans }),
       [ENTITY_TYPES.TASKS]: new RecordService({ database, repository: tasks }),
     };
+    const exportOptions = { database, dialog, getWindow, openPath, assertUnlocked };
     ipc = new IPCManager({
       ipcMain, database, appService: new AppService(app),
       settingsService: new SettingsService(settings),
-      recordServices, calendar: new CalendarService(instructions, tasks),
+      recordServices, calendar: new CalendarService(instructions, tasks, { plans, isPlanningEnabled }),
       analytics: new AnalyticsService({ repository: new AnalyticsRepository(database) }),
+      planAnalytics: new AnalyticsService({ repository: new AnalyticsRepository(database, { planning: true }), detailKey: 'plans' }),
       notifications,
       appLock,
       hasPendingNotifications() {
@@ -98,7 +106,8 @@ export function createApplicationServices({ app, ipcMain, dialog, getWindow, ope
         return notifications.list().items.some(item => item.popupPending);
       },
       selection: new DatabaseSelectionService({ database, location, dialog, getWindow, assertUnlocked }),
-      exportService: new ExcelExportService({ database, instructions, dialog, getWindow, openPath, assertUnlocked }),
+      exportService: new ExcelExportService({ ...exportOptions, repository: instructions }),
+      planExport: new ExcelExportService({ ...exportOptions, repository: plans, report: PLANNING_REPORT }),
       controlCardExport: new ControlCardExportService({ database, instructions, settings, dialog, getWindow, openPath, assertUnlocked }),
       getWindow, logger, onDataChanged: () => reminderScheduler?.check(), onAppearanceChanged: refreshAppearance,
     });

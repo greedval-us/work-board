@@ -7,6 +7,8 @@ import ExcelJS from 'exceljs';
 import { DatabaseService } from '../../src/main/database/DatabaseService.js';
 import { InstructionRepository } from '../../src/main/repositories/InstructionRepository.js';
 import { ExcelExportService } from '../../src/main/services/ExcelExportService.js';
+import { PLANNING_REPORT, REGISTRY_REPORT } from '../../src/main/exports/excel/workbookConfig.js';
+import { formatDate, localDate } from '../../src/shared/dates.js';
 
 async function fixture(t, openPath = async () => '') {
   const directory = await realpath(await mkdtemp(path.join(tmpdir(), 'work-board-file-export-')));
@@ -117,6 +119,67 @@ test('Excel rejects an unknown report type before opening the save dialog', asyn
   const { dialog, service } = await fixture(t);
   dialog.showSaveDialog = async () => assert.fail('The save dialog must not open for an invalid report type');
   await assert.rejects(service.export({ generation: 1, reportType: 'compact' }), { code: 'VALIDATION' });
+});
+
+test('overdue workbooks use the local export date and keep only compact control details for each section', async t => {
+  const { directory, database } = await fixture(t);
+  for (const report of [REGISTRY_REPORT, PLANNING_REPORT]) {
+    const planning = report === PLANNING_REPORT;
+    const entry = { instructionNumber: '0007', title: '=1+1', executor: 'Петров', ...(planning && { planItem: '01.2' }) };
+    const controls = [{ ...entry, dueDate: '2020-10-01', controlKind: 'checkpoint' },
+      { ...entry, dueDate: '2020-10-03', controlKind: 'deadline' }];
+    let cutOff;
+    const repository = { overdueControls(today) { cutOff = today; return structuredClone(controls); } };
+    const filePath = path.join(directory, report.sheet + '.xlsx');
+    const dialog = { async showSaveDialog(_window, options) {
+      assert.match(options.defaultPath, new RegExp('^' + report.sheet + ' — просроченные контроли '));
+      controls.length = 0;
+      return { filePath };
+    } };
+    const service = new ExcelExportService({ database, repository, report, dialog, getWindow: () => null });
+    const result = await service.export({ generation: 1, reportType: 'overdue', closed: true, today: '2010-01-01',
+      filters: { executor: 'Другой исполнитель', deadlineFrom: '2030-01-01' }, offset: 25, limit: 1 });
+    assert.equal(result.count, 2);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(filePath);
+    assert.equal(cutOff, localDate(workbook.created));
+    const sheet = workbook.getWorksheet(report.sheet);
+    const headings = ['Подписной №', 'Название', ...(planning ? ['Пункт плана'] : []), 'Исполнитель', 'Вид контроля', 'Срок'];
+    assert.deepEqual(sheet.getRow(1).values.slice(1), headings);
+    const fields = ['0007', '=1+1', ...(planning ? ['01.2'] : []), 'Петров'];
+    assert.deepEqual(sheet.getRow(2).values.slice(1), [...fields, 'Промежуточная проверка', '01.10.2020']);
+    assert.deepEqual(sheet.getRow(3).values.slice(1), [...fields, 'Итоговый срок', '03.10.2020']);
+    assert.equal(sheet.getCell('B2').type, ExcelJS.ValueType.String);
+    const parameters = new Map(workbook.getWorksheet('Параметры').getSheetValues().filter(Boolean).slice(1).map(row => row.slice(1)));
+    assert.equal(parameters.get('Вид отчёта'), 'Просроченные контроли');
+    assert.equal(parameters.get('Раздел'), report.section);
+    assert.equal(parameters.get('Период'), 'За всё время');
+    assert.equal(parameters.get('Состояние на'), formatDate(cutOff));
+    assert.equal(parameters.get('Количество строк'), 2);
+    assert.equal(parameters.has('Исполнитель'), false);
+  }
+});
+
+test('plan spreadsheets preserve the point and identify the planning section in both formats', async t => {
+  const { directory, database } = await fixture(t);
+  const row = { id: 1, title: 'Проверка', instructionNumber: '004', planItem: '02.1' };
+  const repository = { all(request) { assert.equal(request.sort.field, 'planItem'); return [row]; } };
+  for (const reportType of ['short', 'full']) {
+    const filePath = path.join(directory, reportType + '.xlsx');
+    const dialog = { async showSaveDialog(_window, options) {
+      assert.match(options.defaultPath, /Планы/);
+      return { filePath };
+    } };
+    const service = new ExcelExportService({ database, repository, report: PLANNING_REPORT, dialog, getWindow: () => null });
+    const result = await service.export({ generation: 1, reportType, sort: { field: 'planItem', direction: 'asc' } });
+    assert.equal(result.count, 1);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(filePath);
+    const sheet = workbook.getWorksheet('Планы');
+    const point = sheet.getRow(1).values.indexOf('Пункт плана');
+    assert.equal(sheet.getRow(2).getCell(point).value, row.planItem);
+    assert.match(JSON.stringify(workbook.getWorksheet('Параметры').getSheetValues()), /Контроль планирования/);
+  }
 });
 
 test('Excel exports only the selected registry scope', async t => {

@@ -9,6 +9,7 @@ export function createSmokeFixture(userData, dialog, today = localDate()) {
   const secondFile = path.join(userData, 'another.sqlite');
   const exportFile = path.join(userData, 'filtered.xlsx');
   const shortExportFile = path.join(userData, 'short-filtered.xlsx');
+  const overdueExportFile = path.join(userData, 'overdue.xlsx');
   const controlCardFile = path.join(userData, 'control-card.docx');
   const createFiles = [firstFile, secondFile];
   let openingFile = null;
@@ -25,7 +26,8 @@ export function createSmokeFixture(userData, dialog, today = localDate()) {
       }
       return { canceled: false, filePath: controlCardFile };
     }
-    const filePath = title === 'Выгрузить краткий отчёт в Excel' ? shortExportFile
+    const filePath = title === 'Выгрузить просроченные контроли в Excel' ? overdueExportFile
+      : title === 'Выгрузить краткий отчёт в Excel' ? shortExportFile
       : title.includes('Excel') ? exportFile : createFiles.shift();
     return { canceled: false, filePath };
   };
@@ -42,7 +44,7 @@ export function createSmokeFixture(userData, dialog, today = localDate()) {
   const registrySelections = { documentType: 'Письмо', source: 'Канцелярия', executor: 'Иванов И.И.' };
   const reportSelections = { department: 'Отдел контроля', executorPhone: '+7 000 000-00-03' };
   return {
-    userData, firstFile, secondFile, exportFile, shortExportFile, controlCardFile,
+    userData, firstFile, secondFile, exportFile, shortExportFile, overdueExportFile, controlCardFile,
     openRequests, openPath,
     failNextOpen() { failOpen = true; },
     today, originalDeadline: addCalendarDays(today, -1),

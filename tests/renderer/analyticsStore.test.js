@@ -4,6 +4,32 @@ import { createPinia, setActivePinia } from 'pinia';
 import { nextTick, reactive } from 'vue';
 import { createAnalyticsStore } from '../../src/renderer/features/analytics/analyticsStore.js';
 
+test('plan analytics has independent filters and drops pending results when planning is disabled', async () => {
+  setActivePinia(createPinia());
+  const app = reactive({ database: { ready: true, generation: 1 }, revision: 0, planningEnabled: true });
+  const getApp = () => app;
+  const registry = createAnalyticsStore({ getApp, initialDate: () => '2026-11-26' })();
+  let respond;
+  const plans = createAnalyticsStore({ getApp, planning: true, service: {
+    summary: () => new Promise(resolve => { respond = resolve; }),
+  } })();
+  assert.deepEqual(plans.appliedFilters, { from: '', to: '', executor: '' });
+  const pending = plans.selectExecutor('иванов');
+  await Promise.resolve();
+  app.planningEnabled = false;
+  respond({ totals: { total: 3 }, plans: { page: 1 } });
+  assert.equal(await pending, false);
+  assert.equal(plans.data, null);
+  assert.equal(plans.ready, false);
+  assert.equal(registry.ready, true);
+  app.planningEnabled = true;
+  assert.equal(plans.ready, true);
+  assert.equal(plans.appliedFilters.executor, '');
+  assert.deepEqual(registry.appliedFilters, { from: '2026-11-01', to: '2026-11-26', executor: '' });
+  plans.$dispose();
+  registry.$dispose();
+});
+
 test('analytics clears the executor and ignores replies from the previous database', async () => {
   setActivePinia(createPinia());
   const app = reactive({ database: { ready: true, generation: 1 }, revision: 0 });

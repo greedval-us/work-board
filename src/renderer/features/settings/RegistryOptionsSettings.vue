@@ -35,14 +35,14 @@ const errorField = shallowRef(null);
   <section class="settings-section registry-options-section" aria-labelledby="registry-options-title">
     <div class="section-heading">
       <span class="settings-glyph"><BookOpen :size="17" aria-hidden="true" /></span>
-      <h2 id="registry-options-title">Реестр и Ф‑21</h2>
+      <h2 id="registry-options-title">Справочники</h2>
     </div>
     <p v-if="!props.ready" class="settings-unavailable">Откройте или создайте базу данных, чтобы заполнить справочники.</p>
     <template v-if="props.ready">
       <label class="registry-directory-choice">
         <span>Справочник</span>
         <select v-model="directory" name="registry-directory" :disabled="props.disabled">
-          <optgroup label="Указания">
+          <optgroup label="Документы">
             <option v-for="field in registryFields" :key="field" :value="field">{{ directoryNames[field] }}</option>
           </optgroup>
           <optgroup label="Исполнители">

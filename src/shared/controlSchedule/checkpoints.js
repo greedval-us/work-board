@@ -1,5 +1,5 @@
 import { DATE_LIMITS } from '../constants/dates.js';
-import { isDate } from '../dates.js';
+import { addCalendarDays, isDate } from '../dates.js';
 import { isControlPeriodOverridden } from './periods.js';
 import { isScheduledDate, scheduledDates } from './recurrence.js';
 
@@ -36,6 +36,29 @@ export function listControlCheckpoints(schedule, { from, to, deadline }) {
     ...(planned.get(date) ? { originalDate: planned.get(date) } : {}),
     ...(marks.get(date)?.actualDate ? { actualDate: marks.get(date).actualDate } : {}),
   }));
+}
+
+// Enumerate long-running automatic schedules a year at a time, keeping the
+// temporary maps of dates bounded while preserving moves and marked history.
+export function* iterateControlCheckpoints(schedule, { from, to, deadline }) {
+  if (!schedule?.frequency || schedule.frequency === 'custom' || !isDate(schedule.firstDate)) {
+    yield* listControlCheckpoints(schedule, { from, to, deadline });
+    return;
+  }
+  const marks = schedule.marks ?? [];
+  const start = [schedule.firstDate, ...(schedule.customDates ?? []), ...Object.values(schedule.periodDates ?? {}),
+    ...(schedule.moves ?? []).map(move => move.to), ...marks.map(mark => mark.date)]
+    .reduce((earliest, date) => isDate(date) && date < earliest ? date : earliest, schedule.firstDate);
+  const end = marks.reduce((latest, mark) => isDate(mark.date) && mark.date > latest ? mark.date : latest, deadline);
+  const limit = end < to ? end : to;
+  let cursor = from > start ? from : start;
+  while (cursor <= limit) {
+    const yearEnd = `${cursor.slice(0, 4)}-12-31`;
+    const through = yearEnd < limit ? yearEnd : limit;
+    yield* listControlCheckpoints(schedule, { from: cursor, to: through, deadline });
+    if (through === limit) break;
+    cursor = addCalendarDays(through, 1);
+  }
 }
 
 export function getNextControlCheckpoint(schedule, deadline) {

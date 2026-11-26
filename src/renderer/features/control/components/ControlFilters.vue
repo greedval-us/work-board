@@ -4,12 +4,12 @@ import { RotateCcw, X } from 'lucide-vue-next';
 import ActionIcon from '../../../ui/ActionIcon.vue';
 import { CHECKPOINT_FILTER_LABELS } from '../../../../shared/registry.js';
 import { INSTRUCTION_OPTION_LABELS } from '../../../../shared/constants/settings.js';
-import { REGISTRY_FILTER_LIMITS } from '../inputLimits.js';
+const FILTER_LIMITS = Object.freeze({ instructionNumber: 200, executor: 200, executionMark: 500 });
 
 const FILTER_POPOVER = Object.freeze({ MAX_WIDTH: 720, VIEWPORT_MARGIN: 16, ANCHOR_GAP: 8, MIN_VISIBLE_HEIGHT: 220 });
 
 const props = defineProps({ filters: { type: Object, required: true }, appliedFilters: { type: Object, required: true },
-  documentTypes: { type: Array, required: true }, disabled: Boolean, changed: Boolean, closed: Boolean, error: { type: String, default: '' } });
+  documentTypes: { type: Array, required: true }, allLabel: { type: String, required: true }, disabled: Boolean, changed: Boolean, closed: Boolean, error: { type: String, default: '' } });
 const emit = defineEmits(['update', 'apply', 'reset']);
 const toggle = useTemplateRef('toggle');
 const panel = useTemplateRef('panel');
@@ -36,7 +36,7 @@ const appliedConditions = computed(() => {
   if (filters.executionMark) conditions.push({ key: 'mark', label: filters.executionMark, detail: `Отметка об исполнении: ${filters.executionMark}` });
   return conditions;
 });
-const summary = computed(() => appliedConditions.value.map((condition) => condition.detail).join('; ') || 'Все указания');
+const summary = computed(() => appliedConditions.value.map((condition) => condition.detail).join('; ') || props.allLabel);
 const update = (field, event) => emit('update', { field, value: event.target.value });
 
 function positionPanel() {
@@ -103,21 +103,21 @@ onBeforeUnmount(() => {
     </div>
     <Teleport to="body" :disabled="nativePopover">
     <div :id="panelId" ref="panel" :popover="nativePopover ? 'auto' : undefined" :data-open="expanded" :data-fallback="nativePopover ? undefined : true" :hidden="!nativePopover && !expanded" class="registry-filters registry-filter-panel" :style="panelStyle" :aria-labelledby="titleId" @beforetoggle="beforeToggle" @toggle="afterToggle" @keydown.esc.prevent.stop="closePanel">
-      <form aria-label="Фильтры реестра" @submit.prevent="apply">
+      <form aria-label="Фильтры" @submit.prevent="apply">
         <div class="registry-filter-panel-heading"><h2 :id="titleId">Фильтры</h2><button type="button" class="registry-button registry-filter-close" aria-label="Закрыть фильтры" @click="closePanel"><X :size="17" aria-hidden="true" /></button></div>
         <fieldset class="registry-filter-fields" :disabled="props.disabled">
-          <label class="registry-field"><span>Подписной номер</span><input :value="props.filters.instructionNumber" data-filter="instructionNumber" type="search" :maxlength="REGISTRY_FILTER_LIMITS.instructionNumber" placeholder="Часть номера" @input="update('instructionNumber', $event)" /></label>
+          <label class="registry-field"><span>Подписной номер</span><input :value="props.filters.instructionNumber" data-filter="instructionNumber" type="search" :maxlength="FILTER_LIMITS.instructionNumber" placeholder="Часть номера" @input="update('instructionNumber', $event)" /></label>
           <label class="registry-field"><span>Действующий срок с</span><input :value="props.filters.deadlineFrom" data-filter="deadlineFrom" type="date" @input="update('deadlineFrom', $event)" /></label>
           <label class="registry-field"><span>Действующий срок по</span><input :value="props.filters.deadlineTo" data-filter="deadlineTo" type="date" :min="props.filters.deadlineFrom || undefined" @input="update('deadlineTo', $event)" /></label>
-          <label class="registry-field"><span>Исполнитель</span><input :value="props.filters.executor" data-filter="executor" type="search" :maxlength="REGISTRY_FILTER_LIMITS.executor" placeholder="Имя или фамилия" @input="update('executor', $event)" /></label>
+          <label class="registry-field"><span>Исполнитель</span><input :value="props.filters.executor" data-filter="executor" type="search" :maxlength="FILTER_LIMITS.executor" placeholder="Имя или фамилия" @input="update('executor', $event)" /></label>
           <label class="registry-field"><span>{{ INSTRUCTION_OPTION_LABELS.documentType }}</span>
             <select :value="props.filters.documentType" data-filter="documentType" @change="update('documentType', $event)">
               <option value="">Все виды</option>
               <option v-for="type in props.documentTypes" :key="type" :value="type">{{ type }}</option>
             </select>
           </label>
-          <label v-if="!props.closed" class="registry-field"><span>Промежуточный контроль</span><select :value="props.filters.checkpoint" data-filter="checkpoint" @change="update('checkpoint', $event)"><option value="">Все указания</option><option v-for="(label, value) in CHECKPOINT_FILTER_LABELS" :key="value" :value="value">{{ label }}</option></select></label>
-          <label class="registry-field registry-field-wide"><span>Отметка об исполнении</span><input :value="props.filters.executionMark" data-filter="executionMark" type="search" :maxlength="REGISTRY_FILTER_LIMITS.executionMark" placeholder="Текст комментария" @input="update('executionMark', $event)" /></label>
+          <label v-if="!props.closed" class="registry-field"><span>Промежуточный контроль</span><select :value="props.filters.checkpoint" data-filter="checkpoint" @change="update('checkpoint', $event)"><option value="">{{ props.allLabel }}</option><option v-for="(label, value) in CHECKPOINT_FILTER_LABELS" :key="value" :value="value">{{ label }}</option></select></label>
+          <label class="registry-field registry-field-wide"><span>Отметка об исполнении</span><input :value="props.filters.executionMark" data-filter="executionMark" type="search" :maxlength="FILTER_LIMITS.executionMark" placeholder="Текст комментария" @input="update('executionMark', $event)" /></label>
         </fieldset>
         <div class="registry-filter-footer"><p v-if="props.error" class="registry-inline-error" role="alert">{{ props.error }}</p><p v-else class="registry-help">Все условия — одновременно. Даты включительно.</p><div class="registry-actions"><button class="registry-button" type="button" :disabled="props.disabled" @click="reset">Сбросить</button><button class="registry-button registry-button-primary" type="submit" :disabled="props.disabled">Применить</button></div></div>
       </form>

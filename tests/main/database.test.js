@@ -7,6 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { DatabaseService } from '../../src/main/database/DatabaseService.js';
 import { migrate, migrations } from '../../src/main/database/migrations.js';
 import { InstructionRepository } from '../../src/main/repositories/InstructionRepository.js';
+import { PlanRepository } from '../../src/main/repositories/PlanRepository.js';
 import { SettingsRepository } from '../../src/main/repositories/SettingsRepository.js';
 import { SettingsService } from '../../src/main/services/SettingsService.js';
 
@@ -37,7 +38,7 @@ test('initializes a nested SQLite file with registry schema and settings', (t) =
   assert.equal(status.schemaVersion, currentSchemaVersion);
   assert.match(status.sqliteVersion, /^3\./);
   assert.deepEqual(database.connection.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all().map(row => row.name),
-    ['app_settings', 'attachments', 'calendar_task_completions', 'calendar_task_moves', 'calendar_tasks', 'instructions']);
+    ['app_settings', 'attachments', 'calendar_task_completions', 'calendar_task_moves', 'calendar_tasks', 'instructions', 'plans']);
   assert.equal(database.connection.prepare('PRAGMA foreign_keys').get().foreign_keys, 1);
   assert.equal(database.connection.prepare('PRAGMA journal_mode').get().journal_mode, 'wal');
 });
@@ -315,7 +316,7 @@ test('registry option renames follow saved instructions and removal preserves va
   assert.deepEqual(instructions.list().documentTypes, ['Распоряжение']);
 });
 
-test('renaming exact instruction options updates active and closed records and their search keys', (t) => {
+test('renaming shared options updates active and closed instructions and plans, including search keys', (t) => {
   const { database } = fixture(t);
   database.open();
   const settings = settingsFor(database);
@@ -324,6 +325,9 @@ test('renaming exact instruction options updates active and closed records and t
   const renamed = { documentType: 'Служебное письмо', source: 'Общий архив', executor: 'Петров' };
   for (const [field, value] of Object.entries(former)) settings.addRegistryOption(field, value);
   const base = { controlDate: '2026-11-10', deadline: '2026-11-12', title: 'Проверить отчёт', ...former };
+  const plans = new PlanRepository(database);
+  const activePlan = plans.create({ ...base, instructionNumber: 'П-1', planItem: 'п. 1' });
+  const closedPlan = plans.closeControl(plans.create({ ...base, instructionNumber: 'П-1', planItem: 'п. 2' }).id);
   const active = instructions.create({ ...base, instructionNumber: '1' });
   const closed = instructions.closeControl(instructions.create({ ...base, instructionNumber: '2' }).id);
   const historic = instructions.create({ ...base, instructionNumber: '3', documentType: 'ПИСЬМО', source: ' Архив ', executor: 'ИВАНОВ' });
@@ -339,6 +343,10 @@ test('renaming exact instruction options updates active and closed records and t
   }
   assert.deepEqual(instructions.get(historic.id), historic);
   const filters = { documentType: 'СЛУЖЕБНОЕ ПИСЬМО', executor: 'ПЕТРОВ' };
+  for (const plan of [activePlan, closedPlan]) {
+    assert.deepEqual(plans.list({ filters, closed: Boolean(plan.closedAt) }).items.map(item => item.id), [plan.id]);
+    assert.equal(plans.get(plan.id).source, renamed.source);
+  }
   assert.deepEqual(instructions.list({ filters }).items.map(item => item.id), [active.id]);
   assert.deepEqual(instructions.list({ filters, closed: true }).items.map(item => item.id), [closed.id]);
 });

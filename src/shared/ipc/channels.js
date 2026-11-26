@@ -23,12 +23,16 @@ export const IPC_CHANNELS = Object.freeze({
     remove: 'instructions:remove', closeControl: 'instructions:close-control',
     export: 'instructions:export', exportControlCard: 'instructions:export-control-card',
   }),
+  plans: Object.freeze({
+    list: 'plans:list', get: 'plans:get', create: 'plans:create', update: 'plans:update',
+    remove: 'plans:remove', closeControl: 'plans:close-control', export: 'plans:export',
+  }),
   tasks: Object.freeze({
     list: 'tasks:list', get: 'tasks:get', create: 'tasks:create', update: 'tasks:update', remove: 'tasks:remove',
     setOccurrenceCompleted: 'tasks:set-occurrence-completed',
     moveOccurrence: 'tasks:move-occurrence',
   }),
-  calendar: Object.freeze({ month: 'calendar:month', day: 'calendar:day' }),
-  analytics: Object.freeze({ summary: 'analytics:summary' }),
+  calendar: Object.freeze({ month: 'calendar:month', day: 'calendar:day', year: 'calendar:year' }),
+  analytics: Object.freeze({ summary: 'analytics:summary', planSummary: 'analytics:plan-summary' }),
   notifications: Object.freeze({ list: 'notifications:list', acknowledge: 'notifications:acknowledge' }),
 });

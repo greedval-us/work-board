@@ -63,8 +63,11 @@ export function useApplicationSettings({ database, canWrite, withOperation, touc
     return saveSettings(generation => settingsService.setTypography(value, generation), typographyError);
   }
 
-  function setPlanningEnabled(value) {
-    return saveSettings(generation => settingsService.setPlanningEnabled(value, generation));
+  async function setPlanningEnabled(value) {
+    const previous = planningEnabled.value;
+    const saved = await saveSettings(generation => settingsService.setPlanningEnabled(value, generation));
+    if (saved && previous !== planningEnabled.value) touchData();
+    return saved;
   }
 
   function setOffice(value) {

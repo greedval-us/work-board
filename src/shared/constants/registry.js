@@ -1,3 +1,5 @@
+import { controlColumns } from './control.js';
+
 export const INSTRUCTION_STATUS = Object.freeze({
   PENDING: 'pending', IN_PROGRESS: 'in_progress', COMPLETED: 'completed',
 });
@@ -20,32 +22,18 @@ export const TASK_PRIORITY_TONES = Object.freeze({
   [TASK_PRIORITY.NORMAL]: 'info', [TASK_PRIORITY.IMPORTANT]: 'warning', [TASK_PRIORITY.URGENT]: 'danger',
 });
 
-export const INSTRUCTION_COLUMNS = Object.freeze([
-  { key: 'id', label: 'ID' },
-  { key: 'controlDate', label: 'Дата постановки на контроль' },
-  { key: 'incomingNumber', label: 'Входящий номер' },
-  { key: 'instructionNumber', label: 'Подписной номер' },
-  { key: 'documentType', label: 'Вид документа' },
-  { key: 'source', label: 'Откуда' },
-  { key: 'title', label: 'Название указания' },
-  { key: 'summary', label: 'Резолюция' },
-  { key: 'deadline', label: 'Сроки исполнения' },
-  { key: 'extendedUntil', label: 'Продлён до' },
-  { key: 'nextCheckpoint', label: 'Ближайший промежуточный контроль' },
-  { key: 'executor', label: 'Исполнитель' },
-  { key: 'controlFrequency', label: 'Промежуточный контроль' },
-  { key: 'executionMark', label: 'Отметка об исполнении' },
-].map(Object.freeze));
-
-export const INSTRUCTION_FIELDS = Object.freeze([
-  'controlDate', 'incomingNumber', 'instructionNumber', 'documentType', 'source', 'title', 'summary',
-  'deadline', 'extendedUntil', 'executor', 'executionMark',
-]);
+export const INSTRUCTION_COLUMNS = controlColumns('Название указания');
+export { CONTROL_FIELDS as INSTRUCTION_FIELDS } from './control.js';
 export const TASK_FIELDS = Object.freeze(['title', 'date', 'description', 'priority', 'completed']);
 export const REGISTRY_PAGINATION = Object.freeze({
   DEFAULT_PAGE: 1, DEFAULT_SIZE: 25, SIZES: Object.freeze([25, 50, 100]), MAX_SIZE: 100, DEFAULT_OFFSET: 0,
 });
 export const REGISTRY_DEFAULT_SORT = Object.freeze({ field: 'controlDate', direction: 'desc' });
-export const REGISTRY_REPORT_TYPE = Object.freeze({ FULL: 'full', SHORT: 'short' });
+export const REGISTRY_REPORT_TYPE = Object.freeze({ FULL: 'full', SHORT: 'short', OVERDUE: 'overdue' });
+export const REGISTRY_REPORT_LABELS = Object.freeze({
+  [REGISTRY_REPORT_TYPE.FULL]: 'Полный отчёт',
+  [REGISTRY_REPORT_TYPE.SHORT]: 'Краткий отчёт',
+  [REGISTRY_REPORT_TYPE.OVERDUE]: 'Просроченные контроли',
+});
 export const SORT_DIRECTIONS = Object.freeze(['asc', 'desc']);
 export const URGENCY_WINDOW_DAYS = 3;

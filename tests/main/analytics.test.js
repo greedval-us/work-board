@@ -6,6 +6,29 @@ import { TaskRepository } from '../../src/main/repositories/TaskRepository.js';
 import { InstructionRepository } from '../../src/main/repositories/InstructionRepository.js';
 import { AnalyticsService } from '../../src/main/services/AnalyticsService.js';
 import { AnalyticsRepository } from '../../src/main/repositories/AnalyticsRepository.js';
+import { PlanRepository } from '../../src/main/repositories/PlanRepository.js';
+
+test('planning analytics counts only plan deadlines and checkpoints and links each detail to its plan item', t => {
+  const connection = new DatabaseSync(':memory:');
+  t.after(() => connection.close());
+  migrate(connection);
+  const database = { connection };
+  const plans = new PlanRepository(database);
+  const row = { instructionNumber: 'П-7', title: 'Ноябрь', controlDate: '2026-11-01', executor: 'Иванов', deadline: '2026-11-30' };
+  new InstructionRepository(database).create({ ...row, executor: 'Сидоров' });
+  const first = plans.create({ ...row, planItem: '1.1', controlSchedule: { frequency: 'custom', customDates: ['2026-11-24'] } });
+  const closed = plans.closeControl(plans.create({ ...row, planItem: '1.2' }).id);
+  const service = new AnalyticsService({ repository: new AnalyticsRepository(database, { planning: true }),
+    detailKey: 'plans', today: () => '2026-11-26' });
+  assert.equal(service.summary().totals.total, 3);
+  assert.deepEqual(service.summary().executorOptions.map(option => option.label), ['Иванов']);
+  const result = service.summary({ filters: { executor: 'иванов' } });
+  assert.deepEqual(result.totals, { total: 3, active: 2, overdue: 1, closed: 1, closedRate: 33 });
+  assert.deepEqual(result.plans.items.map(item => [item.id, item.planItem, item.checkpointDate ?? '', Boolean(item.closedAt)]), [
+    [first.id, '1.1', '2026-11-24', false], [first.id, '1.1', '', false], [closed.id, '1.2', '', true],
+  ]);
+  assert.equal(new AnalyticsService({ repository: new AnalyticsRepository(database) }).summary().totals.total, 1);
+});
 
 function fixture(t, seed) {
   const connection = new DatabaseSync(':memory:'); migrate(connection); t.after(() => connection.close());

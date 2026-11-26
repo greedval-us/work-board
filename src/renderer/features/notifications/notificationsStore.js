@@ -4,7 +4,7 @@ import { errorMessage } from '../../infrastructure/errorMessage.js';
 import { createRequestChannel } from '../../infrastructure/requestScope.js';
 import { notificationService } from './NotificationService.js';
 import { useAppStore } from '../../app/appStore.js';
-import { notificationKey, notificationReference } from '../../../shared/notificationReference.js';
+import { isPlanNotification, notificationKey, notificationReference } from '../../../shared/notificationReference.js';
 
 export function createNotificationsStore({
   id = 'notifications', getApp = useAppStore, service = notificationService,
@@ -39,17 +39,21 @@ export function createNotificationsStore({
     const keyFor = () => JSON.stringify([generation.value, app.revision, lockVersion]);
     const current = (ticket, key) => !disposed && available.value && ticket?.isCurrent() && key === keyFor();
 
-    function applySnapshot(value) {
-      delivery.value = value.delivery ?? { mode: 'in-app', error: '' };
-      if (delivery.value.mode === 'system') popup.value = null;
-      today.value = value.today;
-      items.value = value.items;
-      const active = new Map(value.items.map(item => [notificationKey(item), item]));
+    function setVisibleItems(next) {
+      items.value = app.planningEnabled ? next : next.filter(item => !isPlanNotification(item.kind));
+      const active = new Map(items.value.map(item => [notificationKey(item), item]));
       for (const key of shown) if (!active.has(key)) shown.delete(key);
       if (popup.value) {
         const remaining = popup.value.items.map(item => active.get(notificationKey(item))).filter(Boolean);
         popup.value = remaining.length ? { items: remaining } : null;
       }
+    }
+
+    function applySnapshot(value) {
+      delivery.value = value.delivery ?? { mode: 'in-app', error: '' };
+      if (delivery.value.mode === 'system') popup.value = null;
+      today.value = value.today;
+      setVisibleItems(value.items);
     }
 
     // Writes are serialized, while reads wait for the outstanding receipt writes.
@@ -141,6 +145,9 @@ export function createNotificationsStore({
       resumeSystemOpen();
     }, { flush: 'sync' });
     watch(() => app.revision, () => invalidate(), { flush: 'sync' });
+    watch(() => app.planningEnabled, enabled => {
+      if (!enabled) setVisibleItems(items.value);
+    }, { flush: 'sync' });
     onScopeDispose(() => { disposed = true; requests.dispose(); shown.clear(); });
 
     function acquire() {

@@ -5,7 +5,8 @@ import { isNavigationFailure, useRouter } from 'vue-router';
 import { ArrowUpRight, CheckCheck, RefreshCw, X } from 'lucide-vue-next';
 import ActionIcon from '../../ui/ActionIcon.vue';
 import { formatDate } from '../../../shared/dates.js';
-import { notificationKey } from '../../../shared/notificationReference.js';
+import { isPlanNotification, notificationKey, notificationTitle } from '../../../shared/notificationReference.js';
+import { planningLocation } from '../planning/planningLocation.js';
 import { groupNotifications, NOTIFICATION_GROUP_SIZE, UPCOMING_DEADLINES } from './notificationGroups.js';
 import { useAppStore } from '../../app/appStore.js';
 import { useNotifications } from './useNotifications.js';
@@ -38,7 +39,8 @@ const popupItems = computed(() => popup.value?.items ?? []);
 const popupVisible = computed(() => !disabled.value && !open.value && popupItems.value.length > 0);
 const popupSummary = computed(() => groupNotifications(popupItems.value, today.value)
   .map(group => `${group.title}: ${group.items.length}`).join(' · '));
-const kinds = { instruction: 'Указание', task: 'Задача', checkpoint: 'Промежуточный контроль' };
+const kinds = { instruction: 'Указание', task: 'Задача', checkpoint: 'Промежуточный контроль',
+  plan: 'План', planCheckpoint: 'Промежуточный контроль плана' };
 let navigationSequence = 0;
 
 async function acknowledgePopup() {
@@ -89,12 +91,15 @@ function escapePanel(event) {
 }
 
 async function openItem(item) {
-  if (busy.value) return;
+  if (busy.value || (isPlanNotification(item.kind) && !app.planningEnabled)) return;
   const generation = app.database?.generation;
   const notification = `${Date.now()}-${++navigationSequence}`;
-  const target = item.kind === 'task'
-    ? { name: 'Calendar', query: { task: item.recordId, date: item.date, notification } }
-    : { name: 'Registry', query: { instruction: item.recordId, ...(item.kind === 'checkpoint' ? { checkpoint: item.date } : {}), notification } };
+  const query = { notification };
+  if (item.kind === 'checkpoint' || item.kind === 'planCheckpoint') query.checkpoint = item.date;
+  let target;
+  if (isPlanNotification(item.kind)) target = planningLocation(false, { plan: item.recordId, ...query });
+  else if (item.kind === 'task') target = { name: 'Calendar', query: { task: item.recordId, date: item.date, ...query } };
+  else target = { name: 'Registry', query: { instruction: item.recordId, ...query } };
   navigating.value = true;
   actionError.value = '';
   try {
@@ -179,7 +184,7 @@ onBeforeUnmount(() => {
               <li v-for="item in group.visible" :key="notificationKey(item)" :class="{ 'notification-unread': item.unread }">
                 <button type="button" class="notification-record" data-notification-action="open-item" :disabled="busy" @click="openItem(item)">
                   <span class="notification-record-heading"><span>{{ kinds[item.kind] }}<template v-if="item.instructionNumber"> · № {{ item.instructionNumber }}</template></span><ArrowUpRight :size="14" aria-hidden="true" /></span>
-                  <strong>{{ item.title }}</strong>
+                  <strong>{{ notificationTitle(item) }}</strong>
                   <span class="notification-record-meta"><span class="notification-urgency" :class="`notification-${group.key}`">{{ group.title }}</span><time :datetime="item.date">{{ formatDate(item.date) }}</time><span v-if="item.unread" class="notification-unread-label">Не прочитано</span></span>
                 </button>
               </li>
@@ -193,7 +198,7 @@ onBeforeUnmount(() => {
     <section v-if="popupVisible" class="notification-popup" :aria-labelledby="popupHeadingId">
       <header><span class="notification-popup-icon"><ActionIcon name="notify" :size="19" /></span><h2 :id="popupHeadingId">Напоминания о сроках</h2><button type="button" class="icon-button" aria-label="Закрыть напоминание" @click="acknowledgePopup"><X :size="16" aria-hidden="true" /></button></header>
       <p class="notification-popup-summary" role="status">{{ popupSummary }}</p>
-      <ul class="notification-popup-titles"><li v-for="item in popupItems.slice(0, popupTitleLimit)" :key="notificationKey(item)">{{ item.title }}</li></ul>
+      <ul class="notification-popup-titles"><li v-for="item in popupItems.slice(0, popupTitleLimit)" :key="notificationKey(item)">{{ notificationTitle(item) }}</li></ul>
       <footer class="notification-popup-footer">
         <p v-if="popupItems.length > popupTitleLimit" class="notification-popup-more">И ещё {{ popupItems.length - popupTitleLimit }}</p>
         <button type="button" class="notification-open-list" data-notification-action="show-list" @click="showPanel">Открыть уведомления <ArrowUpRight :size="14" aria-hidden="true" /></button>

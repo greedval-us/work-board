@@ -25,9 +25,10 @@ function controlPageWindow(timeline, start) {
 }
 
 export class AnalyticsService {
-  constructor({ repository, today = localDate }) {
+  constructor({ repository, today = localDate, detailKey = 'instructions' }) {
     this.repository = repository;
     this.today = today;
+    this.detailKey = detailKey;
   }
   summary(request = {}) {
     const filters = normalizeAnalyticsFilters(request.filters);
@@ -41,14 +42,14 @@ export class AnalyticsService {
     }
     const result = summary.toResult();
     const executorOptions = this.repository.executorOptions().sort((left, right) => left.label.localeCompare(right.label, 'ru-RU'));
-    let instructions = null;
+    let details = null;
     if (filters.executor) {
       const pageCount = Math.max(1, Math.ceil(result.totals.total / INSTRUCTION_PAGE_SIZE));
       const page = Math.min(requestedPage, pageCount);
       const items = result.totals.total ? this.#page(filters, result.timeline, page) : [];
-      instructions = { items, page, pageCount };
+      details = { items, page, pageCount };
     }
-    return { filters, asOf, ...result, executorOptions, instructions };
+    return { filters, asOf, ...result, executorOptions, [this.detailKey]: details };
   }
 
   #page(filters, timeline, page) {

@@ -12,6 +12,7 @@ export const DATABASE_CONFIG = Object.freeze({
   DOCUMENT_TYPE_SCHEMA_VERSION: 8,
   TASK_RECURRENCE_SCHEMA_VERSION: 9,
   TASK_OCCURRENCE_MOVES_SCHEMA_VERSION: 10,
+  PLANNING_SCHEMA_VERSION: 11,
   LOCATION_FILE: 'database-location.json',
   LEGACY_DIRECTORY: 'data',
   LEGACY_FILENAME: 'work-board.sqlite',
@@ -20,6 +21,14 @@ export const DATABASE_CONFIG = Object.freeze({
 
 // Versioned identity checks are independent of the active database lifecycle.
 export const REQUIRED_DATABASE_COLUMNS = Object.freeze({
+  plans: Object.freeze({
+    [DATABASE_CONFIG.PLANNING_SCHEMA_VERSION]: Object.freeze([
+      'id', 'control_date', 'incoming_number', 'instruction_number', 'document_type', 'source', 'title',
+      'plan_item', 'summary', 'deadline', 'extended_until', 'executor', 'status', 'execution_mark', 'control_schedule',
+      'instruction_number_search', 'document_type_search', 'executor_search', 'execution_mark_search',
+      'created_at', 'updated_at', 'closed_at',
+    ]),
+  }),
   instructions: Object.freeze({
     [DATABASE_CONFIG.REGISTRY_SCHEMA_VERSION]: Object.freeze([
       'id', 'control_date', 'incoming_number', 'instruction_number', 'title', 'summary', 'deadline',

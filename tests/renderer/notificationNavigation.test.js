@@ -244,3 +244,21 @@ test('leaving the registry invalidates its request even if another route inherit
   assert.equal(state.calls.length, 1);
   assert.equal(state.calls[0][2](), false);
 });
+
+test('switching control scope guards a draft even when both links contain the same record', async t => {
+  const state = registryFixture(t);
+  state.selected.value = { id: 5 };
+  const from = { query: { instruction: '5' } };
+  const to = { query: { instruction: '5', closed: '1' } };
+  assert.equal(await state.navigation.guardRouteUpdate(to, from), false);
+  assert.equal(state.guards(), 1);
+});
+
+test('switching to the archive invalidates an active-list lookup before its response arrives', async t => {
+  const state = registryFixture(t);
+  const stillActive = state.calls[0][2];
+  state.route.query = { ...state.route.query, closed: '1' };
+  assert.equal(stillActive(), false);
+  await setImmediate();
+  assert.equal(state.calls.length, 1);
+});

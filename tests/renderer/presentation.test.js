@@ -1,7 +1,20 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { getTaskPriorityPresentation } from '../../src/renderer/features/calendar/taskPriorities.js';
-import { presentCalendarCheckpoints, presentCalendarRecords } from '../../src/renderer/features/calendar/calendarRecords.js';
+import { calendarDayUrgency, presentCalendarCheckpoints, presentCalendarRecords } from '../../src/renderer/features/calendar/calendarRecords.js';
+
+test('a month colors past days with pending plan or registry controls, respecting completed parents and the planning switch', () => {
+  const today = '2026-11-26';
+  const base = { date: '2026-11-25', controls: 0, checkpoints: 0, plans: 0, planCheckpoints: 2, inactivePlanCheckpoints: 1 };
+  assert.equal(calendarDayUrgency(base, today, true).overduePlans, 1);
+  assert.equal(calendarDayUrgency(base, today, true).urgency.tone, 'danger');
+  assert.equal(calendarDayUrgency(base, today, false).urgency, null);
+  assert.equal(calendarDayUrgency({ ...base, date: today }, today, true).overduePlans, 0);
+  assert.equal(calendarDayUrgency({ ...base, inactivePlanCheckpoints: 2 }, today, true).urgency, null);
+  assert.equal(calendarDayUrgency({ ...base, plans: 2 }, today, true).overduePlans, 3);
+  assert.equal(calendarDayUrgency({ ...base, checkpoints: 1, inactiveCheckpoints: 1 }, today, false).urgency, null);
+  assert.equal(calendarDayUrgency({ ...base, controls: 1 }, today, false).urgency.tone, 'danger');
+});
 
 test('task priority presentation shares labels and preserves the normal-tone chart override', () => {
   assert.deepEqual(getTaskPriorityPresentation('normal'), { label: 'Обычная', tone: 'info' });
@@ -34,16 +47,18 @@ test('checkpoint marks take precedence over date urgency, including historical c
     { date: '2026-10-25', mark: '', scheduled: true },
     { date: '2026-10-26', mark: '', scheduled: true },
     { date: '2026-11-05', mark: '', scheduled: true },
+    { date: '2026-10-24', mark: '', scheduled: true, recordCompleted: true, planId: 1 },
   ], '2026-10-26');
   assert.deepEqual(rows.map(({ urgency }) => urgency), [
     { tone: 'success', label: 'Есть отметка' },
     { tone: 'danger', label: 'Просрочено' },
     { tone: 'warning', label: 'Срок сегодня' },
     { tone: 'info', label: 'По графику' },
+    { tone: 'success', label: 'Пункт плана исполнен' },
   ]);
   assert.equal(rows[0].scheduled, false);
   assert.equal(rows[0].mark, 'Доклад получен');
-  assert.equal(open, 3);
+  assert.equal(open, 4);
   assert.equal(marked, 1);
 });
 

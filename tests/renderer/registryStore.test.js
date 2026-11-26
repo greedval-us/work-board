@@ -267,7 +267,9 @@ test('the short and full reports use the same applied filters and sort across al
 
   assert.equal(await store.exportRecords('full'), true);
   assert.equal(await store.exportRecords('short'), true);
-  const [full, { reportType, ...short }] = exports;
+  assert.equal(await store.exportRecords('overdue'), true);
+  const [full, { reportType, ...short }, overdue] = exports;
+  assert.deepEqual(overdue, { generation: full.generation, reportType: 'overdue' });
   assert.equal(reportType, 'short');
   assert.deepEqual(short, full);
   assert.equal(full.filters.executor, 'Иванов');

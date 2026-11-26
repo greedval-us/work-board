@@ -47,6 +47,13 @@
 .calendar-date-warning { --calendar-date-surface: var(--calendar-warning-surface); }
 .calendar-date-danger { --calendar-date-surface: var(--error-surface); }
 .calendar-date-number { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 25px; height: 25px; border-radius: 50%; font-size: calc(13px + var(--app-font-offset)); font-weight: 520; font-variant-numeric: tabular-nums; }
+.calendar-date-heading { display: flex; flex: none; align-items: center; justify-content: flex-end; width: 100%; gap: 1px; }
+.calendar-plan-count { margin-inline-end: auto; min-width: 0; overflow: hidden; }
+.calendar-plan-count, .calendar-plan-legend, .calendar-plan-label, .calendar-plans-section .calendar-list-heading > svg { color: var(--violet); }
+.calendar-plan-overdue { color: var(--error); }
+.calendar-plan-overdue > svg { color: var(--violet); }
+.calendar-plan-label { font-size: calc(11px + var(--app-font-offset)); font-weight: 600; }
+.calendar-plan-card { border-inline-start: 2px solid var(--violet); }
 .calendar-date-today .calendar-date-number { color: var(--accent); box-shadow: inset 0 0 0 1px currentColor; }
 .calendar-date-selected .calendar-date-number { background: var(--accent); color: var(--on-accent); box-shadow: none; }
 .calendar-date-events { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: center; width: 100%; gap: 1px 3px; margin-top: auto; }

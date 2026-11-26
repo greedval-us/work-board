@@ -113,10 +113,13 @@ test('planning stays off until enabled and preserves its saved state on failure'
   });
   await store.initialize();
   assert.equal(store.planningEnabled, false);
+  const revision = store.revision;
   assert.equal(await store.setPlanningEnabled(true), true);
   assert.equal(store.planningEnabled, true);
+  assert.equal(store.revision, revision + 1);
   assert.equal(await store.setPlanningEnabled(false), false);
   assert.equal(store.planningEnabled, true);
+  assert.equal(store.revision, revision + 1);
   assert.ok(store.error);
 });
 

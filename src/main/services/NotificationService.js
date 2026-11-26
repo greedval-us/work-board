@@ -2,6 +2,7 @@ import { localDate, validateDate } from '../../shared/dates.js';
 import { buildDeadlineNotifications, deadlineNotificationHorizon } from '../../shared/deadlineNotifications.js';
 import { validateRecord } from '../../shared/validation.js';
 import { ValidationError } from '../../shared/errors.js';
+import { isPlanNotification } from '../../shared/notificationReference.js';
 
 function validateAcknowledgement(value) {
   const request = validateRecord(value, 'Подтверждение уведомлений');
@@ -25,16 +26,21 @@ function validateAcknowledgement(value) {
 }
 
 export class NotificationService {
-  constructor({ instructions, tasks, repository, today = localDate, getDeliveryStatus }) {
-    Object.assign(this, { instructions, tasks, repository, today, getDeliveryStatus });
+  constructor({ instructions, tasks, plans, isPlanningEnabled = () => false, repository, today = localDate, getDeliveryStatus }) {
+    Object.assign(this, { instructions, tasks, plans, isPlanningEnabled, repository, today, getDeliveryStatus });
   }
 
-  list() {
+  list() { return this.#snapshot(this.isPlanningEnabled()); }
+
+  #snapshot(planningEnabled) {
     const today = validateDate(this.today());
     const horizon = deadlineNotificationHorizon(today);
+    const request = { filters: { deadlineTo: horizon } };
     const items = buildDeadlineNotifications({
-      instructions: this.instructions.all({ filters: { deadlineTo: horizon } }),
+      instructions: this.instructions.all(request),
       scheduledInstructions: this.instructions.scheduledForCalendar(),
+      plans: planningEnabled ? this.plans.all(request) : [],
+      scheduledPlans: planningEnabled ? this.plans.scheduledForCalendar() : [],
       tasks: [...this.tasks.occurrences({ from: today, to: horizon }), ...this.tasks.overdueBefore(today)], today,
     });
     const receipts = this.repository.get();
@@ -47,7 +53,13 @@ export class NotificationService {
 
   acknowledge(value) {
     const request = validateAcknowledgement(value);
-    this.repository.acknowledge(this.list().items, request.items, request);
+    const enabled = this.isPlanningEnabled();
+    const snapshot = this.#snapshot(enabled);
+    // Hidden plans can reappear on the same day. Keep their read and popup
+    // receipts when the user acknowledges an unrelated task or instruction.
+    const keepHidden = receipt => !enabled && receipt.occurrence.endsWith(`:${snapshot.today}`)
+      && isPlanNotification(receipt.id.split(':', 1)[0]);
+    this.repository.acknowledge(snapshot.items, request.items, request, keepHidden);
     return this.list();
   }
 }

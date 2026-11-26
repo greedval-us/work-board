@@ -1,6 +1,6 @@
 <script setup>
 import { nextTick, onBeforeUnmount, shallowRef, useId, useTemplateRef } from 'vue';
-import { createDialogMotion } from '../../../ui/dialogMotion.js';
+import { createDialogMotion } from './dialogMotion.js';
 const dialog = useTemplateRef('dialog');
 const options = shallowRef({});
 const choosing = shallowRef(false);
@@ -19,7 +19,7 @@ async function ask(value) {
   await nextTick();
   if (disposed || !resolveChoice) return answer;
   motion.open();
-  dialog.value?.querySelector('[data-cancel]')?.focus();
+  dialog.value?.querySelector(value.choices ? '[data-choice]' : '[data-cancel]')?.focus();
   return answer;
 }
 
@@ -48,8 +48,21 @@ defineExpose({ ask });
 <template>
   <Teleport to="body">
     <dialog ref="dialog" class="registry-dialog registry-confirm-dialog" :aria-labelledby="titleId" :aria-describedby="messageId" :aria-busy="choosing" @cancel.prevent="choose('cancel')">
-      <div class="registry-confirm-content"><h2 :id="titleId">{{ options.title }}</h2><p :id="messageId">{{ options.message }}</p></div>
-      <div class="registry-dialog-actions registry-confirm-actions"><button type="button" class="registry-button" data-cancel :disabled="choosing" @click="choose('cancel')">{{ options.cancelLabel || 'Отмена' }}</button><button v-if="options.secondaryLabel" type="button" class="registry-button" :disabled="choosing" @click="choose('secondary')">{{ options.secondaryLabel }}</button><button type="button" class="registry-button" :class="options.danger ? 'registry-button-danger' : 'registry-button-primary'" :disabled="choosing" @click="choose('primary')">{{ options.primaryLabel }}</button></div>
+      <div class="registry-confirm-content">
+        <h2 :id="titleId">{{ options.title }}</h2>
+        <p :id="messageId">{{ options.message }}</p>
+        <div v-if="options.choices" class="registry-confirm-choices">
+          <button v-for="(label, value) in options.choices" :key="value" type="button" class="registry-button"
+            :data-choice="value" :disabled="choosing" @click="choose(value)">{{ label }}</button>
+        </div>
+      </div>
+      <div class="registry-dialog-actions registry-confirm-actions">
+        <button type="button" class="registry-button" data-cancel :disabled="choosing" @click="choose('cancel')">{{ options.cancelLabel || 'Отмена' }}</button>
+        <template v-if="!options.choices">
+          <button v-if="options.secondaryLabel" type="button" class="registry-button" :disabled="choosing" @click="choose('secondary')">{{ options.secondaryLabel }}</button>
+          <button type="button" class="registry-button" :class="options.danger ? 'registry-button-danger' : 'registry-button-primary'" :disabled="choosing" @click="choose('primary')">{{ options.primaryLabel }}</button>
+        </template>
+      </div>
     </dialog>
   </Teleport>
 </template>

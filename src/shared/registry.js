@@ -1,9 +1,8 @@
 import { ValidationError } from './errors.js';
 import { validateDate, localDate, addCalendarDays } from './dates.js';
 import { validateRecord as record, validateText as text, validateEnum as enumValue } from './validation.js';
-import { validateControlSchedule } from './controlSchedule.js';
+import { effectiveDeadline, validateControlFields } from './controlRecord.js';
 import { validateTaskRecurrence } from './taskRecurrence.js';
-import { INSTRUCTION_OPTION_LABELS } from './constants/settings.js';
 import {
   INSTRUCTION_STATUSES, INSTRUCTION_STATUS, TASK_PRIORITIES, TASK_PRIORITY, TASK_PRIORITY_TONES, URGENCY_WINDOW_DAYS,
 } from './constants/registry.js';
@@ -16,30 +15,7 @@ export { validateId } from './validation.js';
 export { ValidationError } from './errors.js';
 
 export function validateInstruction(value) {
-  const data = record(value, 'Указание');
-  const { extendedUntil = '' } = data;
-  const instruction = {
-    controlDate: validateDate(data.controlDate, 'Дата постановки на контроль'),
-    incomingNumber: text(data.incomingNumber, 'Входящий номер'),
-    instructionNumber: text(data.instructionNumber, 'Подписной номер', true),
-    documentType: text(data.documentType, 'Вид документа').trim(),
-    source: text(data.source, INSTRUCTION_OPTION_LABELS.source),
-    title: text(data.title, 'Название указания', true),
-    summary: text(data.summary, 'Резолюция'),
-    deadline: validateDate(data.deadline, 'Срок исполнения'),
-    extendedUntil: extendedUntil === '' ? '' : validateDate(extendedUntil, 'Продлён до'),
-    executor: text(data.executor, 'Исполнитель', true),
-    status: enumValue(data.status === undefined ? INSTRUCTION_STATUS.PENDING : data.status, INSTRUCTION_STATUSES, 'Статус'),
-    executionMark: text(data.executionMark, 'Отметка об исполнении'),
-  };
-  if (instruction.extendedUntil && instruction.extendedUntil < instruction.deadline) {
-    throw new ValidationError('Дата продления не может быть раньше срока исполнения.');
-  }
-  instruction.controlSchedule = validateControlSchedule(data.controlSchedule, {
-    controlDate: instruction.controlDate,
-    deadline: instructionDeadline(instruction),
-  });
-  return instruction;
+  return validateControlFields(record(value, 'Указание'), 'Название указания');
 }
 
 export function validateTask(value) {
@@ -62,16 +38,14 @@ export function normalizeSearch(value) {
   return value.normalize('NFKC').toLocaleLowerCase('ru-RU');
 }
 
-export function instructionDeadline(item) {
-  return item.extendedUntil || item.deadline;
-}
+export { effectiveDeadline as instructionDeadline };
 
 export function getUrgency(item, today = localDate()) {
   const isTask = Object.hasOwn(item, 'date');
   if (isTask ? item.completed : item.status === INSTRUCTION_STATUS.COMPLETED) {
     return { tone: 'success', label: isTask ? 'Выполнено' : INSTRUCTION_STATUSES[INSTRUCTION_STATUS.COMPLETED] };
   }
-  const date = isTask ? item.date : instructionDeadline(item);
+  const date = isTask ? item.date : effectiveDeadline(item);
   if (date < today) return { tone: 'danger', label: 'Просрочено' };
   if (isTask) {
     const priority = item.priority ?? TASK_PRIORITY.NORMAL;

@@ -1,7 +1,7 @@
 import { emptyControlSchedule } from '../../../shared/controlSchedule.js';
 import { normalizeSearch } from '../../../shared/registry.js';
 
-// The same mapping drives the detail/registry projections and both write operations.
+// Shared between document controls with the same card fields.
 const fields = {
   control_date: 'controlDate', incoming_number: 'incomingNumber', instruction_number: 'instructionNumber',
   document_type: 'documentType', source: 'source', title: 'title', summary: 'summary', deadline: 'deadline',
@@ -9,12 +9,12 @@ const fields = {
 };
 const searchColumns = ['instruction_number', 'document_type', 'executor', 'execution_mark'];
 
-export const INSTRUCTION_COLUMNS_SQL = [
+export const CONTROL_COLUMNS_SQL = [
   'id', ...Object.entries(fields).map(([column, property]) => `${column} AS ${property}`),
   'created_at AS createdAt', 'updated_at AS updatedAt', 'closed_at AS closedAt',
 ].join(', ');
 
-export function instructionRecord(data) {
+export function controlRecord(data) {
   const record = Object.fromEntries(Object.entries(fields).map(([column, property]) => [column, data[property]]));
   for (const column of searchColumns) record[`${column}_search`] = normalizeSearch(record[column]);
   const schedule = data.controlSchedule;

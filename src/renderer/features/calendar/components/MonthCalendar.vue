@@ -1,14 +1,15 @@
 <script setup>
 import { computed, nextTick } from 'vue';
-import { Check, ChevronLeft, ChevronRight, FileText, Flag, ListTodo } from 'lucide-vue-next';
-import { addCalendarDays, getUrgency, INSTRUCTION_STATUS } from '../../../../shared/registry.js';
+import { CalendarCheck, Check, ChevronLeft, ChevronRight, FileText, Flag, ListTodo } from 'lucide-vue-next';
+import { addCalendarDays } from '../../../../shared/registry.js';
+import { calendarDayUrgency } from '../calendarRecords.js';
 import { DATE_LIMITS } from '../../../../shared/constants/dates.js';
 import { monthLabel, moveMonth } from '../../../ui/calendarDates.js';
 import { CALENDAR_LAYOUT, CALENDAR_MONTHS, CALENDAR_WEEKDAYS } from '../../../ui/calendarLabels.js';
 
 const props = defineProps({
   month: { type: String, required: true }, days: { type: Array, required: true },
-  selectedDate: { type: String, required: true }, today: { type: String, required: true }, loading: Boolean,
+  selectedDate: { type: String, required: true }, today: { type: String, required: true }, loading: Boolean, planningEnabled: Boolean,
 });
 const emit = defineEmits(['changeMonth', 'selectDate', 'today']);
 const title = computed(() => monthLabel(props.month));
@@ -20,21 +21,29 @@ const visibleDays = computed(() => {
 });
 const weekCount = computed(() => Math.ceil(visibleDays.value.length / CALENDAR_LAYOUT.DAYS_PER_WEEK));
 const days = computed(() => visibleDays.value.map((day) => {
-  const urgency = day.controls || day.checkpoints
-    ? getUrgency({ deadline: day.date, status: INSTRUCTION_STATUS.PENDING }, props.today)
-    : null;
+  const { activeChecks, overduePlans, urgency } = calendarDayUrgency(day, props.today, props.planningEnabled);
   const controlHighlight = urgency?.tone === 'danger' || urgency?.tone === 'warning';
   const hasTasks = Boolean(day.tasks || day.completedTasks);
+  const planDeadlines = (day.plans ?? 0) + (day.completedPlans ?? 0);
+  const planChecks = (day.planCheckpoints ?? 0) + (day.completedPlanCheckpoints ?? 0);
+  const planCount = props.planningEnabled ? planDeadlines + planChecks : 0;
+  const planLabel = planCount ? [`Сроки планов: ${planDeadlines}`, `проверки планов: ${planChecks}`,
+    overduePlans && `просрочено: ${overduePlans}`].filter(Boolean).join(', ') : '';
   return {
     ...day,
     controlTone: urgency?.tone,
+    checkpointTone: activeChecks ? urgency?.tone : 'success',
+    overduePlans,
     controlHighlight,
     hasTasks,
+    planCount,
+    planLabel,
     ariaLabel: [
       day.date, `контролей: ${day.controls}`, `невыполненных задач: ${day.tasks}`,
       day.completedTasks && `выполненных задач: ${day.completedTasks}`,
       day.checkpoints && `промежуточных сроков без отметки: ${day.checkpoints}`,
       day.completedCheckpoints && `промежуточных сроков с отметкой: ${day.completedCheckpoints}`,
+      planLabel,
       controlHighlight && urgency.label,
       day.date === props.today && 'сегодня',
     ].filter(Boolean).join(', '),
@@ -86,14 +95,19 @@ function registerButton(date, element) {
         :aria-label="day.ariaLabel" :aria-pressed="day.date === selectedDate" :aria-current="day.date === today ? 'date' : undefined"
         :tabindex="day.date === selectedDate ? 0 : -1" @click="emit('selectDate', day.date)" @keydown="navigate($event, day, index)"
       >
-        <span class="calendar-date-number">{{ day.day }}</span>
+        <span class="calendar-date-heading">
+          <span v-if="day.planCount" class="calendar-date-count calendar-plan-count" :class="{ 'calendar-plan-overdue': day.overduePlans }" :title="day.planLabel">
+            <CalendarCheck :size="15" aria-hidden="true" />{{ day.planCount }}
+          </span>
+          <span class="calendar-date-number">{{ day.day }}</span>
+        </span>
         <span class="calendar-date-events">
           <span v-if="day.controls" class="calendar-date-count" :class="`calendar-tone-${day.controlTone}`" :title="`Контроли: ${day.controls}`"><FileText :size="17" aria-hidden="true" />{{ day.controls }}</span>
           <span v-if="day.hasTasks" class="calendar-date-count" :class="day.tasks ? 'calendar-tone-info' : 'calendar-tone-success'"
             :title="day.tasks ? `Невыполненные задачи: ${day.tasks}` : `Выполненные задачи: ${day.completedTasks}`">
             <ListTodo :size="17" aria-hidden="true" />{{ day.tasks || day.completedTasks }}
           </span>
-          <span v-if="day.checkpoints" class="calendar-date-count calendar-date-checkpoint" :class="`calendar-tone-${day.controlTone}`" :title="`Промежуточные сроки без отметки: ${day.checkpoints}`"><Flag :size="17" aria-hidden="true" />{{ day.checkpoints }}</span>
+          <span v-if="day.checkpoints" class="calendar-date-count calendar-date-checkpoint" :class="`calendar-tone-${day.checkpointTone}`" :title="`Промежуточные сроки без отметки: ${day.checkpoints}`"><Flag :size="17" aria-hidden="true" />{{ day.checkpoints }}</span>
           <span v-if="day.completedCheckpoints" class="calendar-date-count calendar-date-checkpoint calendar-date-checkpoint-marked calendar-tone-success" :title="`Промежуточные сроки с отметкой: ${day.completedCheckpoints}`"><Check :size="17" aria-hidden="true" />{{ day.completedCheckpoints }}</span>
         </span>
       </button>
@@ -104,6 +118,7 @@ function registerButton(date, element) {
         <span><ListTodo :size="15" aria-hidden="true" />Задачи</span>
         <span><Flag :size="15" aria-hidden="true" />Промежуточные сроки</span>
         <span><Check :size="15" class="calendar-tone-success" aria-hidden="true" />С отметкой</span>
+        <span v-if="planningEnabled" class="calendar-plan-legend"><CalendarCheck :size="15" aria-hidden="true" />Сроки и проверки планов</span>
       </div>
       <span v-if="loading" role="status">Обновление…</span>
     </div>

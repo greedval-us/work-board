@@ -8,7 +8,7 @@ import { CONTROL_CARD_FIELD_LIMITS, controlCardFields, executorContactFor } from
 import { createDialogMotion } from '../../../ui/dialogMotion.js';
 import { useAppStore } from '../../../app/appStore.js';
 import { useControlCardStore } from '../state/controlCardStore.js';
-import ExportOpenWarning from './ExportOpenWarning.vue';
+import ExportOpenWarning from '../../../ui/ExportOpenWarning.vue';
 
 const groups = [
   { title: 'Реквизиты документа', fields: [
@@ -109,3 +109,27 @@ onBeforeUnmount(() => { motion.dispose(); report.reset(); });
     </dialog>
   </Teleport>
 </template>
+
+<style>
+.registry-control-card-dialog { width: 960px; }
+.registry-control-card-form { display: flex; flex-direction: column; min-height: 0; }
+.registry-control-card-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 18px 24px; }
+.registry-control-card-group { min-width: 0; margin: 0; padding: 0; border: 0; }
+.registry-control-card-group legend { width: 100%; padding-bottom: 5px; border-bottom: 1px solid var(--border); }
+.registry-control-card-actions { gap: 8px; }
+.registry-control-card-actions > .registry-export-warning { flex: 1 1 100%; }
+.registry-control-card-notice, .registry-control-card-error { flex: 1 1 185px; margin: 0; font-size: calc(12px + var(--app-font-offset)); overflow-wrap: anywhere; }
+.registry-control-card-notice { color: var(--registry-success); }
+.registry-control-card-error { color: var(--error); }
+.registry-control-card-dialog[open] { display: flex; flex-direction: column; overflow: hidden; }
+.registry-control-card-group legend { margin: 0 0 10px; padding-inline: 0; color: var(--text); font-size: calc(14px + var(--app-font-offset)); font-weight: 625; letter-spacing: -.025em; }
+@media (min-width: 621px) and (max-width: 840px) {
+  .registry-control-card-body { column-gap: 14px; }
+}
+@media (max-height: 390px) {
+  .registry-control-card-dialog[open] { display: block; overflow: auto; }
+}
+@media (max-width: 620px) {
+  .registry-control-card-body { grid-template-columns: minmax(0, 1fr); }
+}
+</style>

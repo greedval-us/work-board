@@ -63,7 +63,7 @@ function preset(value) {
             <button class="analytics-button" type="button" :disabled="disabled" @click="$emit('reset')"><RotateCcw :size="14" aria-hidden="true" />Сбросить</button>
             <button class="analytics-button analytics-button-primary" type="submit" :disabled="disabled">Применить</button>
           </div>
-          <p class="analytics-filter-caption">Период учитывает действующие сроки указаний и плановые даты проверок.</p>
+          <p class="analytics-filter-caption">Период учитывает сроки исполнения с продлениями и даты промежуточных проверок.</p>
           <p v-if="changed" class="analytics-draft-note">Есть неприменённые изменения</p>
           <p v-if="error" class="analytics-form-error" role="alert">{{ error }}</p>
         </div>

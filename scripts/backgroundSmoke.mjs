@@ -128,6 +128,27 @@ void runtime.ready.then(async () => {
   assert.equal(lockedReminder.popupPending, false);
   await js("document.querySelector('[aria-label=\"Закрыть уведомления\"]').click()");
 
+  await navigate('/settings', 'Настройки');
+  await js("document.querySelector('[name=planning-enabled]').click()");
+  await wait("Boolean(document.querySelector('a[href=\"#/planning-control\"]'))");
+  const planDate = localDate();
+  const [plan] = await api('plans', 'create', { generation, rows: [{
+    title: 'Годовой план', planItem: 'Проверка склада', instructionNumber: 'П-12', executor: 'Отдел',
+    controlDate: planDate, deadline: planDate, controlSchedule: { frequency: 'custom', customDates: [planDate] },
+  }] });
+  const planNotification = notifications.at(-1);
+  assert.notEqual(planNotification, privateNotification);
+  planNotification.emit('click');
+  await wait("document.querySelector('.notification-panel')?.textContent.includes('Проверка склада')");
+  await js("[...document.querySelectorAll('.notification-record')].find(row => row.textContent.includes('Промежуточный контроль плана')).click()");
+  await wait(`document.activeElement === document.querySelector('.planning-dialog[open] [data-checkpoint-date="${planDate}"] textarea') && Boolean(document.activeElement)`);
+  assert.equal(await js("document.querySelector('.planning-dialog [name=planItem]').value"), 'Проверка склада');
+  const planReminders = (await api('notifications', 'list', { generation })).items.filter(item => item.recordId === plan.id);
+  assert.equal(planReminders.find(item => item.kind === 'planCheckpoint').unread, false);
+  assert.equal(planReminders.find(item => item.kind === 'plan').unread, true);
+  await js("document.querySelector('.planning-dialog .registry-close-button').click()");
+  await wait("!document.querySelector('.planning-dialog[open]')");
+
   await navigate('/calendar', 'Календарь и задачи');
   await click('Новая задача', '.calendar-page-heading button');
   await wait("Boolean(document.querySelector('.calendar-task-dialog[open]'))");

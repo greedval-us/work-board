@@ -53,6 +53,36 @@ test('late calendar responses from a previous database cannot replace current da
   assert.equal(calendar.dayLoading.value, false);
 });
 
+test('disabling planning clears its calendar entries and rejects late responses from the enabled view', async t => {
+  const oldDay = Promise.withResolvers();
+  const oldMonth = Promise.withResolvers();
+  let hold = false;
+  const enabledDay = { plans: [{ id: 1 }], planCheckpoints: [{ planId: 1 }] };
+  const enabledMonth = { days: [{ date: '2026-10-23', plans: 1, planCheckpoints: 1 }] };
+  const { app, store } = setup(t, {
+    month: () => hold ? oldMonth.promise : app.planningEnabled ? enabledMonth : { days: [] },
+    day: () => hold ? oldDay.promise : app.planningEnabled ? enabledDay : { tasks: [{ id: 3 }] },
+  });
+  app.planningEnabled = true;
+  await store.refresh();
+  assert.deepEqual(store.plans, enabledDay.plans);
+  assert.deepEqual(store.planCheckpoints, enabledDay.planCheckpoints);
+  hold = true;
+  const pending = [store.fetchMonth({ force: true }), store.fetchDay({ force: true })];
+  await nextTick();
+  hold = false;
+  app.planningEnabled = false;
+  assert.deepEqual(store.monthDays, []);
+  await store.refresh();
+  oldDay.resolve(enabledDay);
+  oldMonth.resolve(enabledMonth);
+  await Promise.all(pending);
+  assert.deepEqual(store.plans, []);
+  assert.deepEqual(store.planCheckpoints, []);
+  assert.deepEqual(store.monthDays, []);
+  assert.deepEqual(store.tasks, [{ id: 3 }]);
+});
+
 test('a slower selected day cannot overwrite the most recent selection', async (t) => {
   const oldDay = Promise.withResolvers();
   const { calendar } = setup(t, {

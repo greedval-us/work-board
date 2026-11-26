@@ -88,7 +88,7 @@
 .analytics-executors-table tr > :not(:first-child) { text-align: right; }
 .analytics-instructions-table { min-width: 320px; }
 .analytics-instructions-table thead th:first-child { width: 22%; }
-.analytics-instructions-table thead th:nth-child(3) { width: 24%; }
+.analytics-instructions-table thead th:last-child { width: 24%; }
 .analytics-instructions-table time { white-space: nowrap; }
 .analytics-instruction-link { color: var(--accent); }
 .analytics-instruction-link:hover { text-decoration: underline; }

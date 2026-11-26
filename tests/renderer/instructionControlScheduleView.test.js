@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { controlScheduleRows, inControlPeriod, startingMonth } from '../../src/renderer/features/registry/schedule/controlScheduleView.js';
+import { controlScheduleRows, inControlPeriod, startingMonth } from '../../src/renderer/features/control/schedule/controlScheduleView.js';
 
 const period = { controlDate: '2026-01-01', deadline: '2026-12-31' };
 const empty = { frequency: '', firstDate: '', customDates: [], marks: [] };

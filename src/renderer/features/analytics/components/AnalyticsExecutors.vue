@@ -1,5 +1,6 @@
 <script setup>
 import { useId } from 'vue';
+import { vResizableColumns } from '../../../ui/resizableColumns.js';
 
 defineProps({ rows: { type: Array, required: true } });
 const headingId = useId();
@@ -15,7 +16,7 @@ const metrics = [
   <section class="analytics-chart-card analytics-executors">
     <header><h2 :id="headingId">По исполнителям</h2></header>
     <div class="analytics-table-scroll" role="region" :aria-labelledby="headingId" tabindex="0">
-      <table class="analytics-data-table analytics-executors-table" :aria-labelledby="headingId">
+      <table v-resizable-columns="'analytics-executors'" class="analytics-data-table analytics-executors-table" :aria-labelledby="headingId">
         <thead>
           <tr>
             <th scope="col">Исполнитель</th>

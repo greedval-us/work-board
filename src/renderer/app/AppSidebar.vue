@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue';
-import { Archive, Files, CalendarCheck, CalendarDays, ChartNoAxesColumnIncreasing, ChartNoAxesCombined, Info, ListTodo, Settings, X } from 'lucide-vue-next';
+import { Files, CalendarCheck, CalendarDays, ChartNoAxesColumnIncreasing, ChartNoAxesCombined, Info, ListTodo, Settings, X } from 'lucide-vue-next';
 import { useAppStore } from './appStore.js';
 import AppIcon from '../ui/AppIcon.vue';
 import { navigationGlyphs } from '../ui/navigationGlyphs.js';
@@ -15,9 +15,8 @@ defineEmits(['navigate', 'close']);
 const store = useAppStore();
 const glyphs = computed(() => navigationGlyphs[store.appearanceStyle]);
 const navigation = [
-  { to: '/', label: 'Контроль реестра', glyph: 'register', icon: Files, tone: 'blue' },
+  { to: '/', label: 'Реестр контроля', glyph: 'register', icon: Files, tone: 'blue' },
   { to: '/planning-control', label: 'Контроль планирования', glyph: 'planningControl', icon: CalendarCheck, tone: 'coral', requiresPlanning: true },
-  { to: '/closed-control', label: 'Закрытый контроль', glyph: 'archive', icon: Archive, tone: 'violet' },
   { to: '/calendar', label: 'Календарь', glyph: 'calendar', icon: CalendarDays, tone: 'coral' },
   { to: '/tasks', label: 'Задачи', glyph: 'tasks', icon: ListTodo, tone: 'amber' },
   { to: '/analytics', label: 'Аналитика контроля', glyph: 'analytics', icon: ChartNoAxesColumnIncreasing, tone: 'teal' },

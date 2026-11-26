@@ -8,6 +8,16 @@ export async function verifyClosedControl(driver, { shortExportFile, openRequest
   const card = '.registry-instruction-dialog[open]';
   const cardAction = `${card} .registry-dialog-header button`;
   const confirmation = '.registry-confirm-dialog[open]';
+  const views = '[role="group"][aria-label="Состояние контроля"]';
+  const registryLink = '#main-navigation nav a[href="#/"]';
+  const switchView = async (closed) => {
+    const label = closed ? 'Закрытый контроль' : 'На контроле';
+    await click(label, `${views} button`);
+    await wait(`location.hash === ${JSON.stringify(closed ? '#/?closed=1' : '#/')} &&
+      document.querySelector('${views} button[aria-pressed=true]')?.textContent.trim() === ${JSON.stringify(label)} &&
+      document.querySelector('h1')?.textContent === 'Реестр контроля' &&
+      document.querySelector('${registryLink}')?.getAttribute('aria-current') === 'page'`);
+  };
   const countIs = (value) => `document.querySelector('.registry-count')?.textContent === '${value}' && !document.querySelector('.registry-table[aria-busy=true], .registry-table-scroll[aria-busy=true]')`;
   const controlNumber = `${card} [name=instructionNumber]`;
   const closeCard = `${card} [aria-label="Закрыть карточку"]`;
@@ -31,7 +41,8 @@ export async function verifyClosedControl(driver, { shortExportFile, openRequest
     assert.ok(upcoming.checkpoints.some(item => item.instructionId === id));
   }
 
-  await navigate('/', 'Контроль реестра');
+  await navigate('/', 'Реестр контроля');
+  assert.equal(await js("document.querySelector('#main-navigation nav a[href=\"#/closed-control\"]') === null"), true);
   await filterByNumber(created.instructionNumber);
   await js("document.querySelector('.registry-row').click()");
   await wait(`document.querySelector(${JSON.stringify(controlNumber)})?.value === ${JSON.stringify(created.instructionNumber)}`);
@@ -60,7 +71,7 @@ export async function verifyClosedControl(driver, { shortExportFile, openRequest
   await click('Закрыть контроль', `${confirmation} button`);
   await wait(countIs(0));
 
-  await navigate('/closed-control', 'Закрытый контроль');
+  await switchView(true);
   await wait(countIs(2));
   assert.equal(await js(`Boolean(document.querySelector(${JSON.stringify(rowAction)}))`), false);
   assert.equal(await js("Boolean(document.querySelector('.registry-row .registry-status'))"), false);
@@ -100,6 +111,7 @@ export async function verifyClosedControl(driver, { shortExportFile, openRequest
   assert.deepEqual((await api('instructions', 'get', { id: item.id, generation })).controlSchedule, before.controlSchedule);
   await js(`document.querySelector(${JSON.stringify(closeCard)}).click()`);
   await wait(`!document.querySelector('${card}')`);
+  await switchView(false);
 
   await navigate('/analytics', 'Аналитика контроля');
   const executor = 'select[name=analytics-executor]';
@@ -109,7 +121,18 @@ export async function verifyClosedControl(driver, { shortExportFile, openRequest
   const archivedLink = `.analytics-instructions tr[data-instruction-id="${other.id}"] a`;
   await wait(`Boolean(document.querySelector(${JSON.stringify(archivedLink)}))`);
   await js(`document.querySelector(${JSON.stringify(archivedLink)}).click()`);
-  await wait(`location.hash.startsWith('#/closed-control?') && document.querySelector(${JSON.stringify(controlNumber)})?.value === 'К-0'`);
+  const closedQuery = (id) => `location.hash.startsWith('#/?') &&
+    new URLSearchParams(location.hash.slice(3)).get('closed') === '1' &&
+    new URLSearchParams(location.hash.slice(3)).get('instruction') === '${id}'`;
+  await wait(`${closedQuery(other.id)} && document.querySelector(${JSON.stringify(controlNumber)})?.value === 'К-0'`);
+  await js(`document.querySelector(${JSON.stringify(closeCard)}).click()`);
+  await wait(`!document.querySelector('${card}')`);
+
+  await js(`location.hash = ${JSON.stringify(`#/closed-control?instruction=${created.id}&checkpoint=${today}`)}`);
+  await wait(`${closedQuery(created.id)} && new URLSearchParams(location.hash.slice(3)).get('checkpoint') === ${JSON.stringify(today)} &&
+    document.querySelector(${JSON.stringify(controlNumber)})?.value === ${JSON.stringify(created.instructionNumber)} &&
+    document.querySelector('${views} button[aria-pressed=true]')?.textContent.trim() === 'Закрытый контроль' &&
+    document.querySelector('${registryLink}')?.getAttribute('aria-current') === 'page'`);
   await js(`document.querySelector(${JSON.stringify(closeCard)}).click()`);
   await wait(`!document.querySelector('${card}')`);
 }

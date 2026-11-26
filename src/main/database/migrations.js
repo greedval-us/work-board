@@ -107,6 +107,36 @@ export const migrations = [
     CREATE INDEX calendar_task_moves_original_date_idx ON calendar_task_moves (original_date);
     CREATE INDEX calendar_task_moves_target_date_idx ON calendar_task_moves (target_date);`,
   },
+  {
+    version: 11,
+    sql: `CREATE TABLE plans (
+      id INTEGER PRIMARY KEY,
+      control_date TEXT NOT NULL,
+      incoming_number TEXT NOT NULL DEFAULT '',
+      instruction_number TEXT NOT NULL,
+      document_type TEXT NOT NULL DEFAULT '',
+      source TEXT NOT NULL DEFAULT '',
+      title TEXT NOT NULL,
+      plan_item TEXT NOT NULL DEFAULT '',
+      summary TEXT NOT NULL DEFAULT '',
+      deadline TEXT NOT NULL,
+      extended_until TEXT NOT NULL DEFAULT '',
+      executor TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed')),
+      execution_mark TEXT NOT NULL DEFAULT '',
+      control_schedule TEXT NOT NULL DEFAULT '',
+      instruction_number_search TEXT NOT NULL,
+      document_type_search TEXT NOT NULL,
+      executor_search TEXT NOT NULL,
+      execution_mark_search TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      closed_at TEXT
+    ) STRICT;
+    CREATE INDEX plans_signature_idx ON plans (instruction_number_search);
+    CREATE INDEX plans_effective_deadline_idx ON plans (${EFFECTIVE_INSTRUCTION_DEADLINE_SQL}, status);
+    CREATE INDEX plans_document_type_idx ON plans (document_type_search);`,
+  },
 ];
 
 // The caller holds a transaction across inspection, schema updates and identity repair.

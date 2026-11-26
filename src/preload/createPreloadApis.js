@@ -51,6 +51,7 @@ export function createPreloadApis(ipcRenderer) {
       setExecutorContact: (executor, contact, generation) => ipcRenderer.invoke(channels.settings.setExecutorContact, { executor, contact, generation }),
     },
     instructions: payloadMethods(channels.instructions),
+    plans: payloadMethods(channels.plans),
     tasks: payloadMethods(channels.tasks),
     calendar: payloadMethods(channels.calendar),
     analytics: payloadMethods(channels.analytics),

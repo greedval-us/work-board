@@ -25,7 +25,7 @@ export async function verifyStartup(driver, userData, continueStartup) {
   assert.equal(await js("Boolean(document.querySelector('.app-shell'))"), false, 'Protected workspace mounted before unlock.');
   await fill('input[name=unlock-password]', { 0: password });
   await click('Разблокировать', '.app-lock-unlock-form button');
-  await wait("document.querySelector('h1')?.textContent === 'Контроль реестра' && !document.querySelector('[aria-busy=true], #startup-screen, .app-lock-screen[open]')");
+  await wait("document.querySelector('h1')?.textContent === 'Реестр контроля' && !document.querySelector('[aria-busy=true], #startup-screen, .app-lock-screen[open]')");
   await api('appLock', 'configure', { currentPassword: password, password: '', timeoutMinutes });
   console.log('Startup screen, locked profile and unlocked registry verified.');
 }

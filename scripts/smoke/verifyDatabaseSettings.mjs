@@ -5,6 +5,9 @@ import { nativeTheme } from 'electron';
 import { APP_FONT_SIZE_LIMITS, DEFAULT_SETTINGS } from '../../src/shared/constants/settings.js';
 import { createSmokeForms } from './forms.mjs';
 import { verifyAppearanceStyles } from './verifyAppearanceStyles.mjs';
+import { verifyPlanning } from './verifyPlanning.mjs';
+import { verifyOverdueReports } from './verifyOverdueReports.mjs';
+import { verifyYearCalendars } from './verifyYearCalendars.mjs';
 
 export async function verifyDatabaseSettings(driver, fixture, { generation, created }) {
   const { js, api, wait, click, navigate, fill, openFilters, geometry, resize, resizeDefault, pressKey, screenshot } = driver;
@@ -145,7 +148,7 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
   assert.equal(badges.length, 4);
   assert.ok(badges.every(badge => badge.bottom <= 0 && badge.right <= 0),
     `Calendar badges at the maximum font size exceed available space: ${JSON.stringify(badges)}`);
-  await navigate('/', 'Контроль реестра');
+  await navigate('/', 'Реестр контроля');
   await wait("document.querySelector('.registry-table tbody tr') && !document.querySelector('.workspace-enter-active')");
   await geometry('registry', 'registry maximum typography');
   await js("document.querySelector('.registry-record-link').click()");
@@ -232,18 +235,31 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
   const updatedContact = { executor: renamedSelections.executor, department: renamedSelections.department, executorPhone: renamedSelections.executorPhone };
   assert.deepEqual((await api('settings', 'get', generation)).executorContacts, [updatedContact]);
 
-  await navigate('/', 'Контроль реестра');
+  await navigate('/', 'Реестр контроля');
   await waitForRenamedRow(created.id);
-  await navigate('/closed-control', 'Закрытый контроль');
+  await click('Закрытый контроль', '[role="group"][aria-label="Состояние контроля"] button');
   await waitForRenamedRow(archived.id);
   await navigate('/settings', 'Настройки');
   await waitForPlanning(false);
   await js("document.querySelector('.planning-switch-track').click()");
   await waitForPlanning(true);
-  for (const [route, title] of planningSections) {
-    await navigate(route, title);
-    assert.equal(await js("document.querySelector('h1').closest('.page').textContent.trim()"), title);
-  }
+  await verifyPlanning(driver, fixture, generation);
+  await navigate('/planning-analytics', 'Аналитика планирования');
+  await wait("document.querySelector('[data-metric=total]')?.textContent.trim() === '3'");
+  const planSummary = await api('analytics', 'planSummary', { generation });
+  assert.equal(planSummary.totals.active, 3);
+  const planExecutor = planSummary.executors.find(row => row.label === renamedSelections.executor);
+  await fill('select[name=analytics-executor]', { 0: planExecutor.key });
+  await wait("document.querySelectorAll('.analytics-instructions [data-plan-id]').length === 3");
+  const planRow = ".analytics-instructions tr[data-plan-id]";
+  assert.deepEqual(await js(`[...document.querySelectorAll('${planRow}')].map(row => row.cells[1].textContent.trim()).sort()`),
+    ['1.1', '1.2а', '2.1']);
+  await screenshot('planning-analytics.png');
+  const planId = await js(`document.querySelector('${planRow}').dataset.planId`);
+  await js(`document.querySelector('${planRow} a').click()`);
+  await wait(`location.hash.includes('plan=${planId}') && document.querySelector('.planning-dialog[open] [name=planItem]')?.value === '1.1'`);
+  await js("document.querySelector('.planning-dialog .registry-close-button').click()");
+  await wait("!document.querySelector('.planning-dialog[open]')");
   await navigate('/settings', 'Настройки');
 
   await click('Создать другую базу', '.storage-button');
@@ -262,6 +278,10 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
   assert.equal((await api('instructions', 'list', { generation: next.generation })).total, 0);
   assert.equal((await api('analytics', 'summary', { generation: next.generation })).totals.total, 0);
   await assert.rejects(api('instructions', 'update', { id: created.id, data: { title: 'Wrong DB' }, generation }));
+  await togglePlanningWithKeyboard(true);
+  await verifyOverdueReports(driver, fixture, next.generation);
+  await verifyYearCalendars(driver, today, next.generation);
+  await togglePlanningWithKeyboard(false);
   await click('Открыть базу', '.storage-button');
   assert.equal((await api('database', 'getStatus')).generation, next.generation);
   dialogs.openDatabase(firstFile);
@@ -292,7 +312,7 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
   assert.equal(JSON.parse(readFileSync(path.join(userData, 'database-location.json'), 'utf8')).filePath, firstFile);
 
   await js("location.hash = '#/planning-control'");
-  await wait("location.hash === '#/' && document.querySelector('h1')?.textContent === 'Контроль реестра'");
+  await wait("location.hash === '#/' && document.querySelector('h1')?.textContent === 'Реестр контроля'");
   await click('Добавить указание', '.registry-toolbar button');
   await wait("Boolean(document.querySelector('.registry-instruction-dialog[open]'))");
   for (const field of Object.keys(registrySelections)) {

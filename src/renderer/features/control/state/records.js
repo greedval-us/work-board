@@ -1,10 +1,9 @@
 import { computed, shallowRef } from 'vue';
 import { DesktopError, ERROR_CODES } from '../../../../shared/errors.js';
-import { snapshotInstruction } from '../instructionDraft.js';
 import { errorMessage } from '../../../infrastructure/errorMessage.js';
-import { createRegistryRead } from './read.js';
+import { createControlRead } from './read.js';
 
-export function createRegistryRecords({ app, service, closed, ready, isCurrent, error, showNotice }) {
+export function createControlRecords({ app, service, closed, ready, isCurrent, error, showNotice, persist, messages }) {
   const opening = shallowRef(false);
   const saving = shallowRef(false);
   const deleting = shallowRef(false);
@@ -12,7 +11,7 @@ export function createRegistryRecords({ app, service, closed, ready, isCurrent, 
   const mutationError = shallowRef('');
   const busy = computed(() => saving.value || deleting.value || closingControl.value);
   const canMutate = computed(() => ready.value && !app.databaseSwitching && !busy.value);
-  const requests = createRegistryRead(null);
+  const requests = createControlRead(null);
 
   function cancelRecordRead() {
     requests.invalidate();
@@ -33,10 +32,10 @@ export function createRegistryRecords({ app, service, closed, ready, isCurrent, 
       try {
         const record = await service.get({ id, generation });
         if (!isReadCurrent()) return null;
-        if (!record) throw new DesktopError(ERROR_CODES.NOT_FOUND, 'Указание не найдено. Возможно, оно было удалено.');
+        if (!record) throw new DesktopError(ERROR_CODES.NOT_FOUND, 'Запись не найдена. Возможно, она была удалена.');
         return record;
       } catch (cause) {
-        if (isReadCurrent()) error.value = errorMessage(cause, 'Не удалось открыть указание.');
+        if (isReadCurrent()) error.value = errorMessage(cause, 'Не удалось открыть карточку.');
         return null;
       } finally {
         if (isReadCurrent()) opening.value = false;
@@ -63,19 +62,17 @@ export function createRegistryRecords({ app, service, closed, ready, isCurrent, 
 
   async function saveRecord({ id = null, data: values, generation }) {
     if (!canMutate.value || !isCurrent(generation)) return false;
-    const data = snapshotInstruction(values);
-    const persist = () => id ? service.update({ id, data, generation }) : service.create({ data, generation });
-    return mutate(generation, saving, persist, {
-      success: id ? 'Изменения сохранены.' : 'Указание добавлено.',
-      failure: 'Не удалось сохранить указание. Введённые данные сохранены в форме.',
+    return mutate(generation, saving, () => persist(service, { id, values, generation }), {
+      success: id ? 'Изменения сохранены.' : messages.added,
+      failure: 'Не удалось сохранить запись. Введённые данные сохранены в форме.',
     });
   }
 
   async function removeRecord({ id, generation }) {
     if (!canMutate.value || !id || !isCurrent(generation)) return false;
     return mutate(generation, deleting, () => service.remove({ id, generation }), {
-      success: 'Указание удалено.',
-      failure: 'Не удалось удалить указание.',
+      success: messages.removed,
+      failure: 'Не удалось удалить запись.',
     });
   }
 
@@ -83,7 +80,7 @@ export function createRegistryRecords({ app, service, closed, ready, isCurrent, 
     if (closed || !canMutate.value || !id || !isCurrent(generation)) return false;
     showNotice('');
     return mutate(generation, closingControl, () => service.closeControl({ id, generation }), {
-      success: 'Указание перенесено в раздел «Закрытый контроль».',
+      success: messages.closed,
       failure: 'Не удалось закрыть контроль.',
       feedback: fromCard ? mutationError : error,
     });

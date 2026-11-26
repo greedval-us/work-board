@@ -14,11 +14,11 @@ export class NotificationStateRepository {
     return new Map(receipts.map(receipt => [receipt.id, receipt]));
   }
 
-  acknowledge(candidates, acknowledgements, { read, popup }) {
+  acknowledge(candidates, acknowledgements, { read, popup }, keepHidden = () => false) {
     return this.database.transaction(() => {
       const previous = this.get();
       const requested = new Map(acknowledgements.map(item => [item.id, item.occurrence]));
-      const receipts = [];
+      const receipts = [...previous.values()].filter(keepHidden);
       for (const item of candidates) {
         const saved = previous.get(item.id);
         const receipt = saved?.occurrence === item.occurrence

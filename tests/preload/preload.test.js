@@ -5,7 +5,8 @@ import { createPreloadApis } from '../../src/preload/createPreloadApis.js';
 test('bridge exposes named operations and sends only their explicit payloads', async () => {
   const calls = [];
   const api = createPreloadApis({ invoke: async (...args) => { calls.push(args); return { ok: true, value: 'ok' }; } });
-  assert.deepEqual(Object.keys(api).sort(), ['analytics', 'app', 'appLock', 'calendar', 'database', 'instructions', 'notifications', 'settings', 'tasks']);
+  assert.deepEqual(Object.keys(api).sort(), ['analytics', 'app', 'appLock', 'calendar', 'database', 'instructions', 'notifications', 'plans', 'settings', 'tasks']);
+  assert.deepEqual(Object.keys(api.plans).sort(), ['closeControl', 'create', 'export', 'get', 'list', 'remove', 'update']);
   assert.equal(api.invoke, undefined);
   await api.app.whenReady();
   await api.app.getInfo();
@@ -27,6 +28,8 @@ test('bridge exposes named operations and sends only their explicit payloads', a
   await api.instructions.create({ generation: 1, data: { title: 'Указание' } });
   await api.instructions.closeControl({ generation: 1, id: 4 });
   await api.instructions.exportControlCard({ generation: 1, id: 4, fields: { executorPhone: '' } });
+  const plans = { generation: 1, rows: [{ planItem: '1.2' }, { planItem: '1.3' }] };
+  await api.plans.create(plans);
   const taskOccurrence = { generation: 1, id: 9, date: '2026-11-17', completed: true };
   await api.tasks.setOccurrenceCompleted(taskOccurrence);
   const taskMove = { generation: 1, id: 9, from: '2026-11-17', to: '2026-11-20' };
@@ -49,6 +52,7 @@ test('bridge exposes named operations and sends only their explicit payloads', a
     ['instructions:create', { generation: 1, data: { title: 'Указание' } }],
     ['instructions:close-control', { generation: 1, id: 4 }],
     ['instructions:export-control-card', { generation: 1, id: 4, fields: { executorPhone: '' } }],
+    ['plans:create', plans],
     ['tasks:set-occurrence-completed', taskOccurrence], ['tasks:move-occurrence', taskMove], ['database:open'],
     ['notifications:list', { generation: 1 }],
     ['notifications:acknowledge', { generation: 1, items: [{ id: 'task:1', occurrence: '2026-11-12:2026-11-12' }], read: true }],

@@ -1,12 +1,13 @@
 <script setup>
 import { computed } from 'vue';
+import { vResizableColumns } from '../../../ui/resizableColumns.js';
 import { Archive, ArrowDown, ArrowUp, CircleAlert, Clock3 } from 'lucide-vue-next';
 import { CONTROL_FREQUENCIES } from '../../../../shared/controlSchedule.js';
-import { formatDate, getUrgency, INSTRUCTION_COLUMNS, localDate } from '../../../../shared/registry.js';
+import { formatDate, getUrgency, localDate } from '../../../../shared/registry.js';
 
 const props = defineProps({ items: { type: Array, required: true }, sort: { type: Object, required: true }, loading: Boolean,
   wide: Boolean, today: { type: String, required: true }, closed: Boolean, canCloseControl: Boolean,
-  sectionTitle: { type: String, required: true } });
+  sectionTitle: { type: String, required: true }, columns: { type: Array, required: true }, groupRows: Function });
 const emit = defineEmits(['sort', 'open', 'close-control']);
 
 function deadlineAlert(item) {
@@ -28,15 +29,16 @@ const rows = computed(() => props.items.map((item) => ({
     { key: 'extendedUntil', value: item.extendedUntil, showUrgency: Boolean(item.extendedUntil) },
   ].map(date => ({ ...date, label: formatDate(date.value) })),
 })));
+const groups = computed(() => props.groupRows ? props.groupRows(rows.value) : [{ key: '', rows: rows.value }]);
 const ariaSort = (key) => props.sort.field === key ? (props.sort.direction === 'asc' ? 'ascending' : 'descending') : 'none';
 const columnLabels = { controlDate: 'Учёт с', incomingNumber: 'Вх. №', title: 'Название', deadline: 'Срок', executionMark: 'Отметка' };
 </script>
 
 <template>
   <div class="registry-table-scroll" :class="{ 'registry-table-scroll-wide': props.wide }" role="region" :aria-label="`${props.sectionTitle}, прокрутка списка${props.wide ? ' и широких столбцов' : ''}`" tabindex="0" :aria-busy="props.loading">
-    <table class="registry-table" :class="{ 'registry-table-wide': props.wide, 'registry-table-with-actions': !props.closed }">
-      <caption class="registry-visually-hidden">{{ props.sectionTitle }}. Откройте название указания для просмотра и редактирования.</caption>
-      <thead><tr><th v-for="column in INSTRUCTION_COLUMNS" :key="column.key" :data-column="column.key" scope="col" :aria-sort="props.closed && column.key === 'nextCheckpoint' ? undefined : ariaSort(column.key)" :title="props.closed && column.key === 'nextCheckpoint' ? 'Дата закрытия' : column.label">
+    <table v-resizable-columns="props.wide ? 'control-wide' : 'control'" class="registry-table" :class="{ 'registry-table-wide': props.wide, 'registry-table-with-actions': !props.closed, 'control-grouped-table': props.groupRows }">
+      <caption class="registry-visually-hidden">{{ props.sectionTitle }}. Откройте название записи для просмотра и редактирования.</caption>
+      <thead><tr><th v-for="column in props.columns" :key="column.key" :data-column="column.key" scope="col" :aria-sort="props.closed && column.key === 'nextCheckpoint' ? undefined : ariaSort(column.key)" :title="props.closed && column.key === 'nextCheckpoint' ? 'Дата закрытия' : column.label">
         <span v-if="props.closed && column.key === 'nextCheckpoint'" class="registry-static-heading">Дата закрытия</span>
         <button v-else type="button" class="registry-sort" :aria-label="`Сортировать: ${column.label}`" @click="emit('sort', column.key)">
           <span v-if="column.key === 'nextCheckpoint'" class="registry-checkpoint-heading">
@@ -56,15 +58,17 @@ const columnLabels = { controlDate: 'Учёт с', incomingNumber: 'Вх. №', 
           <ArrowDown v-else-if="props.sort.field === column.key" :size="12" aria-hidden="true" />
         </button>
       </th><th v-if="!props.closed" data-column="actions" scope="col"><span class="registry-visually-hidden">Действия</span></th></tr></thead>
-      <tbody>
-        <tr v-for="item in rows" :key="item.id" class="registry-row" @click="emit('open', item.id)">
+      <tbody v-for="group in groups" :key="group.key">
+        <tr v-for="(item, index) in group.rows" :key="item.id" class="registry-row" @click="emit('open', item.id)">
           <td data-column="id"><span class="registry-cell-text registry-number" :title="String(item.id)">{{ item.id }}</span></td>
           <td data-column="controlDate"><time class="registry-cell-date" :datetime="item.controlDate" :title="item.controlDateLabel" :aria-label="item.controlDateLabel"><span class="registry-date-full">{{ item.controlDateLabel }}</span><span class="registry-date-short" aria-hidden="true">{{ item.controlDateLabel.slice(0, 5) }}</span></time></td>
           <td data-column="incomingNumber"><span class="registry-cell-text" :title="item.incomingNumber">{{ item.incomingNumber || '—' }}</span></td>
-          <td data-column="instructionNumber"><span class="registry-cell-text registry-number" :title="item.instructionNumber">{{ item.instructionNumber }}</span></td>
+          <th v-if="props.groupRows && index === 0" class="control-group-number" data-column="instructionNumber" scope="rowgroup" :rowspan="group.rows.length" @click.stop><span :title="item.instructionNumber">{{ item.instructionNumber }}</span></th>
+          <td v-else-if="!props.groupRows" data-column="instructionNumber"><span class="registry-cell-text registry-number" :title="item.instructionNumber">{{ item.instructionNumber }}</span></td>
           <td data-column="documentType"><span class="registry-cell-text" :title="item.documentType">{{ item.documentType || '—' }}</span></td>
           <td data-column="source"><span class="registry-cell-text" :title="item.source">{{ item.source || '—' }}</span></td>
           <td data-column="title"><button class="registry-record-link" type="button" @click.stop="emit('open', item.id)"><span class="registry-cell-text" :title="item.title">{{ item.title }}</span></button></td>
+          <slot name="after-title" :item="item" />
           <td data-column="summary"><span class="registry-cell-summary" :title="item.summary">{{ item.summary || '—' }}</span></td>
           <td v-for="date in item.dates" :key="date.key" :data-column="date.key">
             <time v-if="date.value" class="registry-cell-date registry-date" :datetime="date.value" :title="date.label" :aria-label="date.label"><span class="registry-date-full">{{ date.label }}</span><span class="registry-date-short" aria-hidden="true">{{ date.label.slice(0, 5) }}</span></time>
