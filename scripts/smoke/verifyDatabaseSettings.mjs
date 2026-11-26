@@ -7,11 +7,39 @@ import { createSmokeForms } from './forms.mjs';
 import { verifyAppearanceStyles } from './verifyAppearanceStyles.mjs';
 
 export async function verifyDatabaseSettings(driver, fixture, { generation, created }) {
-  const { js, api, wait, click, navigate, fill, openFilters, geometry, resize, resizeDefault, screenshot } = driver;
+  const { js, api, wait, click, navigate, fill, openFilters, geometry, resize, resizeDefault, pressKey, screenshot } = driver;
   const { userData, firstFile, today, controlFrequencyCell, customControl, registrySelections, reportSelections, settingsSelections, renamedSelections, controlCardOffice, alternateOffice, dialogs } = fixture;
   const { instructionField, optionRow, selectRegistryDirectory, addRegistryOption, controlCardDialog, reportField } = createSmokeForms(driver);
   const defaultTypography = DEFAULT_SETTINGS.typography;
   const largeTypography = { fontFamily: 'system', fontSize: APP_FONT_SIZE_LIMITS.max };
+  const planningCheckbox = 'input[name=planning-enabled]';
+  const planningSections = [
+    ['/planning-control', 'Контроль планирования'],
+    ['/planning-analytics', 'Аналитика планирования'],
+  ];
+  const waitForPlanning = enabled => wait(`(() => {
+    const checkbox = document.querySelector('${planningCheckbox}');
+    return checkbox?.matches(':enabled') && checkbox.checked === ${enabled} &&
+      ${JSON.stringify(planningSections)}.every(([route, title]) => {
+        const link = document.querySelector('#main-navigation nav a[href="#' + route + '"]');
+        if (!${enabled}) return !link;
+        const label = link?.querySelector('.sidebar-label');
+        return label?.textContent === title && label.scrollWidth <= label.clientWidth;
+      });
+  })()`);
+  const togglePlanningWithKeyboard = async enabled => {
+    const selector = `${planningCheckbox}[role=switch]`;
+    await js(`document.querySelector('${selector}').focus()`);
+    await pressKey('Space');
+    await waitForPlanning(enabled);
+    assert.equal(await js(`document.activeElement.matches('${selector}')`), true, 'Keep keyboard focus on the planning switch');
+    await wait(`(() => {
+      const track = document.querySelector('${selector} + .planning-switch-track');
+      const transform = getComputedStyle(track, '::after').transform;
+      const shift = transform === 'none' ? 0 : new DOMMatrixReadOnly(transform).m41;
+      return ${enabled} ? shift > 0 : shift === 0;
+    })()`);
+  };
   const applyTypography = async ({ fontFamily, fontSize }) => {
     for (const [selector, value] of [
       ['select[name=appearance-font-family]', fontFamily],
@@ -50,6 +78,12 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
   await screenshot('settings-typography-compact.png');
   await resizeDefault();
 
+  await waitForPlanning(false);
+  assert.ok(await js(`[...document.querySelector('${planningCheckbox}').labels]
+    .some(label => label.textContent.includes('Дополнительные возможности планирования'))`));
+  await togglePlanningWithKeyboard(true);
+  assert.equal(await js(`document.querySelector('#main-navigation nav a[href="#/"]').nextElementSibling?.getAttribute('href')`),
+    '#/planning-control', 'Planning control follows registry control in the menu');
   const originalThemeSource = nativeTheme.themeSource;
   const systemPrefersDark = "matchMedia('(prefers-color-scheme: dark)').matches";
   const appearance = 'document.documentElement.dataset.appearance';
@@ -83,8 +117,14 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
   } finally {
     nativeTheme.themeSource = originalThemeSource;
   }
+  await togglePlanningWithKeyboard(false);
+  console.log('Planning switch keyboard activation, focus and thumb positions verified.');
 
-  await navigate('/analytics', 'Аналитика');
+  await navigate('/analytics', 'Аналитика контроля');
+  assert.ok(await js(`(() => {
+    const label = document.querySelector('#main-navigation a[href="#/analytics"] .sidebar-label');
+    return label?.textContent === 'Аналитика контроля' && label.scrollWidth <= label.clientWidth;
+  })()`), 'The analytics menu label must fit at the maximum font size');
   await wait("Boolean(document.querySelector('.analytics-results .analytics-timeline'))");
   await screenshot('analytics-dark.png');
   await navigate('/calendar', 'Календарь и задачи');
@@ -105,7 +145,7 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
   assert.equal(badges.length, 4);
   assert.ok(badges.every(badge => badge.bottom <= 0 && badge.right <= 0),
     `Calendar badges at the maximum font size exceed available space: ${JSON.stringify(badges)}`);
-  await navigate('/', 'Реестр указаний');
+  await navigate('/', 'Контроль реестра');
   await wait("document.querySelector('.registry-table tbody tr') && !document.querySelector('.workspace-enter-active')");
   await geometry('registry', 'registry maximum typography');
   await js("document.querySelector('.registry-record-link').click()");
@@ -192,11 +232,20 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
   const updatedContact = { executor: renamedSelections.executor, department: renamedSelections.department, executorPhone: renamedSelections.executorPhone };
   assert.deepEqual((await api('settings', 'get', generation)).executorContacts, [updatedContact]);
 
-  await navigate('/', 'Реестр указаний');
+  await navigate('/', 'Контроль реестра');
   await waitForRenamedRow(created.id);
   await navigate('/closed-control', 'Закрытый контроль');
   await waitForRenamedRow(archived.id);
   await navigate('/settings', 'Настройки');
+  await waitForPlanning(false);
+  await js("document.querySelector('.planning-switch-track').click()");
+  await waitForPlanning(true);
+  for (const [route, title] of planningSections) {
+    await navigate(route, title);
+    assert.equal(await js("document.querySelector('h1').closest('.page').textContent.trim()"), title);
+  }
+  await navigate('/settings', 'Настройки');
+
   await click('Создать другую базу', '.storage-button');
   await wait("document.querySelector('.file-path')?.textContent.includes('another.sqlite')");
   const next = await api('database', 'getStatus');
@@ -206,6 +255,7 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
   await wait("document.documentElement.dataset.appearanceStyle === 'standard'");
   assert.deepEqual(nextSettings.typography, defaultTypography);
   await waitForTypography(defaultTypography);
+  await waitForPlanning(false);
   assert.deepEqual(nextSettings.registryOptions, { documentType: [], source: [], executor: [], department: [], executorPhone: [], office: [] });
   assert.deepEqual(nextSettings.executorContacts, []);
   assert.equal(nextSettings.office, '');
@@ -223,6 +273,9 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
   await wait("document.documentElement.dataset.appearanceStyle === 'gzhel'");
   assert.deepEqual(reopenedSettings.typography, largeTypography);
   await waitForTypography(largeTypography);
+  await waitForPlanning(true);
+  await js("document.querySelector('.planning-switch-track').click()");
+  await waitForPlanning(false);
   await applyTypography(defaultTypography);
   await waitForTypography(defaultTypography);
   assert.deepEqual(reopenedSettings.registryOptions, updatedOptions);
@@ -238,7 +291,8 @@ export async function verifyDatabaseSettings(driver, fixture, { generation, crea
   assert.equal((await api('calendar', 'day', { date: today, generation: reopened.generation })).tasks.length, 1);
   assert.equal(JSON.parse(readFileSync(path.join(userData, 'database-location.json'), 'utf8')).filePath, firstFile);
 
-  await navigate('/', 'Реестр указаний');
+  await js("location.hash = '#/planning-control'");
+  await wait("location.hash === '#/' && document.querySelector('h1')?.textContent === 'Контроль реестра'");
   await click('Добавить указание', '.registry-toolbar button');
   await wait("Boolean(document.querySelector('.registry-instruction-dialog[open]'))");
   for (const field of Object.keys(registrySelections)) {

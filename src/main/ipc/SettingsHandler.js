@@ -20,6 +20,10 @@ export class SettingsHandler {
         this.database.assertGeneration(payload?.generation);
         return this.settingsService.setTypography(payload?.typography);
       },
+      [channels.settings.setPlanningEnabled]: (payload) => {
+        this.database.assertGeneration(payload?.generation);
+        return this.settingsService.setPlanningEnabled(payload?.planningEnabled);
+      },
       [channels.settings.setOffice]: (payload) => {
         this.database.assertGeneration(payload?.generation);
         return this.settingsService.setOffice(payload?.office);

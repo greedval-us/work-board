@@ -25,7 +25,7 @@ const refresh = () => store.refresh({ force: true, keepData: Boolean(data.value)
 </script>
 <template>
   <section class="page analytics-page">
-    <div class="analytics-page-heading"><PageHeading title="Аналитика" /><button type="button" class="analytics-button" :disabled="!ready || loading" @click="refresh"><RefreshCw :size="15" aria-hidden="true" />Обновить</button></div>
+    <div class="analytics-page-heading"><PageHeading title="Аналитика контроля" /><button type="button" class="analytics-button" :disabled="!ready || loading" @click="refresh"><RefreshCw :size="15" aria-hidden="true" />Обновить</button></div>
     <template v-if="ready">
       <AnalyticsFilters :filters="draftFilters" :applied="appliedFilters" :executors="executors" :error="filterError"
         :changed="filtersChanged" :disabled="app.databaseSwitching" @change="Object.assign(draftFilters, $event)"

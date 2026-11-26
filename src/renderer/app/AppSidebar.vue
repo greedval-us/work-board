@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue';
-import { Archive, Files, CalendarDays, ChartNoAxesColumnIncreasing, Info, ListTodo, Settings, X } from 'lucide-vue-next';
+import { Archive, Files, CalendarCheck, CalendarDays, ChartNoAxesColumnIncreasing, ChartNoAxesCombined, Info, ListTodo, Settings, X } from 'lucide-vue-next';
 import { useAppStore } from './appStore.js';
 import AppIcon from '../ui/AppIcon.vue';
 import { navigationGlyphs } from '../ui/navigationGlyphs.js';
@@ -15,14 +15,17 @@ defineEmits(['navigate', 'close']);
 const store = useAppStore();
 const glyphs = computed(() => navigationGlyphs[store.appearanceStyle]);
 const navigation = [
-  { to: '/', label: 'Реестр указаний', glyph: 'register', icon: Files, tone: 'blue' },
+  { to: '/', label: 'Контроль реестра', glyph: 'register', icon: Files, tone: 'blue' },
+  { to: '/planning-control', label: 'Контроль планирования', glyph: 'planningControl', icon: CalendarCheck, tone: 'coral', requiresPlanning: true },
   { to: '/closed-control', label: 'Закрытый контроль', glyph: 'archive', icon: Archive, tone: 'violet' },
   { to: '/calendar', label: 'Календарь', glyph: 'calendar', icon: CalendarDays, tone: 'coral' },
   { to: '/tasks', label: 'Задачи', glyph: 'tasks', icon: ListTodo, tone: 'amber' },
-  { to: '/analytics', label: 'Аналитика', glyph: 'analytics', icon: ChartNoAxesColumnIncreasing, tone: 'teal' },
+  { to: '/analytics', label: 'Аналитика контроля', glyph: 'analytics', icon: ChartNoAxesColumnIncreasing, tone: 'teal' },
+  { to: '/planning-analytics', label: 'Аналитика планирования', glyph: 'planningAnalytics', icon: ChartNoAxesCombined, tone: 'teal', requiresPlanning: true },
   { to: '/settings', label: 'Настройки', glyph: 'settings', icon: Settings, utilityFirst: true },
   { to: '/info', label: 'О приложении', glyph: 'info', icon: Info },
 ];
+const visibleNavigation = computed(() => navigation.filter(item => !item.requiresPlanning || store.planningEnabled));
 </script>
 
 <template>
@@ -37,10 +40,10 @@ const navigation = [
     <button v-if="overlay" class="sidebar-close icon-button" type="button" aria-label="Свернуть меню" @click="$emit('close')"><X :size="16" aria-hidden="true" /></button>
     <nav class="sidebar-nav" aria-label="Главное меню">
       <span class="sidebar-label nav-section-label" aria-hidden="true">Рабочая область</span>
-      <RouterLink v-for="item in navigation" :key="item.to" :to="item.to"
+      <RouterLink v-for="item in visibleNavigation" :key="item.to" :to="item.to"
         class="nav-item" :class="{ 'nav-item-utility-first': item.utilityFirst }" :title="item.label" :aria-label="item.label" exact-active-class="nav-item-active" @click="$emit('navigate')">
         <span class="nav-symbol" :class="item.tone && `nav-symbol-${item.tone}`">
-          <svg v-if="glyphs" class="nav-glyph" :data-glyph-style="store.appearanceStyle" width="18" height="18" viewBox="0 0 24 24"
+          <svg v-if="glyphs?.[item.glyph]" class="nav-glyph" :data-glyph-style="store.appearanceStyle" width="18" height="18" viewBox="0 0 24 24"
             fill="none" stroke="currentColor" stroke-width="1.85" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true" focusable="false">
             <path :d="glyphs[item.glyph].outline" />
             <path v-if="glyphs[item.glyph].etch" class="nav-glyph-etch" :d="glyphs[item.glyph].etch" />

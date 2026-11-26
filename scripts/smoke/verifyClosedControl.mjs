@@ -31,7 +31,7 @@ export async function verifyClosedControl(driver, { shortExportFile, openRequest
     assert.ok(upcoming.checkpoints.some(item => item.instructionId === id));
   }
 
-  await navigate('/', 'Реестр указаний');
+  await navigate('/', 'Контроль реестра');
   await filterByNumber(created.instructionNumber);
   await js("document.querySelector('.registry-row').click()");
   await wait(`document.querySelector(${JSON.stringify(controlNumber)})?.value === ${JSON.stringify(created.instructionNumber)}`);
@@ -101,7 +101,7 @@ export async function verifyClosedControl(driver, { shortExportFile, openRequest
   await js(`document.querySelector(${JSON.stringify(closeCard)}).click()`);
   await wait(`!document.querySelector('${card}')`);
 
-  await navigate('/analytics', 'Аналитика');
+  await navigate('/analytics', 'Аналитика контроля');
   const executor = 'select[name=analytics-executor]';
   const executorKey = other.executor.normalize('NFKC').toLocaleLowerCase('ru-RU');
   await wait(`[...document.querySelector('${executor}')?.options ?? []].some(option => option.value === ${JSON.stringify(executorKey)})`);

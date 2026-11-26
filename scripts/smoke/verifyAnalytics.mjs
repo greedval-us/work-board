@@ -25,7 +25,7 @@ export async function verifyAnalytics(driver, fixture, { generation }) {
   const totals = (...values) => ['total', 'closed', 'active', 'overdue'].slice(0, values.length).map((key, index) =>
     `document.querySelector('[data-metric=${key}]')?.textContent.trim() === '${values[index]}'`).join(' && ');
 
-  await navigate('/analytics', 'Аналитика');
+  await navigate('/analytics', 'Аналитика контроля');
   await wait(totals(monthTotal, primaryCheckpointsThisMonth, 28, 0));
   assert.equal(await js("[...document.querySelectorAll('.analytics-page h2')].some(heading => heading.textContent.trim() === 'Статусы исполнения')"), false);
   const executorMetric = (label, metric) => js(`document.querySelector(${JSON.stringify(`[data-executor=${JSON.stringify(label)}] [data-executor-metric=${metric}]`)})?.textContent.trim()`);
@@ -68,7 +68,7 @@ export async function verifyAnalytics(driver, fixture, { generation }) {
   await js("document.querySelector('.registry-instruction-dialog .registry-close-button').click()");
   await wait("!document.querySelector('.registry-instruction-dialog[open]')");
 
-  await navigate('/analytics', 'Аналитика');
+  await navigate('/analytics', 'Аналитика контроля');
   await wait(`Boolean(document.querySelector('${instructionLink}'))`);
   assert.deepEqual(await analyticsInstructionIds(), secondPageIds);
   assert.equal(await js(`document.querySelector('${executorSelect}').value`), primaryExecutorKey);
@@ -124,7 +124,7 @@ export async function verifyAnalytics(driver, fixture, { generation }) {
     await wait(`Boolean(document.querySelector('.registry-instruction-dialog[open] [data-checkpoint-date="${movedDate}"] textarea'))`);
     await js("document.querySelector('.registry-instruction-dialog .registry-close-button').click()");
     await wait("!document.querySelector('.registry-instruction-dialog[open]')");
-    await navigate('/analytics', 'Аналитика');
+    await navigate('/analytics', 'Аналитика контроля');
   } finally {
     for (const { id } of weekFixtures) await api('instructions', 'remove', { generation, id });
   }

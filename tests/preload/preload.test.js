@@ -15,6 +15,7 @@ test('bridge exposes named operations and sends only their explicit payloads', a
   await api.settings.setAppearanceStyle('witcher', 1);
   const typography = { fontFamily: 'system', fontSize: 15 };
   await api.settings.setTypography(typography, 1);
+  await api.settings.setPlanningEnabled(true, 1);
   await api.settings.setOffice('Приёмная', 1);
   await api.settings.addRegistryOption('source', 'Канцелярия', 1);
   await api.settings.updateRegistryOption('source', 'Канцелярия', 'Архив', 1);
@@ -37,6 +38,7 @@ test('bridge exposes named operations and sends only their explicit payloads', a
     ['app:when-ready'], ['app:get-info'], ['database:get-status'], ['settings:get', { generation: 1 }], ['settings:set-theme', { theme: 'dark', generation: 1 }],
     ['settings:set-appearance-style', { appearanceStyle: 'witcher', generation: 1 }],
     ['settings:set-typography', { typography, generation: 1 }],
+    ['settings:set-planning-enabled', { planningEnabled: true, generation: 1 }],
     ['settings:set-office', { office: 'Приёмная', generation: 1 }],
     ['settings:add-registry-option', { field: 'source', value: 'Канцелярия', generation: 1 }],
     ['settings:update-registry-option', { field: 'source', previousValue: 'Канцелярия', value: 'Архив', generation: 1 }],

@@ -18,7 +18,7 @@ import './registry.css';
 
 const InstructionDialog = defineAsyncComponent(() => import('./components/InstructionDialog.vue'));
 const props = defineProps({ closed: Boolean });
-const sectionTitle = props.closed ? 'Закрытый контроль' : 'Реестр указаний';
+const sectionTitle = props.closed ? 'Закрытый контроль' : 'Контроль реестра';
 const routeName = props.closed ? 'ClosedControl' : 'Registry';
 const app = useAppStore();
 const choosingDatabase = computed(() => app.loading || app.databaseSwitching || app.pendingOperations > 0);

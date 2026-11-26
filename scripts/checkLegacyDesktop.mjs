@@ -89,7 +89,7 @@ try {
           let ready = false;
           for (let attempt = 0; attempt < 100 && !ready; attempt++) {
             ready = await window.webContents.executeJavaScript(
-              'Boolean(window.desktopAPI?.database) && document.querySelector("h1")?.textContent === "Реестр указаний" && !document.querySelector("[aria-busy=true]")');
+              'Boolean(window.desktopAPI?.database) && document.querySelector("h1")?.textContent === "Контроль реестра" && !document.querySelector("[aria-busy=true]")');
             if (!ready) await delay(50);
           }
           assert.equal(ready, true, 'Packaged renderer did not become ready.');

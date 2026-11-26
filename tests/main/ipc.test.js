@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 const emptyRegistryOptions = { documentType: [], source: [], executor: [], department: [], executorPhone: [], office: [] };
-const defaultSettings = { theme: 'light', appearanceStyle: 'standard', typography: { fontFamily: 'inter', fontSize: 14 }, registryOptions: emptyRegistryOptions, executorContacts: [], office: '' };
+const defaultSettings = { theme: 'light', appearanceStyle: 'standard', typography: { fontFamily: 'inter', fontSize: 14 }, planningEnabled: false, registryOptions: emptyRegistryOptions, executorContacts: [], office: '' };
 
 test('post-request background checks run only after trusted successful writes and cannot falsify a saved result', async () => {
   const handlers = new Map(); const calls = [];
@@ -94,6 +94,19 @@ test('appearance style writes reject stale databases and unknown styles before u
     assert.equal((await save(event, { ...payload, appearanceStyle })).error.code, 'VALIDATION');
   }
   assert.equal((await handlers.get('settings:get')(event, { generation })).value.appearanceStyle, 'witcher');
+});
+
+test('planning toggle writes reject stale databases and values that are not booleans', async (t) => {
+  const { handlers, event, generation } = fixture(t);
+  const save = handlers.get('settings:set-planning-enabled');
+  assert.equal((await save(event, { planningEnabled: true, generation: generation - 1 })).error.code, 'DATABASE_CHANGED');
+  for (const planningEnabled of [undefined, null, 'true', 1, {}]) {
+    assert.equal((await save(event, { planningEnabled, generation })).error.code, 'VALIDATION');
+  }
+  assert.deepEqual(await handlers.get('settings:get')(event, { generation }), { ok: true, value: defaultSettings });
+  assert.deepEqual(await save(event, { planningEnabled: true, generation }), {
+    ok: true, value: { ...defaultSettings, planningEnabled: true },
+  });
 });
 
 test('adding a registry option over IPC requires a trusted sender and the active database generation', async (t) => {

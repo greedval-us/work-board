@@ -40,3 +40,20 @@
 :root[data-appearance-style='gzhel'] :is(.registry-button-primary, .calendar-button-primary, .analytics-button-primary) {
   border-radius: 16px;
 }
+
+:root[data-appearance-style='witcher'] .planning-switch-track {
+  --switch-radius: 5px;
+  --switch-thumb-radius: 3px;
+}
+:root[data-appearance-style='harry-potter'] .planning-switch-track {
+  --switch-radius: 10px 4px;
+  --switch-thumb-radius: 6px 3px;
+}
+:root[data-appearance-style='cyberpunk'] .planning-switch-track {
+  --switch-radius: 2px 8px;
+  --switch-thumb-radius: 2px 5px;
+}
+:root[data-appearance-style='gzhel'] .planning-switch-track {
+  --switch-radius: 12px 12px 9px 9px;
+  --switch-thumb-radius: 8px 8px 6px 6px;
+}

@@ -7,6 +7,7 @@ const registryOptionKey = field => `registryOptions.${field}`;
 const EXECUTOR_CONTACTS_KEY = 'executorContacts';
 const APPEARANCE_STYLE_KEY = 'appearanceStyle';
 const TYPOGRAPHY_KEY = 'typography';
+const PLANNING_ENABLED_KEY = 'planningEnabled';
 const OFFICE_KEY = 'office';
 const INSTRUCTION_OPTION_COLUMNS = Object.freeze({
   documentType: ['document_type', 'document_type_search'],
@@ -65,6 +66,7 @@ export class SettingsRepository {
       appearanceStyle: Object.hasOwn(APP_APPEARANCE_STYLES, appearanceStyle) ? appearanceStyle : DEFAULT_SETTINGS.appearanceStyle,
       registryOptions,
       typography: readTypography(settings.get(TYPOGRAPHY_KEY)),
+      planningEnabled: (settings.get(PLANNING_ENABLED_KEY) ?? String(DEFAULT_SETTINGS.planningEnabled)) === 'true',
       executorContacts: readExecutorContacts(settings.get(EXECUTOR_CONTACTS_KEY)),
       office,
     };
@@ -75,6 +77,13 @@ export class SettingsRepository {
       if (theme !== undefined) this.#set('theme', theme);
       if (appearanceStyle !== undefined) this.#set(APPEARANCE_STYLE_KEY, appearanceStyle);
       if (typography !== undefined) this.#set(TYPOGRAPHY_KEY, JSON.stringify(typography));
+      return this.get();
+    });
+  }
+
+  savePlanningEnabled(planningEnabled) {
+    return this.database.transaction(() => {
+      this.#set(PLANNING_ENABLED_KEY, String(planningEnabled));
       return this.get();
     });
   }

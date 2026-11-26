@@ -17,7 +17,7 @@ const store = useAppStore();
           <p class="about-version">{{ store.info ? `Версия ${store.info.version}` : 'Загрузка сведений…' }}</p>
         </div>
       </div>
-      <p class="about-summary">Реестр указаний, задачи и календарь. Данные хранятся на вашем компьютере и доступны без подключения к сети.</p>
+      <p class="about-summary">Контроль реестра, задачи и календарь. Данные хранятся на вашем компьютере и доступны без подключения к сети.</p>
     </div>
   </section>
 </template>

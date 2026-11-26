@@ -29,6 +29,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   theme: 'light',
   appearanceStyle: 'standard',
   typography: Object.freeze({ fontFamily: 'inter', fontSize: 14 }),
+  planningEnabled: false,
   registryOptions: Object.freeze(Object.fromEntries(
     Object.keys(REGISTRY_OPTION_LABELS).map(field => [field, Object.freeze([])]),
   )),

@@ -91,6 +91,64 @@
 .file-path { overflow-wrap: anywhere; user-select: text; }
 .save-status { color: var(--muted); font-size: calc(12px + var(--app-font-offset)); }
 
+.planning-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  font-size: calc(13px + var(--app-font-offset));
+  cursor: pointer;
+}
+.planning-option:has(.planning-switch:is(:disabled, [aria-disabled='true'])) { cursor: not-allowed; }
+.planning-switch-track {
+  --switch-off-track: var(--grouped);
+  --switch-off-thumb: var(--muted);
+  --switch-on-track: var(--accent);
+  --switch-on-thumb: var(--on-accent);
+  position: relative;
+  flex: 0 0 40px;
+  height: 24px;
+  border: 1px solid var(--switch-off-thumb);
+  border-radius: var(--switch-radius, 999px);
+  background: var(--switch-off-track);
+  transition: background-color var(--motion-fast) ease, border-color var(--motion-fast) ease;
+}
+.planning-switch-track::after {
+  content: '';
+  position: absolute;
+  inset: 3px auto auto 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--switch-thumb-radius, 50%);
+  background: var(--switch-off-thumb);
+  transition: transform var(--motion-fast) ease, background-color var(--motion-fast) ease;
+}
+.planning-switch:checked + .planning-switch-track {
+  border-color: var(--switch-on-track);
+  background: var(--switch-on-track);
+}
+.planning-switch:checked + .planning-switch-track::after {
+  transform: translateX(16px);
+  background: var(--switch-on-thumb);
+}
+.planning-switch:focus-visible + .planning-switch-track {
+  outline: 2px solid var(--switch-on-track);
+  outline-offset: 2px;
+}
+.planning-switch:is(:disabled, [aria-disabled='true']) + .planning-switch-track { opacity: .65; }
+
+@media (forced-colors: active) {
+  .planning-switch-track {
+    --switch-off-track: Canvas;
+    --switch-off-thumb: CanvasText;
+    --switch-on-track: Highlight;
+    --switch-on-thumb: HighlightText;
+    forced-color-adjust: none;
+  }
+  .planning-switch:disabled + .planning-switch-track { --switch-off-thumb: GrayText; }
+}
+
 .appearance-settings { position: relative; container: appearance / inline-size; }
 .appearance-settings .settings-glyph { background: var(--grouped); color: var(--text); }
 

@@ -58,6 +58,11 @@ export class SettingsService {
 
   setTypography(value) { return this.repository.saveAppearance({ typography: validateTypography(value) }); }
 
+  setPlanningEnabled(value) {
+    if (typeof value !== 'boolean') throw new ValidationError('Укажите, включены ли дополнительные возможности планирования.');
+    return this.repository.savePlanningEnabled(value);
+  }
+
   setOffice(value) {
     const office = validateOffice(value);
     return this.repository.updateRegistry(settings => {

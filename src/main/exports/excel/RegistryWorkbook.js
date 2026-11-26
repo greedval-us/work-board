@@ -125,7 +125,7 @@ export function createRegistryWorkbook({ rows, request = {}, exportedAt = new Da
   const settings = [
     ['Дата выгрузки', exportedAt.toLocaleString('ru-RU')], ['Количество строк', rows.length],
     ['Вид отчёта', short ? 'Краткий отчёт' : 'Полный отчёт'],
-    ['Раздел', normalized.closed ? 'Закрытый контроль' : 'Реестр указаний'],
+    ['Раздел', normalized.closed ? 'Закрытый контроль' : 'Контроль реестра'],
     ['Подписной номер', filters.instructionNumber || 'Все'],
     ...(filters.documentType ? [['Вид документа', filters.documentType]] : []),
     ['Действующий срок с', filters.deadlineFrom ? formatDate(filters.deadlineFrom) : 'Все'],

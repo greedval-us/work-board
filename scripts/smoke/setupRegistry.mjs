@@ -9,7 +9,7 @@ export async function setupRegistry(driver, fixture) {
   const { fillInstruction, optionForm, optionRow, selectRegistryDirectory, addRegistryOption } = createSmokeForms(driver);
 
   window.showInactive();
-  await wait("document.querySelector('h1')?.textContent === 'Реестр указаний' && !document.querySelector('[aria-busy=true]')");
+  await wait("document.querySelector('h1')?.textContent === 'Контроль реестра' && !document.querySelector('[aria-busy=true]')");
   window.webContents.debugger.attach('1.3');
   await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
   assert.equal((await api('database', 'getStatus')).ready, false);
@@ -36,7 +36,7 @@ export async function setupRegistry(driver, fixture) {
   const generation = initial.generation;
   assert.equal(initial.schemaVersion, migrations.at(-1).version);
   assert.equal(initial.filePath, firstFile);
-  await navigate('/', 'Реестр указаний');
+  await navigate('/', 'Контроль реестра');
   await click('Добавить указание', '.registry-toolbar button');
   await wait("Boolean(document.querySelector('.registry-instruction-dialog[open] .registry-options-hint a'))");
   assert.equal(await js("document.querySelector('select[name=executor]').validity.valueMissing"), true);
@@ -130,7 +130,7 @@ export async function setupRegistry(driver, fixture) {
   await wait(`!document.querySelector(${JSON.stringify(executorEditInput)})`);
   assert.deepEqual((await api('settings', 'get', generation)).executorContacts, [executorContact]);
 
-  await navigate('/', 'Реестр указаний');
+  await navigate('/', 'Контроль реестра');
   await click('Добавить указание', '.registry-toolbar button');
   await wait("Boolean(document.querySelector('.registry-instruction-dialog[open]'))");
   await verifyEntrance('.registry-instruction-dialog', 'instruction card');

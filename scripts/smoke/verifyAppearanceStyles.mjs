@@ -15,6 +15,8 @@ export async function verifyAppearanceStyles({ js, wait, pressKey, screenshot },
   const palettes = new Set();
   const createIcons = new Set();
   const registryIcons = new Set();
+  const planningIcons = new Set();
+  const planningSwitchStyles = new Set();
   let minimum = Infinity;
   for (const style of Object.keys(APP_APPEARANCE_STYLES)) {
     const option = `button[name=appearance-style][value="${style}"]`;
@@ -23,10 +25,31 @@ export async function verifyAppearanceStyles({ js, wait, pressKey, screenshot },
     await wait(`document.querySelector('${option}').matches(':enabled[aria-pressed=true]') &&
       document.documentElement.dataset.appearanceStyle === '${style}' && document.documentElement.dataset.appearance === '${mode}'`);
     assert.equal(await js(`document.activeElement.matches('${option}')`), true, 'Keep keyboard focus on the chosen style');
-    const [createIcon, registryIcon] = await js(`['.storage-actions [data-action-icon=create]', '.nav-item .nav-symbol svg'].map(selector =>
+    const [createIcon, registryIcon, planningControlIcon, planningAnalyticsIcon] = await js(`[
+      '.storage-actions [data-action-icon=create]',
+      '.nav-item .nav-symbol svg',
+      '#main-navigation a[href="#/planning-control"] svg',
+      '#main-navigation a[href="#/planning-analytics"] svg',
+    ].map(selector =>
       [...document.querySelector(selector).querySelectorAll('path')].map(path => path.getAttribute('d')).join(' '))`);
     createIcons.add(createIcon);
     registryIcons.add(registryIcon);
+    assert.ok(planningControlIcon && planningAnalyticsIcon, `${style}/${mode} planning icons must have visible artwork`);
+    planningIcons.add(planningControlIcon);
+    planningIcons.add(planningAnalyticsIcon);
+    const planningSwitch = await js(`(() => {
+      const track = document.querySelector('input[name=planning-enabled]:checked + .planning-switch-track');
+      const surface = getComputedStyle(track);
+      const thumb = getComputedStyle(track, '::after');
+      return {
+        rendered: track.offsetWidth > track.offsetHeight && track.offsetHeight > 0 &&
+          thumb.content !== 'none' && parseFloat(thumb.width) > 0 && parseFloat(thumb.height) > 0,
+        colors: [surface.backgroundColor, surface.borderTopColor, thumb.backgroundColor],
+        radii: [surface.borderRadius, thumb.borderRadius],
+      };
+    })()`);
+    assert.ok(planningSwitch.rendered, `${style}/${mode} planning control must render as a track with a thumb`);
+    planningSwitchStyles.add(JSON.stringify(planningSwitch));
     const samples = await js(`(async () => {
       const pairs = [
         ['body', 'body'],
@@ -55,5 +78,7 @@ export async function verifyAppearanceStyles({ js, wait, pressKey, screenshot },
   assert.equal(palettes.size, Object.keys(APP_APPEARANCE_STYLES).length, `Distinct palettes in ${mode} mode`);
   assert.equal(createIcons.size, palettes.size, 'Each theme has its own create icon');
   assert.equal(registryIcons.size, palettes.size, 'Each theme has its own registry icon');
-  console.log(`Appearance ${mode}: ${palettes.size} styles, minimum sampled text contrast ${minimum.toFixed(2)}:1.`);
+  assert.equal(planningIcons.size, palettes.size * 2, 'Each theme has two distinct planning icons');
+  assert.equal(planningSwitchStyles.size, palettes.size, 'The planning switch follows each theme');
+  console.log(`Appearance ${mode}: ${palettes.size} styles, planning icons and switch verified, minimum sampled text contrast ${minimum.toFixed(2)}:1.`);
 }

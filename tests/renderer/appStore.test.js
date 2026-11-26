@@ -99,6 +99,27 @@ test('typography follows the active database and applies only after a successful
   assert.match(store.typographyError, /Связь с приложением недоступна/);
 });
 
+test('planning stays off until enabled and preserves its saved state on failure', async (t) => {
+  const store = bridge(t, {
+    database: { getStatus: async () => ({ ready: true, generation: 7 }) },
+    settings: {
+      get: async () => ({ theme: 'light' }),
+      setPlanningEnabled: async (planningEnabled, generation) => {
+        assert.equal(generation, 7);
+        if (!planningEnabled) throw new Error('Storage unavailable');
+        return { theme: 'light', planningEnabled };
+      },
+    },
+  });
+  await store.initialize();
+  assert.equal(store.planningEnabled, false);
+  assert.equal(await store.setPlanningEnabled(true), true);
+  assert.equal(store.planningEnabled, true);
+  assert.equal(await store.setPlanningEnabled(false), false);
+  assert.equal(store.planningEnabled, true);
+  assert.ok(store.error);
+});
+
 test('registry and Ф‑21 options load for the active database and refresh after each saved change', async (t) => {
   const first = { source: ['Канцелярия'], executor: [], department: ['Отдел кадров'], executorPhone: ['+7 000 000-00-01'] };
   const second = { source: [], executor: ['Иванов'], department: ['Архив'], executorPhone: [] };

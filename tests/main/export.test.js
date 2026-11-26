@@ -50,6 +50,7 @@ test('Excel exports all registry columns, leading zeros, literal formula text an
   const parameters = loaded.getWorksheet('Параметры');
   const metadata = JSON.stringify(parameters.getSheetValues());
   assert.deepEqual(parameters.getRow(4).values.slice(1), ['Вид отчёта', 'Полный отчёт']);
+  assert.deepEqual(parameters.getRow(5).values.slice(1), ['Раздел', 'Контроль реестра']);
   assert.equal(parameters.getCell('A1').font.size, 13);
   assert.equal(parameters.getCell('B4').font.size, 13);
   assert.match(metadata, /ИВАНОВ/);

@@ -63,7 +63,7 @@ test('desktop smoke polling retries renderer conditions and reports exhausted co
 });
 
 test('ordinary smoke navigation waits for the destination even when motion is disabled', async () => {
-  const heading = { textContent: 'Реестр указаний' };
+  const heading = { textContent: 'Контроль реестра' };
   const elements = {
     h1: heading,
     'nav a[href="#/calendar"]': { click() { heading.textContent = 'Календарь и задачи'; } },

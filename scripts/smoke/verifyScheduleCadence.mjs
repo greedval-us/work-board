@@ -11,7 +11,7 @@ export async function verifyScheduleCadence(driver, { renamedSelections }, gener
   const field = start => `document.querySelector(${JSON.stringify(period(start))})`;
   const chooseDate = (start, date) => fill(period(start), { 0: date });
 
-  await navigate('/', 'Реестр указаний');
+  await navigate('/', 'Контроль реестра');
   await js("document.querySelector('.registry-filter-reset')?.click()");
   await click('Добавить указание', '.registry-toolbar button');
   await wait(`document.querySelector('${card} select[name=executor]')?.matches(':enabled')`);

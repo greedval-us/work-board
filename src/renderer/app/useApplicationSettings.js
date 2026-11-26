@@ -10,6 +10,7 @@ export function useApplicationSettings({ database, canWrite, withOperation, touc
   const theme = ref(initial.theme);
   const appearanceStyle = ref(initial.appearanceStyle);
   const typography = shallowRef(DEFAULT_SETTINGS.typography);
+  const planningEnabled = ref(DEFAULT_SETTINGS.planningEnabled);
   const registryOptions = shallowRef(DEFAULT_SETTINGS.registryOptions);
   const executorContacts = shallowRef(DEFAULT_SETTINGS.executorContacts);
   const office = ref(DEFAULT_SETTINGS.office);
@@ -28,6 +29,7 @@ export function useApplicationSettings({ database, canWrite, withOperation, touc
     theme.value = settings.theme;
     appearanceStyle.value = settings.appearanceStyle ?? DEFAULT_SETTINGS.appearanceStyle;
     typography.value = settings.typography ?? DEFAULT_SETTINGS.typography;
+    planningEnabled.value = settings.planningEnabled ?? DEFAULT_SETTINGS.planningEnabled;
     registryOptions.value = settings.registryOptions ?? DEFAULT_SETTINGS.registryOptions;
     executorContacts.value = settings.executorContacts ?? DEFAULT_SETTINGS.executorContacts;
     office.value = settings.office ?? DEFAULT_SETTINGS.office;
@@ -61,6 +63,10 @@ export function useApplicationSettings({ database, canWrite, withOperation, touc
     return saveSettings(generation => settingsService.setTypography(value, generation), typographyError);
   }
 
+  function setPlanningEnabled(value) {
+    return saveSettings(generation => settingsService.setPlanningEnabled(value, generation));
+  }
+
   function setOffice(value) {
     return saveSettings(generation => settingsService.setOffice(value, generation), officeError);
   }
@@ -84,7 +90,9 @@ export function useApplicationSettings({ database, canWrite, withOperation, touc
   }
 
   return {
-    theme, appearanceStyle, typography, registryOptions, executorContacts, office, saving, registryOptionsError, officeError, typographyError,
-    applySettings, setTheme, setAppearanceStyle, setTypography, setOffice, addRegistryOption, updateRegistryOption, removeRegistryOption,
+    theme, appearanceStyle, typography, planningEnabled, registryOptions, executorContacts, office,
+    saving, registryOptionsError, officeError, typographyError,
+    applySettings, setTheme, setAppearanceStyle, setTypography, setPlanningEnabled, setOffice,
+    addRegistryOption, updateRegistryOption, removeRegistryOption,
   };
 }

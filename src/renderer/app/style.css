@@ -103,9 +103,7 @@ svg { flex-shrink: 0; }
   font-weight: 510;
   line-height: 1.25;
   letter-spacing: -.014em;
-  white-space: nowrap;
 }
-.nav-item > .sidebar-label { overflow: hidden; text-overflow: ellipsis; }
 .nav-item-utility-first { margin-top: auto; }
 /* The ornament occupies only spare navigation space. At short heights it shrinks to zero. */
 .sidebar:not(.sidebar-collapsed) .sidebar-nav::after {

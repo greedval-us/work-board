@@ -14,7 +14,7 @@ const currentSchemaVersion = migrations.at(-1).version;
 
 const emptyRegistryOptions = { documentType: [], source: [], executor: [], department: [], executorPhone: [], office: [] };
 const defaultTypography = { fontFamily: 'inter', fontSize: 14 };
-const defaultSettings = { theme: 'light', appearanceStyle: 'standard', typography: defaultTypography, registryOptions: emptyRegistryOptions, executorContacts: [], office: '' };
+const defaultSettings = { theme: 'light', appearanceStyle: 'standard', typography: defaultTypography, planningEnabled: false, registryOptions: emptyRegistryOptions, executorContacts: [], office: '' };
 
 function settingsFor(database) {
   return new SettingsService(new SettingsRepository(database));
@@ -137,6 +137,24 @@ test('unrecognized or damaged typography settings fall back to the default', (t)
     write.run('typography', value);
     assert.deepEqual(settings.get().typography, defaultTypography);
   }
+});
+
+test('planning is disabled by default and both toggle values persist per database', (t) => {
+  const { database, filePath } = fixture(t);
+  database.open();
+  const settings = settingsFor(database);
+  assert.equal(settings.get().planningEnabled, false);
+  assert.equal(settings.setPlanningEnabled(true).planningEnabled, true);
+
+  database.replace({ filePath: path.join(path.dirname(filePath), 'other.sqlite'), create: true });
+  assert.equal(settings.get().planningEnabled, false);
+  database.replace({ filePath });
+  assert.equal(settings.get().planningEnabled, true);
+
+  assert.equal(settings.setPlanningEnabled(false).planningEnabled, false);
+  database.close();
+  database.open();
+  assert.equal(settings.get().planningEnabled, false);
 });
 
 test('the Ф‑21 office is stored per database and preserves executor contacts', (t) => {

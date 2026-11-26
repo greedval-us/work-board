@@ -5,6 +5,7 @@ export const settingsService = createDesktopService({
   setTheme: ['settings', 'setTheme'],
   setAppearanceStyle: ['settings', 'setAppearanceStyle'],
   setTypography: ['settings', 'setTypography'],
+  setPlanningEnabled: ['settings', 'setPlanningEnabled'],
   setOffice: ['settings', 'setOffice'],
   addRegistryOption: ['settings', 'addRegistryOption'],
   updateRegistryOption: ['settings', 'updateRegistryOption'],
