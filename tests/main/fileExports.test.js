@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
+import filesystem, { mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -10,7 +10,7 @@ import { ExcelExportService } from '../../src/main/services/ExcelExportService.j
 import { PLANNING_REPORT, REGISTRY_REPORT } from '../../src/main/exports/excel/workbookConfig.js';
 import { formatDate, localDate } from '../../src/shared/dates.js';
 
-async function fixture(t, openPath = async () => '') {
+async function fixture(t, { openPath = async () => '', assertUnlocked } = {}) {
   const directory = await realpath(await mkdtemp(path.join(tmpdir(), 'work-board-file-export-')));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const database = {
@@ -23,7 +23,7 @@ async function fixture(t, openPath = async () => '') {
   const dialog = { showSaveDialog: async () => ({ filePath: path.join(directory, 'export.xlsx') }) };
   const openedPaths = [];
   const service = new ExcelExportService({
-    database, instructions, dialog, getWindow: () => null,
+    database, instructions, dialog, getWindow: () => null, assertUnlocked,
     openPath: filePath => { openedPaths.push(filePath); return openPath(filePath); },
   });
   return { directory, database, rows, dialog, service, openedPaths };
@@ -73,15 +73,49 @@ test('Excel cancellation leaves the filesystem unchanged', async t => {
   assert.deepEqual(openedPaths, []);
 });
 
+test('locking during the save dialog takes precedence over cancellation', async t => {
+  const lockError = new Error('application locked');
+  let locked = false;
+  const { directory, dialog, service, openedPaths } = await fixture(t, {
+    assertUnlocked() { if (locked) throw lockError; },
+  });
+  dialog.showSaveDialog = async () => {
+    locked = true;
+    return { canceled: true };
+  };
+  await assert.rejects(service.export({ generation: 1 }), error => error === lockError);
+  assert.deepEqual(await readdir(directory), ['board.xlsx']);
+  assert.deepEqual(openedPaths, []);
+});
+
+test('locking while the workbook is written preserves the previous export', async t => {
+  const lockError = new Error('application locked');
+  let locked = false;
+  const { directory, service, openedPaths } = await fixture(t, {
+    assertUnlocked() { if (locked) throw lockError; },
+  });
+  const destination = path.join(directory, 'export.xlsx');
+  await writeFile(destination, 'previous export');
+  t.mock.method(filesystem, 'writeFile', async (...args) => {
+    await writeFile(...args);
+    locked = true;
+  });
+  await assert.rejects(service.export({ generation: 1 }), error => error === lockError);
+  assert.equal(await readFile(destination, 'utf8'), 'previous export');
+  assert.deepEqual((await readdir(directory)).sort(), ['board.xlsx', 'export.xlsx']);
+  assert.deepEqual(openedPaths, []);
+});
+
 test('Excel opens each report type only once its final workbook can be read', async t => {
   const inspected = [];
-  const { directory, dialog, service, openedPaths } = await fixture(t, async filePath => {
+  const openPath = async filePath => {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(filePath);
     const sheet = workbook.getWorksheet('Указания');
     inspected.push([filePath, sheet.columnCount, sheet.getCell('A2').value]);
     return '';
-  });
+  };
+  const { directory, dialog, service, openedPaths } = await fixture(t, { openPath });
   for (const [reportType, columns] of [['full', 13], ['short', 8]]) {
     const selected = path.join(directory, reportType);
     const filePath = `${selected}.xlsx`;
@@ -95,7 +129,7 @@ test('Excel opens each report type only once its final workbook can be read', as
 
 test('Excel keeps the saved workbook when the default app fails to launch', async t => {
   for (const openPath of [async () => 'No associated app', async () => { throw new Error('Launch failed'); }]) {
-    const { directory, service, openedPaths } = await fixture(t, openPath);
+    const { directory, service, openedPaths } = await fixture(t, { openPath });
     const filePath = path.join(directory, 'export.xlsx');
     assert.deepEqual(await service.export({ generation: 1 }), { cancelled: false, filePath, count: 1, opened: false });
     assert.deepEqual(openedPaths, [filePath]);

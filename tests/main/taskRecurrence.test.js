@@ -4,12 +4,41 @@ import { DatabaseSync } from 'node:sqlite';
 import { migrate } from '../../src/main/database/migrations.js';
 import { TaskRepository } from '../../src/main/repositories/TaskRepository.js';
 
-function fixture(t) {
+function openConnection(t) {
   const connection = new DatabaseSync(':memory:');
   t.after(() => connection.close());
   migrate(connection);
+  return connection;
+}
+
+function fixture(t) {
+  const connection = openConnection(t);
   return { connection, tasks: new TaskRepository({ connection }) };
 }
+
+test('recurring task reads and writes follow the active database when task ids overlap', t => {
+  const first = openConnection(t);
+  const database = { connection: first };
+  const tasks = new TaskRepository(database);
+  const date = '2026-11-16';
+  const data = { date, title: 'Проверка', recurrence: { frequency: 'weekly' } };
+  const id = tasks.create(data).id;
+  tasks.moveOccurrence(id, date, '2026-11-17');
+  tasks.updateOccurrence(id, '2026-11-17', true);
+
+  database.connection = openConnection(t);
+  assert.equal(tasks.create(data).id, id);
+  tasks.moveOccurrence(id, date, '2026-11-18');
+  assert.deepEqual(tasks.occurrenceMoves(), [{ taskId: id, originalDate: date, date: '2026-11-18' }]);
+  const [secondDay] = tasks.list({ agendaDate: date });
+  assert.deepEqual([secondDay.date, secondDay.completed], ['2026-11-18', false]);
+  assert.equal(tasks.get(id, '2026-11-17'), null);
+
+  database.connection = first;
+  const [firstDay] = tasks.occurrences({ from: date, to: '2026-11-18' });
+  assert.deepEqual([firstDay.date, firstDay.completed], ['2026-11-17', true]);
+  assert.equal(tasks.get(id, '2026-11-18'), null);
+});
 
 test('weekly tasks project the selected weekday and preserve the series start', (t) => {
   const { tasks } = fixture(t);

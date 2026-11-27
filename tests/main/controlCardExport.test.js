@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
+import filesystem, { mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -97,6 +97,20 @@ test('Ф‑21 cancellation and a database switch during destination selection le
   };
   await assert.rejects(service.export({ id: 3, generation: 2 }), { code: 'DATABASE_CHANGED' });
   assert.deepEqual(await readdir(directory), ['work.docx']);
+  assert.deepEqual(openedPaths, []);
+});
+
+test('Ф‑21 preserves the previous document if the database changes during the write', async t => {
+  const { database, directory, selected, service, openedPaths } = await fixture(t);
+  const filePath = `${selected}.docx`;
+  await writeFile(filePath, 'previous document');
+  t.mock.method(filesystem, 'writeFile', async (...args) => {
+    await writeFile(...args);
+    database.generation += 1;
+  });
+  await assert.rejects(service.export({ id: 3, generation: 1 }), { code: 'DATABASE_CHANGED' });
+  assert.equal(await readFile(filePath, 'utf8'), 'previous document');
+  assert.deepEqual((await readdir(directory)).sort(), ['report.docx', 'work.docx']);
   assert.deepEqual(openedPaths, []);
 });
 

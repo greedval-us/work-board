@@ -2,20 +2,11 @@ import { daysInMonth, validateDate, validateId, validateTask, ValidationError } 
 import { ISO_MONTH_PATTERN } from '../../shared/constants/dates.js';
 import { firstTaskOccurrence } from '../../shared/taskRecurrence.js';
 import { validateDateRange } from '../../shared/validation.js';
-import {
-  listTaskOccurrences, occurrenceCompletion, occurrenceView, originalDateForMove, originalOccurrenceDate, planOccurrenceUpdate, selectSeriesOccurrences,
-  validateOccurrenceCompletion,
-} from '../domain/taskOccurrences.js';
+import { occurrenceCompletion, occurrenceView, originalDateForMove, planOccurrenceUpdate, validateOccurrenceCompletion } from '../domain/taskOccurrences.js';
 import { AppError } from '../errors/AppError.js';
+import { agendaTasks, findTask, listOccurrenceMoves, listStoredTasks, movesAt, movesForTask, occurrencesInRange, overdueTasks } from './tasks/queries.js';
 
-const COLUMNS = 'id, title, date, description, priority, completed, recurrence, created_at AS createdAt, updated_at AS updatedAt';
-const MOVE_COLUMNS = 'task_id AS taskId, original_date AS originalDate, target_date AS date';
-
-function fromRow(row) {
-  if (!row) return null;
-  const { recurrence, ...task } = row;
-  return { ...task, completed: Boolean(task.completed), ...(recurrence ? { recurrence: JSON.parse(recurrence) } : {}) };
-}
+const TASK_NOT_FOUND = 'Задача не найдена.';
 
 function taskValues({ title, date, description, priority, completed, recurrence }) {
   return [title, date, description, priority, Number(!recurrence && completed), recurrence ? JSON.stringify(recurrence) : ''];
@@ -27,88 +18,42 @@ export class TaskRepository {
   list(request = {}) {
     if (!request || typeof request !== 'object' || Array.isArray(request)) throw new ValidationError('Некорректный запрос задач.');
     const { from, to, agendaDate, month } = request;
-    if (agendaDate !== undefined || month !== undefined) {
-      if ((agendaDate !== undefined && month !== undefined) || from !== undefined || to !== undefined) {
-        throw new ValidationError('Выберите один режим просмотра задач.');
-      }
-      if (month !== undefined) {
-        if (typeof month !== 'string' || !ISO_MONTH_PATTERN.test(month)) throw new ValidationError('Выберите корректный месяц.');
-        const [year, number] = month.split('-').map(Number);
-        return this.occurrences({ from: `${month}-01`, to: `${month}-${daysInMonth(year, number)}` });
-      }
-      const day = validateDate(agendaDate, 'Дата списка задач');
-      return this.#withSeriesOccurrences(this.list(), day, { preferUpcoming: true });
+    if (agendaDate === undefined && month === undefined) return listStoredTasks(this.database, { from, to });
+    if ((agendaDate !== undefined && month !== undefined) || from !== undefined || to !== undefined) {
+      throw new ValidationError('Выберите один режим просмотра задач.');
     }
-    const clauses = [];
-    const values = [];
-    if (from !== undefined && from !== '') { clauses.push('date >= ?'); values.push(validateDate(from, 'Дата с')); }
-    if (to !== undefined && to !== '') { clauses.push('date <= ?'); values.push(validateDate(to, 'Дата по')); }
-    validateDateRange(from, to);
-    const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
-    return this.database.connection.prepare(`SELECT ${COLUMNS} FROM calendar_tasks ${where} ORDER BY date ASC, id ASC`)
-      .all(...values).map(fromRow);
+    if (agendaDate !== undefined) return agendaTasks(this.database, validateDate(agendaDate, 'Дата списка задач'));
+    if (typeof month !== 'string' || !ISO_MONTH_PATTERN.test(month)) throw new ValidationError('Выберите корректный месяц.');
+    const [year, number] = month.split('-').map(Number);
+    return this.occurrences({ from: `${month}-01`, to: `${month}-${daysInMonth(year, number)}` });
   }
 
   overdueBefore(day) {
     validateDate(day);
-    // A future series can have an occurrence moved to an earlier day.
-    const tasks = this.database.connection.prepare(`SELECT ${COLUMNS} FROM calendar_tasks
-      WHERE (date < ? AND (recurrence <> '' OR completed = 0))
-        OR id IN (SELECT task_id FROM calendar_task_moves WHERE target_date < ?)`).all(day, day).map(fromRow);
-    return this.#withSeriesOccurrences(tasks, day, { preferUpcoming: false });
-  }
-
-  #withSeriesOccurrences(tasks, day, options) {
-    if (!tasks.some(task => task.recurrence)) return tasks;
-    const occurrences = selectSeriesOccurrences(tasks, this.occurrenceMoves(), day, options);
-    const candidates = occurrences.map(({ task, originalDate }) => [task.id, originalDate]);
-    const completed = this.database.connection.prepare(`SELECT c.task_id AS taskId
-      FROM json_each(?) AS candidate
-      JOIN calendar_task_completions AS c ON c.task_id = json_extract(candidate.value, '$[0]')
-        AND c.date = json_extract(candidate.value, '$[1]')`).all(JSON.stringify(candidates));
-    const completedIds = new Set(completed.map(({ taskId }) => taskId));
-    const records = [
-      ...tasks.filter(task => !task.recurrence),
-      ...occurrences.map(({ task, date, originalDate }) => occurrenceView(task, date, completedIds.has(task.id), originalDate)),
-    ];
-    return options.preferUpcoming ? records.sort((left, right) => left.date.localeCompare(right.date) || left.id - right.id) : records;
+    return overdueTasks(this.database.connection, day);
   }
 
   occurrences({ from, to }) {
     validateDate(from, 'Дата с');
     validateDate(to, 'Дата по');
     validateDateRange(from, to);
-    const connection = this.database.connection;
-    const tasks = connection.prepare(`SELECT ${COLUMNS} FROM calendar_tasks
-      WHERE (date <= ? AND (date >= ? OR recurrence <> ''))
-        OR id IN (SELECT task_id FROM calendar_task_moves WHERE target_date BETWEEN ? AND ?)`)
-      .all(to, from, from, to).map(fromRow);
-    const moves = connection.prepare(`SELECT ${MOVE_COLUMNS} FROM calendar_task_moves
-      WHERE original_date BETWEEN ? AND ? OR target_date BETWEEN ? AND ?`).all(from, to, from, to);
-    const completions = connection.prepare(`SELECT task_id AS taskId, date FROM calendar_task_completions
-      WHERE date BETWEEN ? AND ?
-      UNION ALL
-      SELECT c.task_id AS taskId, c.date FROM calendar_task_moves AS m
-      JOIN calendar_task_completions AS c ON c.task_id = m.task_id AND c.date = m.original_date
-      WHERE m.target_date BETWEEN ? AND ?`).all(from, to, from, to);
-    return listTaskOccurrences(tasks, moves, completions, { from, to });
+    return occurrencesInRange(this.database.connection, { from, to });
   }
 
   get(id, date) {
     validateId(id);
     if (date !== undefined) validateDate(date, 'Дата задачи');
-    const connection = this.database.connection;
-    const task = fromRow(connection.prepare(`SELECT ${COLUMNS} FROM calendar_tasks WHERE id = ?`).get(id));
-    if (!task?.recurrence || date === undefined) return task;
-    const originalDate = originalOccurrenceDate(task, date, this.#movesAt(id, date));
-    if (!originalDate) return null;
-    const completed = connection.prepare('SELECT 1 FROM calendar_task_completions WHERE task_id = ? AND date = ?').get(id, originalDate);
-    return occurrenceView(task, date, Boolean(completed), originalDate);
+    return findTask(this.database.connection, id, date);
   }
 
   occurrenceMoves() {
-    return this.database.connection.prepare(`SELECT ${MOVE_COLUMNS} FROM calendar_task_moves ORDER BY task_id, original_date`)
-      .all().map(row => ({ ...row }));
+    return listOccurrenceMoves(this.database.connection);
+  }
+
+  #requireTask(id) {
+    const task = this.get(id);
+    if (!task) throw new AppError(TASK_NOT_FOUND, 'NOT_FOUND');
+    return task;
   }
 
   create(value) {
@@ -123,12 +68,11 @@ export class TaskRepository {
   }
 
   update(id, changes, occurrence) {
-    const existing = this.get(id);
-    if (!existing) throw new AppError('Задача не найдена.', 'NOT_FOUND');
+    const existing = this.#requireTask(id);
     if (!changes || typeof changes !== 'object' || Array.isArray(changes)) throw new ValidationError('Некорректные изменения задачи.');
     const data = validateTask({ ...existing, ...changes });
     const connection = this.database.connection;
-    const moves = existing.recurrence ? connection.prepare(`SELECT ${MOVE_COLUMNS} FROM calendar_task_moves WHERE task_id = ?`).all(id) : [];
+    const moves = existing.recurrence ? movesForTask(connection, id) : [];
     const { removedMoves, completion } = planOccurrenceUpdate(existing, data, moves, occurrence);
     connection.prepare(`UPDATE calendar_tasks SET title = ?, date = ?, description = ?,
       priority = ?, completed = ?, recurrence = ?, updated_at = ? WHERE id = ?`)
@@ -139,10 +83,9 @@ export class TaskRepository {
   }
 
   updateOccurrence(id, date, completed) {
-    const existing = this.get(id);
-    if (!existing) throw new AppError('Задача не найдена.', 'NOT_FOUND');
+    const existing = this.#requireTask(id);
     const requested = validateOccurrenceCompletion({ date, completed });
-    const completion = occurrenceCompletion(existing, this.#movesAt(id, date), requested);
+    const completion = occurrenceCompletion(existing, movesAt(this.database.connection, id, date), requested);
     this.#writeCompletion(id, completion);
     return occurrenceView(existing, date, completed, completion.date);
   }
@@ -150,9 +93,8 @@ export class TaskRepository {
   moveOccurrence(id, from, to) {
     validateDate(from, 'Текущая дата повторения');
     validateDate(to, 'Новая дата повторения');
-    const task = this.get(id);
-    if (!task) throw new AppError('Задача не найдена.', 'NOT_FOUND');
-    const originalDate = originalDateForMove(task, this.#movesAt(id, from, to), from, to);
+    const task = this.#requireTask(id);
+    const originalDate = originalDateForMove(task, movesAt(this.database.connection, id, from, to), from, to);
     if (from === to) return this.get(id, to);
     if (to === originalDate) {
       this.#removeMove(id, originalDate);
@@ -161,11 +103,6 @@ export class TaskRepository {
         ON CONFLICT (task_id, original_date) DO UPDATE SET target_date = excluded.target_date`).run(id, originalDate, to);
     }
     return this.get(id, to);
-  }
-
-  #movesAt(id, from, to = from) {
-    return this.database.connection.prepare(`SELECT ${MOVE_COLUMNS} FROM calendar_task_moves WHERE task_id = ? AND original_date IN (?, ?)
-      UNION SELECT ${MOVE_COLUMNS} FROM calendar_task_moves WHERE task_id = ? AND target_date IN (?, ?)`).all(id, from, to, id, from, to);
   }
 
   #removeMove(id, originalDate) {
@@ -185,7 +122,7 @@ export class TaskRepository {
   remove(id) {
     validateId(id);
     const result = this.database.connection.prepare('DELETE FROM calendar_tasks WHERE id = ?').run(id);
-    if (!result.changes) throw new AppError('Задача не найдена.', 'NOT_FOUND');
+    if (!result.changes) throw new AppError(TASK_NOT_FOUND, 'NOT_FOUND');
     return { removed: true };
   }
 }
