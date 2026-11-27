@@ -1,11 +1,11 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, shallowRef, useId, useTemplateRef, watch } from 'vue';
-import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-vue-next';
+import { ChevronLeft, ChevronRight, RefreshCw, ToggleLeft, ToggleRight } from 'lucide-vue-next';
 import { DATE_LIMITS } from '../../../../shared/constants/dates.js';
 import { daysInMonth } from '../../../../shared/dates.js';
 import { calendarDate } from '../../../ui/calendarDates.js';
 import { CALENDAR_MONTHS, CALENDAR_WEEKDAYS } from '../../../ui/calendarLabels.js';
-import { yearOverdueCounts } from './yearOverdue.js';
+import { groupYearEvents } from './yearOverdue.js';
 import YearDateTooltip from './YearDateTooltip.vue';
 
 const props = defineProps({
@@ -23,25 +23,16 @@ const tooltipId = useId();
 const headingId = useId();
 const dateLabel = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
 const selected = shallowRef(null);
+const onlyOverdue = shallowRef(false);
 let pinned = false;
 let insideTooltip = false;
 let closeTimer;
 
-const eventsByDate = computed(() => {
-  const groups = new Map();
-  for (const event of props.events) {
-    const group = groups.get(event.date);
-    if (group) group.push(event);
-    else groups.set(event.date, [event]);
-  }
-  return groups;
-});
-
-const overdueCounts = computed(() => yearOverdueCounts(props.events, props.today, props.closed));
+const eventsByDate = computed(() => groupYearEvents(props.events, props.today, props.closed, onlyOverdue.value));
 
 function markedDateLabel(date) {
-  const label = `${dateLabel.format(calendarDate(date))}. Событий: ${eventsByDate.value.get(date).length}`;
-  const overdue = overdueCounts.value.get(date);
+  const { events, overdue } = eventsByDate.value.get(date);
+  const label = `${dateLabel.format(calendarDate(date))}. Событий: ${events.length}`;
   return overdue ? `${label}. Просрочено: ${overdue}` : label;
 }
 
@@ -121,6 +112,7 @@ function hoverTooltip(entered) {
 }
 
 watch(() => [props.year, props.loading, props.error], close);
+watch(() => props.closed, () => { onlyOverdue.value = false; });
 watch(eventsByDate, groups => { if (selected.value && !groups.has(selected.value.date)) close(); });
 onBeforeUnmount(close);
 </script>
@@ -130,9 +122,13 @@ onBeforeUnmount(close);
     <header class="control-year-header">
       <h2 :id="headingId">{{ year }} год</h2>
       <ul class="control-year-legend" aria-label="Обозначения календаря">
-        <li>Сроки и проверки</li>
+        <li v-if="!onlyOverdue">Сроки и проверки</li>
         <li v-if="!closed" class="control-year-legend-overdue">Есть просрочка</li>
       </ul>
+      <button v-if="!closed" type="button" class="registry-button registry-filter-toggle"
+        :class="{ 'registry-filter-toggle-active': onlyOverdue }" :aria-pressed="onlyOverdue" @click="onlyOverdue = !onlyOverdue">
+        <component :is="onlyOverdue ? ToggleRight : ToggleLeft" :size="19" aria-hidden="true" />Только просроченные
+      </button>
       <div class="control-year-navigation" role="group" aria-label="Выбор года">
         <button type="button" class="registry-button" aria-label="Предыдущий год" title="Предыдущий год"
           :disabled="year <= minYear" @click="emit('change-year', year - 1)"><ChevronLeft :size="16" aria-hidden="true" /></button>
@@ -141,6 +137,7 @@ onBeforeUnmount(close);
           :disabled="year >= maxYear" @click="emit('change-year', year + 1)"><ChevronRight :size="16" aria-hidden="true" /></button>
       </div>
     </header>
+    <p v-if="onlyOverdue && !loading && !error && !eventsByDate.size" class="control-year-message" role="status">В выбранном году просроченных контролей нет.</p>
     <p v-if="loading" class="control-year-message" role="status">Загрузка календаря…</p>
     <div v-else-if="error" class="control-year-message control-year-error" role="alert">
       <span>{{ error }}</span><button type="button" class="registry-button" @click="emit('retry')"><RefreshCw :size="14" aria-hidden="true" />Повторить</button>
@@ -156,7 +153,7 @@ onBeforeUnmount(close);
             <td v-for="(day, weekday) in week" :key="weekday">
               <template v-if="day">
                 <button v-if="eventsByDate.has(day.date)" type="button" class="control-year-day control-year-marked"
-                  :class="{ 'control-year-overdue': overdueCounts.has(day.date) }"
+                  :class="{ 'control-year-overdue': eventsByDate.get(day.date).overdue > 0 }"
                   :data-control-date="day.date" :aria-label="markedDateLabel(day.date)"
                   :aria-current="day.date === today ? 'date' : undefined" aria-haspopup="dialog" :aria-expanded="selected?.date === day.date"
                   :aria-controls="selected?.date === day.date ? tooltipId : undefined"
@@ -171,7 +168,7 @@ onBeforeUnmount(close);
       </table>
     </div>
     <YearDateTooltip v-if="selected && monthPanel" :id="tooltipId" ref="tooltip" :date="selected.date"
-      :anchor="selected.anchor" :viewport="monthPanel" :events="eventsByDate.get(selected.date) ?? []" :today="today" :planning="planning" :closed="closed"
+      :anchor="selected.anchor" :viewport="monthPanel" :events="eventsByDate.get(selected.date)?.events ?? []" :today="today" :planning="planning" :closed="closed"
       @close="closePanel" @hover="hoverTooltip" @open-record="openRecord" />
   </section>
 </template>

@@ -27,7 +27,8 @@ async function seedSection(api, section, today, generation, created) {
   ];
   const rows = examples.map((example, i) => ({
     ...example, instructionNumber: `${section.prefix}-${i + 1}`, executor: `Исполнитель ${section.prefix}`,
-    controlDate: day(-450), ...(section.entity === 'plans' ? { planItem: `п. 2.${i + 1}` } : {}),
+    controlDate: day(-450),
+    ...(section.entity === 'plans' ? { planItem: `п. 2.${i + 1}`, activity: `Мероприятие по пункту 2.${i + 1}` } : {}),
   }));
   const remember = row => { created.push({ entity: section.entity, id: row.id }); return row; };
   const saved = [];
@@ -39,7 +40,7 @@ async function seedSection(api, section, today, generation, created) {
   await api(section.entity, 'closeControl', { generation, id: saved.at(-1).id });
   const expected = (index, kind, offset) => {
     const row = rows[index];
-    return [row.instructionNumber, row.title, ...(row.planItem ? [row.planItem] : []), row.executor, kind, formatDate(day(offset))];
+    return [row.instructionNumber, row.title, ...(row.planItem ? [row.planItem, row.activity] : []), row.executor, kind, formatDate(day(offset))];
   };
   return [
     expected(0, 'Итоговый срок', -90),
@@ -72,7 +73,7 @@ async function verifyWorkbook(driver, { today, overdueExportFile, openRequests }
     const sheet = workbook.getWorksheet(section.sheet);
     assert.ok(sheet, section.sheet);
     assert.deepEqual(sheet.getRow(1).values.slice(1), [
-      'Подписной №', 'Название', ...(section.entity === 'plans' ? ['Пункт плана'] : []), 'Исполнитель', 'Вид контроля', 'Срок',
+      'Подписной №', 'Название', ...(section.entity === 'plans' ? ['Пункт плана', 'Мероприятие'] : []), 'Исполнитель', 'Вид контроля', 'Срок',
     ]);
     const actual = sheet.getSheetValues().slice(2).map(values => values.slice(1));
     const byContent = (a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b), 'ru');

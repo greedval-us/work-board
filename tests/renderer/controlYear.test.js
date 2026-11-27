@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { effectScope, reactive, ref } from 'vue';
 import { useControlYear } from '../../src/renderer/features/control/year/useControlYear.js';
-import { isYearEventOverdue, yearOverdueCounts } from '../../src/renderer/features/control/year/yearOverdue.js';
+import { groupYearEvents, isYearEventOverdue } from '../../src/renderer/features/control/year/yearOverdue.js';
 
 test('annual overdue markers count outstanding events and follow local midnight without changing receipts', () => {
   const events = [
@@ -16,9 +16,15 @@ test('annual overdue markers count outstanding events and follow local midnight 
   ];
   const today = '2026-11-23';
   assert.deepEqual(events.map(event => isYearEventOverdue(event, today, false)), [true, true, false, false, false, false, false]);
-  assert.deepEqual([...yearOverdueCounts(events, today, false)], [['2026-11-22', 2]]);
-  assert.deepEqual([...yearOverdueCounts(events, '2026-11-24', false)], [['2026-11-22', 2], ['2026-11-23', 1]]);
-  assert.deepEqual([...yearOverdueCounts(events, today, true)], []);
+  const all = groupYearEvents(events, today, false, false);
+  assert.equal(all.size, 3);
+  assert.deepEqual(all.get('2026-11-22'), { events: events.slice(0, 5), overdue: 2 });
+  assert.equal(all.get('2026-11-23').overdue, 0);
+  assert.equal(groupYearEvents(events, today, true, false).get('2026-11-22').overdue, 0);
+  const filtered = groupYearEvents(events, today, false, true);
+  assert.deepEqual([...filtered], [['2026-11-22', { events: events.slice(0, 2), overdue: 2 }]]);
+  const tomorrow = groupYearEvents(events, '2026-11-24', false, true);
+  assert.deepEqual(tomorrow.get('2026-11-23'), { events: [events[5]], overdue: 1 });
 });
 
 test('year view loads on demand and accepts only the active year, database and scope', async () => {

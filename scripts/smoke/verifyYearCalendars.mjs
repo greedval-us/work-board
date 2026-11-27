@@ -4,6 +4,7 @@ import { addCalendarDays, formatDate } from '../../src/shared/dates.js';
 
 const calendar = '.control-year-calendar';
 const tooltip = '.control-year-tooltip';
+const overdueSwitch = `${calendar} .registry-filter-toggle[aria-pressed]`;
 const dayButton = date => `${calendar} button[data-control-date="${date}"]`;
 const sections = [
   { entity: 'instructions', path: '/', heading: 'Реестр контроля', prefix: 'УК', offset: 0, theme: 'light', closed: 'Закрытый контроль' },
@@ -32,7 +33,7 @@ function fixturesFor(section, today) {
   const rows = records.map((record, index) => ({
     ...record, title: `${record.title} ${section.prefix}`, executor: `${record.executor} — ${section.prefix}`,
     controlDate: day(-30), instructionNumber: `${section.prefix}-${101 + index}`,
-    ...(section.entity === 'plans' ? { planItem: `Пункт ${index + 1}.4` } : {}),
+    ...(section.entity === 'plans' ? { planItem: `Пункт ${index + 1}.4`, activity: index === 2 ? '' : `Рабочая встреча ${index + 1}` } : {}),
   }));
   return { dates, rows };
 }
@@ -117,9 +118,10 @@ async function readDay(driver, section, date, styles) {
         const links = li.querySelectorAll('a.control-year-record-link[href]');
         const link = links[0];
         return { text: li.textContent, title: link?.textContent, href: link?.getAttribute('href'), links: links.length,
+          activity: [...li.querySelectorAll('dt')].find(term => term.textContent === 'Мероприятие')?.nextElementSibling?.textContent ?? null,
           overdue: li.classList.contains('control-year-tip-overdue'), status: li.querySelector('.control-year-tip-overdue-status')?.textContent ?? '' };
       });
-      return { overdue: day.classList.contains('control-year-overdue'), current: day.getAttribute('aria-current'), items, palettes };
+      return { overdue: day.classList.contains('control-year-overdue'), current: day.getAttribute('aria-current'), label: day.getAttribute('aria-label'), items, palettes };
     } finally {
       if (previous === undefined) delete root.dataset.appearanceStyle;
       else root.dataset.appearanceStyle = previous;
@@ -171,10 +173,12 @@ async function checkDay(driver, section, date, expected, { allStyles = false, to
   assert.equal(day.overdue, overdue, `Overdue state for ${section.entity} day ${date}`);
   assert.equal(day.current, today ? 'date' : null);
   assert.equal(day.items.length, expected.length, `Individual events for ${section.entity} day ${date}`);
+  assert.ok(day.label.includes(`Событий: ${expected.length}`));
   for (const { row, checkpoint, overdue: late = false } of expected) {
     const item = day.items.find(item => item.title === row.title);
     assert.ok(item, `Missing event for ${row.title}`);
     assert.equal(item.links, 1);
+    assert.equal(item.activity, row.activity || null);
     const fields = [row.instructionNumber, row.executor, row.planItem, checkpoint ? 'Промежуточная проверка' : 'Срок исполнения'].filter(Boolean);
     assert.ok(fields.every(value => item.text.includes(value)), `Unexpected details for ${row.title}: ${item.text}`);
     assert.equal(item.overdue, late);
@@ -240,9 +244,17 @@ async function checkSection(driver, section, today, fixture) {
       { row: marked, checkpoint: true },
     ];
     await inspectEvents(dates.shared, shared, { allStyles: true });
-    // The same moved checkpoint is reachable again after the card and popup were dismissed.
-    await hoverEventDay(driver, dates.shared);
+    await click('Только просроченные', overdueSwitch);
+    await wait(`document.querySelector('${overdueSwitch}').getAttribute('aria-pressed') === 'true'`);
+    await missingDay(dates.today);
+    await missingDay(dates.completed);
+    await missingDay(dates.completedCheckpoint);
+    await missingDay(dates.next);
+    await wait(`document.querySelector('${calendar} [role=status]')?.textContent.includes('просроченных контролей нет')`);
+    await checkDay(driver, section, dates.shared, shared.filter(event => event.overdue));
     await openEvent(driver, section, shared[1], dates.shared, true);
+    await click('Только просроченные', overdueSwitch);
+    await checkDay(driver, section, dates.shared, shared);
     await hoverEventDay(driver, dates.shared);
     await checkLayout(driver);
     await screenshot(`year-${section.entity}-${section.theme}.png`);
@@ -266,6 +278,7 @@ async function checkSection(driver, section, today, fixture) {
     await wait(`document.querySelector('[aria-label="Состояние контроля"] button[aria-pressed=true]')?.textContent === ${JSON.stringify(section.closed)}`);
     await click('Годовой календарь');
     await wait(`document.querySelectorAll('${calendar} .control-year-month').length === 12`);
+    assert.equal(await js(`Boolean(document.querySelector('${overdueSwitch}'))`), false);
     await missingDay(dates.shared);
     await missingDay(dates.closedUnmarked);
     await inspectEvents(dates.closed, [{ row: archived }], { closed: true });
@@ -286,6 +299,7 @@ export async function verifyYearCalendars(driver, today, generation) {
       const remember = row => { saved.push(row); created.push([section.entity, row.id]); };
       if (section.entity === 'plans') {
         for (const row of await driver.api('plans', 'create', { generation, rows })) remember(row);
+        assert.deepEqual(saved.map(row => row.activity), rows.map(row => row.activity));
       } else {
         for (const data of rows) remember(await driver.api(section.entity, 'create', { generation, data }));
       }

@@ -13,6 +13,7 @@ export const DATABASE_CONFIG = Object.freeze({
   TASK_RECURRENCE_SCHEMA_VERSION: 9,
   TASK_OCCURRENCE_MOVES_SCHEMA_VERSION: 10,
   PLANNING_SCHEMA_VERSION: 11,
+  PLAN_ACTIVITY_SCHEMA_VERSION: 12,
   LOCATION_FILE: 'database-location.json',
   LEGACY_DIRECTORY: 'data',
   LEGACY_FILENAME: 'work-board.sqlite',
@@ -28,6 +29,7 @@ export const REQUIRED_DATABASE_COLUMNS = Object.freeze({
       'instruction_number_search', 'document_type_search', 'executor_search', 'execution_mark_search',
       'created_at', 'updated_at', 'closed_at',
     ]),
+    [DATABASE_CONFIG.PLAN_ACTIVITY_SCHEMA_VERSION]: Object.freeze(['activity']),
   }),
   instructions: Object.freeze({
     [DATABASE_CONFIG.REGISTRY_SCHEMA_VERSION]: Object.freeze([

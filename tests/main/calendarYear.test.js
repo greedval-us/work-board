@@ -25,7 +25,7 @@ function fixture(t) {
 test('annual calendar reads the selected section once, with extensions, moves, marks and inclusive year bounds', t => {
   const { calendar, plans, instructions, create, connection } = fixture(t);
   create(instructions, { title: 'Указание' });
-  const plan = create(plans, { deadline: '2023-12-31', extendedUntil: '2024-01-03', status: 'completed',
+  const plan = create(plans, { activity: 'Сверка', deadline: '2023-12-31', extendedUntil: '2024-01-03', status: 'completed',
     controlSchedule: { frequency: 'custom', customDates: ['2023-12-30', '2024-01-01', '2024-01-03'],
       moves: [{ from: '2023-12-30', to: '2024-01-02' }], marks: [{ date: '2024-01-01', text: 'Готово' }] } });
   const other = create(plans, { deadline: '2024-01-03' });
@@ -41,7 +41,8 @@ test('annual calendar reads the selected section once, with extensions, moves, m
     ['2024-01-03', other.id, 'deadline', false], ['2024-12-31', 3, 'checkpoint', true],
   ]);
   assert.deepEqual(events[0], { id: plan.id, date: '2024-01-01', kind: 'checkpoint', completed: true, recordCompleted: true,
-    title: 'Проверка', instructionNumber: '23/А', executor: 'Отдел', planItem: 'п. 2' });
+    title: 'Проверка', instructionNumber: '23/А', executor: 'Отдел', planItem: 'п. 2', activity: 'Сверка' });
+  assert.ok(events.filter(event => event.id === plan.id).every(event => event.activity === 'Сверка'));
   const moved = events.find(event => event.date === '2024-01-02');
   assert.equal(moved.recordCompleted, true);
   assert.equal(moved.completed, false);

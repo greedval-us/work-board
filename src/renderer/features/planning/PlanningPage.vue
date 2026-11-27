@@ -55,6 +55,7 @@ const labels = {
     </template>
     <template #after-title="{ item }">
       <td data-column="planItem"><span class="registry-cell-summary" :title="item.planItem">{{ item.planItem || '—' }}</span></td>
+      <td data-column="activity"><span class="registry-cell-summary" :title="item.activity">{{ item.activity || '—' }}</span></td>
     </template>
   </ControlWorkspace>
 </template>

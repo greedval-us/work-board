@@ -1,4 +1,5 @@
 .control-grouped-table th[data-column='planItem'] { --registry-column-width: 9%; }
+.control-grouped-table th[data-column='activity'] { --registry-column-width: 15%; }
 .control-grouped-table tbody + tbody tr:first-child > :is(td, th) { border-top: 1px solid var(--border); }
 .control-grouped-table th.control-group-number {
   position: static;
@@ -13,7 +14,10 @@
   overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
 }
+@container (max-width: 1390px) {
+  .registry-table.control-grouped-table:not(.registry-table-wide) th[data-column='title'] { width: 14%; }
+}
 @container (max-width: 720px) {
   .control-grouped-table:not(.registry-table-wide) [data-column='instructionNumber'] { display: table-cell; }
-  .control-grouped-table:not(.registry-table-wide) th[data-column='planItem'] { --registry-column-width: 16%; }
+  .control-grouped-table:not(.registry-table-wide) th[data-column='planItem'] { --registry-column-width: 9%; }
 }

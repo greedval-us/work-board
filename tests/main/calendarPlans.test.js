@@ -22,13 +22,15 @@ test('the calendar keeps plan deadlines and checkpoints distinct and follows the
     controlSchedule: { frequency: 'custom', customDates: [date] },
   };
   const instruction = instructions.create(data);
-  const plan = plans.create({ ...data, planItem: 'Пункт А' });
+  const plan = plans.create({ ...data, planItem: 'Пункт А', activity: 'Подготовить доклад' });
   assert.equal(instruction.id, plan.id);
   const second = plans.create({ ...data, planItem: 'Пункт Б', extendedUntil: '2026-12-01', status: 'completed',
     controlSchedule: { ...data.controlSchedule, marks: [{ date, text: 'Доклад получен' }] } });
   const day = () => calendar.day({ date });
   const lastDay = () => calendar.month({ month: '2026-11' }).days.at(-1);
   assert.deepEqual(day().plans.map(({ id }) => id), [plan.id]);
+  assert.equal(day().plans[0].activity, 'Подготовить доклад');
+  assert.equal(day().planCheckpoints[0].activity, 'Подготовить доклад');
   assert.deepEqual(day().planCheckpoints.map(item => [item.planId, item.planItem, item.mark]), [
     [plan.id, 'Пункт А', ''], [second.id, 'Пункт Б', 'Доклад получен'],
   ]);

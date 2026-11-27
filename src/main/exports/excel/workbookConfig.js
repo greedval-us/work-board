@@ -1,6 +1,6 @@
 import { INSTRUCTION_COLUMNS } from '../../../shared/constants/registry.js';
 import { normalizeExportRequest } from '../../../shared/registryRequests.js';
-import { PLAN_COLUMNS, PLAN_ITEM_COLUMN, normalizePlanExportRequest } from '../../../shared/planning.js';
+import { PLAN_COLUMNS, PLAN_ITEM_COLUMN, PLAN_ACTIVITY_COLUMN, normalizePlanExportRequest } from '../../../shared/planning.js';
 
 export const WORKBOOK_CONFIG = Object.freeze({
   CREATOR: 'Work Board', INSTRUCTIONS_SHEET: 'Указания', PARAMETERS_SHEET: 'Параметры',
@@ -27,11 +27,11 @@ export const SHORT_INSTRUCTION_COLUMNS = Object.freeze([
 ].map(Object.freeze));
 
 const shortPlanColumns = Object.freeze(SHORT_INSTRUCTION_COLUMNS.flatMap(column =>
-  column.key === 'title' ? [column, PLAN_ITEM_COLUMN] : [column]));
+  column.key === 'title' ? [column, PLAN_ITEM_COLUMN, PLAN_ACTIVITY_COLUMN] : [column]));
 
 function overdueColumns(shortColumns) {
   return Object.freeze([
-    ...shortColumns.filter(column => ['instructionNumber', 'title', 'planItem', 'executor'].includes(column.key)),
+    ...shortColumns.filter(column => ['instructionNumber', 'title', 'planItem', 'activity', 'executor'].includes(column.key)),
     { key: 'controlKind', label: 'Вид контроля' }, { key: 'dueDate', label: 'Срок' },
   ]);
 }

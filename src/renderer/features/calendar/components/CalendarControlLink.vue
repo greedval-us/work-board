@@ -14,6 +14,7 @@ defineProps({
     <span class="calendar-record-number" :title="`Подписной номер ${item.instructionNumber}`">№ {{ item.instructionNumber }} <ArrowUpRight :size="15" aria-hidden="true" /></span>
     <span v-if="planLabel" class="calendar-plan-label">{{ planLabel }}<template v-if="item.planItem"> · {{ item.planItem }}</template></span>
     <strong :title="item.title">{{ item.title }}</strong>
+    <span v-if="planLabel && item.activity" class="calendar-record-secondary calendar-plan-activity" :title="item.activity">Мероприятие: {{ item.activity }}</span>
     <span class="calendar-record-secondary" :title="item.executor">{{ item.executor }}</span>
     <span class="calendar-record-meta">
       <span class="calendar-badge" :class="`calendar-tone-${item.urgency.tone}`">{{ item.urgency.label }}</span>

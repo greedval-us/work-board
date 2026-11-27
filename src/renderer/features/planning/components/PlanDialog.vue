@@ -1,10 +1,11 @@
 <script setup>
 import { computed, nextTick, ref, useTemplateRef } from 'vue';
 import { Plus, X } from 'lucide-vue-next';
+import { PLAN_ACTIVITY_LIMIT } from '../../../../shared/planning.js';
 import ControlRecordDialog from '../../control/ControlRecordDialog.vue';
 import ControlRecordFields from '../../control/ControlRecordFields.vue';
 import { recordDialogProps } from '../../control/recordDialogProps.js';
-import { copyPlanDocument, createPlanDraft, snapshotPlan } from '../planDraft.js';
+import { createPlanDraft, snapshotPlan } from '../planDraft.js';
 
 const props = defineProps(recordDialogProps);
 const emit = defineEmits(['close']);
@@ -22,20 +23,20 @@ function focusItem(index) {
 }
 
 async function appendRow() {
-  const draft = copyPlanDocument(rows.value[rows.value.length - 1].draft);
-  rows.value.push({ key: nextKey++, draft });
+  rows.value.push({ key: nextKey++, draft: createPlanDraft() });
   await nextTick();
   focusItem(rows.value.length - 1);
 }
 
 async function removeRow(index) {
+  if (index === 0) rows.value[1].draft = snapshotPlan(rows.value[1].draft, rows.value[0].draft);
   rows.value.splice(index, 1);
   await nextTick();
   focusItem(Math.min(index, rows.value.length - 1));
 }
 
 function save() {
-  const data = rows.value.map(row => snapshotPlan(row.draft));
+  const data = rows.value.map(row => snapshotPlan(row.draft, rows.value[0].draft));
   if (props.record.id && JSON.stringify(data[0].controlSchedule) === initialSchedule) delete data[0].controlSchedule;
   return props.saveRecord(data);
 }
@@ -67,7 +68,12 @@ defineExpose({
               title="Убрать строку" :disabled="disabled" @click="removeRow(index)"><X :size="15" aria-hidden="true" /></button>
           </div>
           <ControlRecordFields ref="fields" v-model="row.draft" :record="record" title-label="Название плана"
-            :error-id="errorId" :disabled="disabled" :closed="Boolean(record.closedAt)" :selected-checkpoint="selectedCheckpoint">
+            :show-document-details="index === 0" :error-id="errorId" :disabled="disabled" :closed="Boolean(record.closedAt)" :selected-checkpoint="selectedCheckpoint">
+            <template #before-execution-mark>
+              <label class="registry-field registry-field-wide">
+                <span>Мероприятие</span><textarea v-model="row.draft.activity" name="activity" rows="2" :maxlength="PLAN_ACTIVITY_LIMIT" />
+              </label>
+            </template>
             <template #execution-start>
               <label class="registry-field registry-field-wide">
                 <span>Пункт плана</span><input v-model="row.draft.planItem" name="planItem" type="text" maxlength="500" />

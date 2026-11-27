@@ -7,10 +7,10 @@ export class PlanRepository extends ControlRecordRepository {
     super(database, {
       table: 'plans', validate: validatePlan, normalizeList: normalizePlanListRequest,
       notFound: 'План не найден.',
-      extraColumns: 'plan_item AS planItem',
-      toRecord: data => ({ ...controlRecord(data), plan_item: data.planItem }),
+      extraColumns: 'plan_item AS planItem, activity',
+      toRecord: data => ({ ...controlRecord(data), plan_item: data.planItem, activity: data.activity }),
       groupColumn: 'instruction_number_search',
-      extraSortColumns: { planItem: 'plan_item' },
+      extraSortColumns: { planItem: 'plan_item', activity: 'activity' },
     });
   }
 }

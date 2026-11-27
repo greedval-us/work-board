@@ -137,6 +137,10 @@ export const migrations = [
     CREATE INDEX plans_effective_deadline_idx ON plans (${EFFECTIVE_INSTRUCTION_DEADLINE_SQL}, status);
     CREATE INDEX plans_document_type_idx ON plans (document_type_search);`,
   },
+  {
+    version: 12,
+    sql: "ALTER TABLE plans ADD COLUMN activity TEXT NOT NULL DEFAULT '';",
+  },
 ];
 
 // The caller holds a transaction across inspection, schema updates and identity repair.

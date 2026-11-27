@@ -15,7 +15,9 @@ function deadlines(repository, from, to) {
 function* checkpoints(repository, from, to) {
   for (const record of repository.scheduledForCalendar()) {
     const { id, title, instructionNumber, executor, controlSchedule } = record;
-    const identity = Object.hasOwn(record, 'planItem') ? { planId: id, planItem: record.planItem } : { instructionId: id };
+    const identity = Object.hasOwn(record, 'planItem')
+      ? { planId: id, planItem: record.planItem, activity: record.activity }
+      : { instructionId: id };
     for (const checkpoint of listControlCheckpoints(controlSchedule, { from, to, deadline: instructionDeadline(record) })) {
       yield { ...checkpoint, ...identity, title, instructionNumber, executor,
         ...(record.status === INSTRUCTION_STATUS.COMPLETED && { recordCompleted: true }) };

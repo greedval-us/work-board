@@ -151,6 +151,7 @@ defineExpose({ scrollByKey, focusFirst, contains: node => Boolean(node && panel.
           </strong>
           <dl>
             <template v-if="planning && event.planItem"><dt>Пункт плана</dt><dd>{{ event.planItem }}</dd></template>
+            <template v-if="planning && event.activity"><dt>Мероприятие</dt><dd class="control-year-activity">{{ event.activity }}</dd></template>
             <dt>Подписной номер</dt><dd>{{ event.instructionNumber }}</dd>
             <dt>Исполнитель</dt><dd>{{ event.executor }}</dd>
           </dl>
@@ -176,4 +177,5 @@ defineExpose({ scrollByKey, focusFirst, contains: node => Boolean(node && panel.
 .control-year-tooltip dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 8px; margin: 0; font-size: calc(11px + var(--app-font-offset)); }
 .control-year-tooltip dt { color: var(--muted); }
 .control-year-tooltip dd { margin: 0; }
+.control-year-activity { white-space: pre-line; }
 </style>

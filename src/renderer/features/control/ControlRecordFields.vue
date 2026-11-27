@@ -9,6 +9,7 @@ const form = defineModel({ type: Object, required: true });
 const props = defineProps({
   titleLabel: { type: String, required: true },
   record: { type: Object, required: true },
+  showDocumentDetails: { type: Boolean, default: true },
   selectedCheckpoint: { type: String, default: '' },
   errorId: { type: String, default: undefined },
   disabled: Boolean,
@@ -32,24 +33,27 @@ defineExpose({ focusSelectedDate: () => scheduleEditor.value?.focusSelectedDate(
     <div class="registry-instruction-document">
       <fieldset class="registry-form-grid" :disabled="props.disabled" :aria-describedby="props.errorId">
         <legend>Документ</legend>
-        <label class="registry-field registry-field-wide"><span>{{ props.titleLabel }} *</span><input v-model="form.title" name="title" type="text" required :maxlength="limits.title" /></label>
-        <label class="registry-field"><span>Входящий номер</span><input v-model="form.incomingNumber" name="incomingNumber" type="text" :maxlength="limits.incomingNumber" placeholder="Например, 001/в" /></label>
-        <label class="registry-field"><span>Подписной номер *</span><input v-model="form.instructionNumber" name="instructionNumber" type="text" required :maxlength="limits.instructionNumber" /></label>
-        <label class="registry-field">
-          <span>{{ INSTRUCTION_OPTION_LABELS.documentType }}</span>
-          <select v-model="form.documentType" name="documentType">
-            <option value="">Не указано</option>
-            <option v-for="value in optionsFor('documentType')" :key="value" :value="value">{{ value }}</option>
-          </select>
-        </label>
-        <label class="registry-field">
-          <span>{{ INSTRUCTION_OPTION_LABELS.source }}</span>
-          <select v-model="form.source" name="source">
-            <option value="">Не указано</option>
-            <option v-for="value in optionsFor('source')" :key="value" :value="value">{{ value }}</option>
-          </select>
-        </label>
-        <label class="registry-field registry-field-wide"><span>Резолюция</span><textarea v-model="form.summary" name="summary" rows="2" :maxlength="limits.summary" /></label>
+        <template v-if="props.showDocumentDetails">
+          <label class="registry-field registry-field-wide"><span>{{ props.titleLabel }} *</span><input v-model="form.title" name="title" type="text" required :maxlength="limits.title" /></label>
+          <label class="registry-field"><span>Входящий номер</span><input v-model="form.incomingNumber" name="incomingNumber" type="text" :maxlength="limits.incomingNumber" placeholder="Например, 001/в" /></label>
+          <label class="registry-field"><span>Подписной номер *</span><input v-model="form.instructionNumber" name="instructionNumber" type="text" required :maxlength="limits.instructionNumber" /></label>
+          <label class="registry-field">
+            <span>{{ INSTRUCTION_OPTION_LABELS.documentType }}</span>
+            <select v-model="form.documentType" name="documentType">
+              <option value="">Не указано</option>
+              <option v-for="value in optionsFor('documentType')" :key="value" :value="value">{{ value }}</option>
+            </select>
+          </label>
+          <label class="registry-field">
+            <span>{{ INSTRUCTION_OPTION_LABELS.source }}</span>
+            <select v-model="form.source" name="source">
+              <option value="">Не указано</option>
+              <option v-for="value in optionsFor('source')" :key="value" :value="value">{{ value }}</option>
+            </select>
+          </label>
+          <label class="registry-field registry-field-wide"><span>Резолюция</span><textarea v-model="form.summary" name="summary" rows="2" :maxlength="limits.summary" /></label>
+        </template>
+        <slot name="before-execution-mark" />
         <label class="registry-field registry-field-wide"><span>Отметка об исполнении</span><textarea v-model="form.executionMark" name="executionMark" rows="2" :maxlength="limits.executionMark" placeholder="Комментарий к исполнению" /></label>
       </fieldset>
     </div>

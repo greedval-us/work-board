@@ -125,7 +125,8 @@ test('overdue workbooks use the local export date and keep only compact control 
   const { directory, database } = await fixture(t);
   for (const report of [REGISTRY_REPORT, PLANNING_REPORT]) {
     const planning = report === PLANNING_REPORT;
-    const entry = { instructionNumber: '0007', title: '=1+1', executor: 'Петров', ...(planning && { planItem: '01.2' }) };
+    const entry = { instructionNumber: '0007', title: '=1+1', executor: 'Петров',
+      ...(planning && { planItem: '01.2', activity: 'Проверить документы' }) };
     const controls = [{ ...entry, dueDate: '2020-10-01', controlKind: 'checkpoint' },
       { ...entry, dueDate: '2020-10-03', controlKind: 'deadline' }];
     let cutOff;
@@ -144,9 +145,9 @@ test('overdue workbooks use the local export date and keep only compact control 
     await workbook.xlsx.readFile(filePath);
     assert.equal(cutOff, localDate(workbook.created));
     const sheet = workbook.getWorksheet(report.sheet);
-    const headings = ['Подписной №', 'Название', ...(planning ? ['Пункт плана'] : []), 'Исполнитель', 'Вид контроля', 'Срок'];
+    const headings = ['Подписной №', 'Название', ...(planning ? ['Пункт плана', 'Мероприятие'] : []), 'Исполнитель', 'Вид контроля', 'Срок'];
     assert.deepEqual(sheet.getRow(1).values.slice(1), headings);
-    const fields = ['0007', '=1+1', ...(planning ? ['01.2'] : []), 'Петров'];
+    const fields = ['0007', '=1+1', ...(planning ? ['01.2', entry.activity] : []), 'Петров'];
     assert.deepEqual(sheet.getRow(2).values.slice(1), [...fields, 'Промежуточная проверка', '01.10.2020']);
     assert.deepEqual(sheet.getRow(3).values.slice(1), [...fields, 'Итоговый срок', '03.10.2020']);
     assert.equal(sheet.getCell('B2').type, ExcelJS.ValueType.String);
@@ -160,10 +161,11 @@ test('overdue workbooks use the local export date and keep only compact control 
   }
 });
 
-test('plan spreadsheets preserve the point and identify the planning section in both formats', async t => {
+test('short and full plan spreadsheets place each activity immediately after its plan item', async t => {
   const { directory, database } = await fixture(t);
-  const row = { id: 1, title: 'Проверка', instructionNumber: '004', planItem: '02.1' };
-  const repository = { all(request) { assert.equal(request.sort.field, 'planItem'); return [row]; } };
+  const row = { id: 1, title: 'Проверка', instructionNumber: '004', planItem: '02.1', activity: 'Сверка сметы' };
+  const rows = [row, { ...row, id: 2, planItem: '02.2', activity: '' }];
+  const repository = { all(request) { assert.equal(request.sort.field, 'planItem'); return rows; } };
   for (const reportType of ['short', 'full']) {
     const filePath = path.join(directory, reportType + '.xlsx');
     const dialog = { async showSaveDialog(_window, options) {
@@ -172,12 +174,18 @@ test('plan spreadsheets preserve the point and identify the planning section in 
     } };
     const service = new ExcelExportService({ database, repository, report: PLANNING_REPORT, dialog, getWindow: () => null });
     const result = await service.export({ generation: 1, reportType, sort: { field: 'planItem', direction: 'asc' } });
-    assert.equal(result.count, 1);
+    assert.equal(result.count, rows.length);
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(filePath);
     const sheet = workbook.getWorksheet('Планы');
     const point = sheet.getRow(1).values.indexOf('Пункт плана');
-    assert.equal(sheet.getRow(2).getCell(point).value, row.planItem);
+    assert.ok(point > 0);
+    assert.equal(sheet.getRow(1).getCell(point + 1).value, 'Мероприятие');
+    for (const [index, item] of rows.entries()) {
+      const data = sheet.getRow(index + 2);
+      assert.equal(data.getCell(point).value, item.planItem);
+      assert.equal(data.getCell(point + 1).value ?? '', item.activity);
+    }
     assert.match(JSON.stringify(workbook.getWorksheet('Параметры').getSheetValues()), /Контроль планирования/);
   }
 });

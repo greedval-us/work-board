@@ -35,6 +35,10 @@ export async function verifyCalendarPlans(driver, today, generation, id) {
     }
     const deadlineLink = `${deadline}[href*="plan=${id}"]`;
     assert.ok((await js(`document.querySelector('${deadlineLink} .calendar-plan-label').textContent`)).includes(record.planItem));
+    assert.ok(record.activity);
+    for (const link of [deadlineLink, checkpoint]) {
+      assert.equal(await js(`document.querySelector('${link} .calendar-plan-activity')?.title`), record.activity);
+    }
     await js(`document.querySelector('${deadlineLink}').click()`);
     await wait(`document.querySelector('${card} [name=planItem]')?.value === ${JSON.stringify(record.planItem)}`);
     await closeCard();
