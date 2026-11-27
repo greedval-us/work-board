@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { addCalendarDays } from '../../src/shared/dates.js';
+import { addCalendarDays, formatDate } from '../../src/shared/dates.js';
 import { getControlWeekday } from '../../src/shared/controlSchedule.js';
 
 export async function verifyTaskRecurrence(driver, { today }, generation) {
@@ -88,6 +88,12 @@ export async function verifyTaskRecurrence(driver, { today }, generation) {
       'a five-digit year cannot be appended to the schedule');
     await fill('[name=task-custom-date]', { 0: extra });
     await click('Добавить дату', `${card} button`);
+    const firstWeekly = addCalendarDays(today, 5);
+    await fill(recurrence, { 0: 'weekly' });
+    await fill('[name=task-day-of-week]', { 0: String(getControlWeekday(firstWeekly)) });
+    assert.equal(await js(`document.querySelector('${card} .calendar-recurrence-help')?.textContent.trim()`),
+      `Первая задача по графику — ${formatDate(firstWeekly)}.`);
+    await fill(recurrence, { 0: 'custom' });
     await submit();
     assert.equal((await occurrence(id, extra)).completed, false);
     assert.equal(await occurrence(id, future), undefined);

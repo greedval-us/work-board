@@ -1,20 +1,24 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { createPinia, disposePinia, setActivePinia } from 'pinia';
 import { effectScope, reactive, shallowRef } from 'vue';
+import { useAppStore } from '../../src/renderer/app/appStore.js';
+import { useCalendar } from '../../src/renderer/features/calendar/useCalendar.js';
 import { useTaskWorkspace } from '../../src/renderer/features/tasks/useTaskWorkspace.js';
+import { transportFixture } from '../helpers/desktopTransport.js';
 
 function fixture(t, listTasks) {
   const scope = effectScope();
   t.after(() => scope.stop());
   let appGuard;
   let routeGuard;
-  const calendar = reactive({ taskError: shallowRef(''), busyTaskId: shallowRef(null) });
+  const taskStore = reactive({ taskError: shallowRef(''), busyTaskId: shallowRef(null) });
   const app = reactive({
     database: { ready: true, generation: 1 }, revision: 0, databaseSwitching: false,
     registerUnsavedGuard(guard) { appGuard = guard; return () => { appGuard = undefined; }; },
   });
   const workspace = scope.run(() => useTaskWorkspace({
-    app, calendar, service: { listTasks }, now: () => new Date(2026, 10, 20, 12), trackDate: false,
+    app, taskStore, service: { listTasks }, now: () => new Date(2026, 10, 20, 12), trackDate: false,
     registerRouteLeave(guard) { routeGuard = guard; },
   }));
   return { app, workspace, scope, appGuard: () => appGuard, routeGuard: () => routeGuard };
@@ -81,4 +85,45 @@ test('the tasks editor uses the selected date and guards both navigation and dat
 
   scope.stop();
   assert.equal(appGuard(), undefined);
+});
+
+test('the task list opens independently and shares pending writes with the calendar', async t => {
+  const pinia = createPinia();
+  setActivePinia(pinia);
+  const scope = effectScope();
+  const previousWindow = globalThis.window;
+  t.after(() => { scope.stop(); disposePinia(pinia); globalThis.window = previousWindow; });
+  const task = { id: 7, date: '2026-11-20', completed: false };
+  const updated = Promise.withResolvers();
+  const writes = [];
+  globalThis.window = { desktopAPI: transportFixture({
+    tasks: {
+      list: () => [task],
+      update: request => { writes.push(request); return updated.promise; },
+    },
+    calendar: { month: () => ({ days: [] }), day: () => ({ tasks: [task] }) },
+  }) };
+  const app = useAppStore();
+  app.database = { ready: true, generation: 2 };
+  const workspace = scope.run(() => useTaskWorkspace({ trackDate: false, registerRouteLeave() {} }));
+  await workspace.refresh();
+  assert.deepEqual(workspace.tasks.value, [task]);
+  assert.equal(Object.hasOwn(pinia.state.value, 'calendar'), false);
+
+  const pending = workspace.toggleTask(task);
+  const calendar = scope.run(() => useCalendar({ trackDate: false }));
+  assert.equal(calendar.busyTaskId.value, 7);
+  await calendar.toggleTask(task);
+  assert.deepEqual(writes, [{ id: 7, data: { completed: true }, generation: 2 }]);
+  updated.resolve({ ...task, completed: true });
+  await pending;
+  assert.equal(calendar.busyTaskId.value, null);
+  assert.equal(app.revision, 1);
+
+  const message = 'Файл базы занят.';
+  globalThis.window.desktopAPI.tasks.update = async () => ({ ok: false, error: { code: 'DATABASE_LOCKED', message } });
+  await calendar.toggleTask(task);
+  assert.equal(workspace.taskError.value, message);
+  assert.equal(calendar.taskError.value, message);
+  assert.equal(app.revision, 1);
 });

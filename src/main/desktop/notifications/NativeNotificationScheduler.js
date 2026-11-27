@@ -116,10 +116,14 @@ export class NativeNotificationScheduler {
     });
   }
 
-  #currentItems(delivery) {
-    if (!this.#running || !this.#deliveries.has(delivery)) return [];
+  #isCurrentDelivery(delivery) {
+    if (!this.#running || !this.#deliveries.has(delivery)) return false;
     const status = this.database.connectionState;
-    if (!status.ready || status.generation !== delivery.generation) return [];
+    return status.ready && status.generation === delivery.generation;
+  }
+
+  #currentItems(delivery) {
+    if (!this.#isCurrentDelivery(delivery)) return [];
     const snapshot = this.notifications.list();
     this.database.assertGeneration(delivery.generation);
     if (snapshot.today !== delivery.today) return [];
@@ -130,10 +134,11 @@ export class NativeNotificationScheduler {
   #onShow(delivery) {
     this.#attempts.shown(delivery.items);
     try {
-      const current = this.#currentItems(delivery);
-      if (!current.length) { this.#dispose(delivery); return; }
+      if (!this.#isCurrentDelivery(delivery) || !this.notifications.recordShown(delivery.items)) {
+        this.#dispose(delivery);
+        return;
+      }
       this.#errorKind = null;
-      this.#saveShownReceipts(current, delivery.generation);
     } catch (error) {
       this.#report('Cannot save native notification delivery.', error, 'receipt');
     }
@@ -144,7 +149,7 @@ export class NativeNotificationScheduler {
     if (!pending.length) return;
     try {
       this.database.assertGeneration(generation);
-      this.notifications.acknowledge({ items: pending, popup: true });
+      this.notifications.recordShown(pending);
       if (this.#errorKind === 'receipt') this.#errorKind = null;
     } catch (error) { this.#report('Cannot save native notification delivery.', error, 'receipt'); }
   }

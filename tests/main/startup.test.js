@@ -9,6 +9,7 @@ import { createApplicationServices } from '../../src/main/createApplicationServi
 import { startDesktopApplication } from '../../src/main/desktop/startDesktopApplication.js';
 import { DatabaseLocation } from '../../src/main/database/DatabaseLocation.js';
 import { DatabaseService } from '../../src/main/database/DatabaseService.js';
+import { CleanupError } from '../../src/main/errors/cleanup.js';
 import { TaskRepository } from '../../src/main/repositories/TaskRepository.js';
 import { localDate } from '../../src/shared/dates.js';
 
@@ -23,6 +24,46 @@ test('starting application services leaves report libraries unloaded', t => {
   const require = createRequire(import.meta.url);
   const loaded = ['exceljs', 'jszip'].filter(name => require.cache[require.resolve(name)]);
   assert.deepEqual(loaded, []);
+});
+
+function cleanupFixture(t) {
+  const directory = mkdtempSync(path.join(tmpdir(), 'work-board-shutdown-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const handlers = new Map();
+  const ipcMain = Object.assign(new EventEmitter(), {
+    handle: (channel, handler) => handlers.set(channel, handler),
+    removeHandler: channel => handlers.delete(channel),
+  });
+  const stopError = new Error('Cannot detach power monitor');
+  const databaseClose = t.mock.method(DatabaseService.prototype, 'close');
+  const options = {
+    app: { getPath: () => directory }, ipcMain,
+    nativeNotifications: { powerMonitor: { removeListener() { throw stopError; } } },
+  };
+  return { options, handlers, stopError, databaseClose };
+}
+
+test('startup keeps the primary error and still closes the database if stopping reminders fails', t => {
+  const { options, stopError, databaseClose } = cleanupFixture(t);
+  const startupError = new Error('Cannot register IPC');
+  options.ipcMain.handle = () => { throw startupError; };
+  assert.throws(() => createApplicationServices(options), error => {
+    assert.ok(error instanceof CleanupError);
+    assert.equal(error.cause, startupError);
+    assert.deepEqual(error.errors, [startupError, stopError]);
+    return true;
+  });
+  assert.equal(databaseClose.mock.callCount(), 1);
+});
+
+test('shutdown detaches IPC and closes the database even if stopping reminders fails', t => {
+  const { options, handlers, stopError, databaseClose } = cleanupFixture(t);
+  const services = createApplicationServices(options);
+  assert.ok(handlers.size > 0);
+  assert.throws(() => services.shutdown(), error => error === stopError);
+  assert.equal(handlers.size, 0);
+  assert.equal(options.ipcMain.listenerCount('app-lock:activity'), 0);
+  assert.equal(databaseClose.mock.callCount(), 1);
 });
 
 test('application lock allows only safe requests and ignores activity from child frames', async t => {

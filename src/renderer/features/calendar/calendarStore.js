@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia';
 import { computed, onScopeDispose, shallowRef, watch } from 'vue';
-import { DesktopError } from '../../../shared/errors.js';
 import { localDate } from '../../../shared/registry.js';
 import { moveMonth } from '../../ui/calendarDates.js';
 import { errorMessage } from '../../infrastructure/errorMessage.js';
@@ -20,8 +19,6 @@ export function createCalendarStore({ id = 'calendar', getApp = useAppStore, ser
     const planCheckpoints = shallowRef([]);
     const tasks = shallowRef([]);
     const checkpoints = shallowRef([]);
-    const taskError = shallowRef('');
-    const busyTaskId = shallowRef(null);
     const ready = computed(() => Boolean(app.database?.ready));
     const generation = computed(() => app.database?.generation);
     let consumers = 0;
@@ -103,74 +100,23 @@ export function createCalendarStore({ id = 'calendar', getApp = useAppStore, ser
       return () => { if (!released) { consumers -= 1; released = true; } };
     }
 
-    function invalidate(databaseChanged) {
+    function invalidate() {
       monthRead.invalidate();
       dayRead.invalidate();
-      if (databaseChanged) { taskError.value = ''; busyTaskId.value = null; }
       if (consumers > 0) void refresh();
-    }
-
-    function assertGeneration(source) {
-      if (!ready.value || source !== generation.value) {
-        throw new DesktopError('DATABASE_CHANGED', 'База данных изменилась. Откройте задачу заново.');
-      }
-    }
-
-    async function mutate(source, operation) {
-      assertGeneration(source);
-      return app.withOperation(async () => {
-        assertGeneration(source);
-        const result = await operation();
-        assertGeneration(source);
-        app.touchData();
-        return result;
-      });
-    }
-
-    function saveTask(id, data, source = generation.value, occurrence) {
-      return mutate(source, () => id == null
-        ? service.createTask({ data, generation: source })
-        : service.updateTask({ id, data, generation: source, ...(occurrence ? { occurrence } : {}) }));
-    }
-
-    function removeTask(id, source = generation.value) {
-      return mutate(source, () => service.removeTask({ id, generation: source }));
-    }
-
-    function moveTaskOccurrence(id, from, to, source = generation.value) {
-      return mutate(source, () => service.moveOccurrence({ id, from, to, generation: source }));
-    }
-
-    async function toggleTask(task) {
-      if (busyTaskId.value !== null) return;
-      const source = generation.value;
-      busyTaskId.value = task.id;
-      taskError.value = '';
-      try {
-        const completed = !task.completed;
-        if (task.recurrence?.frequency) {
-          await mutate(source, () => service.setOccurrenceCompleted({ id: task.id, date: task.date, completed, generation: source }));
-        } else {
-          await saveTask(task.id, { completed }, source);
-        }
-      } catch (cause) {
-        if (source === generation.value) taskError.value = errorMessage(cause, 'Не удалось изменить задачу.');
-      } finally { if (source === generation.value) busyTaskId.value = null; }
     }
 
     function selectDate(value) { selectedDate.value = value; month.value = value.slice(0, 7); }
     function changeMonth(delta) { month.value = moveMonth(month.value, delta); selectedDate.value = `${month.value}-01`; }
 
-    watch([() => app.database?.ready, () => app.database?.generation, () => app.revision, () => app.planningEnabled], (value, previous) => {
-      invalidate(value[0] !== previous[0] || value[1] !== previous[1]);
-    }, { flush: 'sync' });
+    watch([ready, generation, () => app.revision, () => app.planningEnabled], invalidate, { flush: 'sync' });
     watch(month, () => { if (consumers > 0) void fetchMonth(); });
     watch(selectedDate, () => { if (consumers > 0) void fetchDay(); });
 
     return {
       month, selectedDate, monthDays, instructions, tasks, checkpoints, plans, planCheckpoints, ready, generation,
-      monthLoading, dayLoading, monthError, dayError, taskError, busyTaskId,
-      acquire, fetchMonth, fetchDay, refresh, selectDate, changeMonth, saveTask, removeTask, moveTaskOccurrence, toggleTask,
+      monthLoading, dayLoading, monthError, dayError,
+      acquire, fetchMonth, fetchDay, refresh, selectDate, changeMonth,
     };
   });
 }

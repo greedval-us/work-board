@@ -1,7 +1,7 @@
 import { addCalendarDays, validateDate } from './dates.js';
 import { instructionDeadline } from './registry.js';
 import { INSTRUCTION_STATUS, URGENCY_WINDOW_DAYS } from './constants/registry.js';
-import { listControlCheckpoints } from './controlSchedule.js';
+import { iterateControlCheckpoints } from './controlSchedule.js';
 import { isPlanNotification } from './notificationReference.js';
 
 function notification(kind, record, date, today, scheduledDate = '') {
@@ -41,7 +41,7 @@ export function buildDeadlineNotifications({ instructions, scheduledInstructions
     for (const record of schedules) {
       if (record.status === INSTRUCTION_STATUS.COMPLETED) continue;
       const schedule = record.controlSchedule;
-      const checkpoints = listControlCheckpoints(schedule, {
+      const checkpoints = iterateControlCheckpoints(schedule, {
         from: firstCheckpointDate(schedule, horizon), to: horizon, deadline: instructionDeadline(record),
       });
       for (const checkpoint of checkpoints) {

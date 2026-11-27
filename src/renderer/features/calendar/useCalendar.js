@@ -2,9 +2,11 @@ import { storeToRefs } from 'pinia';
 import { computed, onScopeDispose, shallowRef } from 'vue';
 import { localDate } from '../../../shared/registry.js';
 import { buildMonthGrid, millisecondsUntilTomorrow } from '../../ui/calendarDates.js';
+import { useTaskActions } from '../tasks/taskStore.js';
 import { useCalendarStore } from './calendarStore.js';
 
-export function useCalendar({ store = useCalendarStore(), now = () => new Date(), trackDate = true } = {}) {
+export function useCalendar({ store = useCalendarStore(), taskStore, now = () => new Date(), trackDate = true } = {}) {
+  const taskActions = useTaskActions(taskStore);
   const state = storeToRefs(store);
   const today = shallowRef(localDate(now()));
   const grid = computed(() => {
@@ -36,9 +38,8 @@ export function useCalendar({ store = useCalendarStore(), now = () => new Date()
   });
 
   return {
-    ...state, today, grid, goToday, refreshToday,
+    ...state, ...taskActions, today, grid, goToday, refreshToday,
     fetchMonth: store.fetchMonth, fetchDay: store.fetchDay, refresh: store.refresh,
     selectDate: store.selectDate, changeMonth: store.changeMonth,
-    saveTask: store.saveTask, removeTask: store.removeTask, moveTaskOccurrence: store.moveTaskOccurrence, toggleTask: store.toggleTask,
   };
 }

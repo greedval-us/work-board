@@ -2,9 +2,9 @@ import { onScopeDispose, shallowRef, watch } from 'vue';
 import { DesktopError } from '../../../shared/errors.js';
 import { errorMessage } from '../../infrastructure/errorMessage.js';
 import { queryDate, queryId, routeGuard } from '../../infrastructure/routeQuery.js';
-import { calendarService } from './CalendarService.js';
+import { taskService } from '../tasks/TaskService.js';
 
-export function useCalendarTaskRoute({ app, route, calendar, editing, requestClose, service = calendarService }) {
+export function useCalendarTaskRoute({ app, route, calendar, editing, requestClose, service = taskService }) {
   const loading = shallowRef(false);
   const error = shallowRef('');
   const fields = ['task', 'date', 'notification'];

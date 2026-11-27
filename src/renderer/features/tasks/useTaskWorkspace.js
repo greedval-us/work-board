@@ -1,21 +1,18 @@
-import { storeToRefs } from 'pinia';
 import { computed, onScopeDispose, shallowRef, watch } from 'vue';
 import { onBeforeRouteLeave } from 'vue-router';
 import { localDate } from '../../../shared/dates.js';
 import { useAppStore } from '../../app/appStore.js';
-import { createDesktopService } from '../../infrastructure/desktopApi.js';
 import { errorMessage } from '../../infrastructure/errorMessage.js';
 import { createRequestChannel } from '../../infrastructure/requestScope.js';
 import { millisecondsUntilTomorrow } from '../../ui/calendarDates.js';
-import { useCalendarStore } from '../calendar/calendarStore.js';
-
-const taskService = createDesktopService({ listTasks: ['tasks', 'list'] });
+import { taskService } from './TaskService.js';
+import { useTaskActions } from './taskStore.js';
 
 export function useTaskWorkspace({
-  app = useAppStore(), calendar = useCalendarStore(), service = taskService,
+  app = useAppStore(), taskStore, service = taskService,
   now = () => new Date(), trackDate = true, registerRouteLeave = onBeforeRouteLeave,
 } = {}) {
-  const { taskError, busyTaskId } = storeToRefs(calendar);
+  const taskActions = useTaskActions(taskStore);
   const ready = computed(() => Boolean(app.database?.ready));
   const generation = computed(() => app.database?.generation);
   const today = shallowRef(localDate(now()));
@@ -108,8 +105,7 @@ export function useTaskWorkspace({
   });
 
   return {
-    ready, generation, tasks, loading, error, taskError, busyTaskId, today, month, editing, editor,
-    refresh, newTask, editTask, closeTask, saveTask: calendar.saveTask, removeTask: calendar.removeTask,
-    moveTaskOccurrence: calendar.moveTaskOccurrence, toggleTask: calendar.toggleTask,
+    ...taskActions, ready, generation, tasks, loading, error, today, month, editing, editor,
+    refresh, newTask, editTask, closeTask,
   };
 }

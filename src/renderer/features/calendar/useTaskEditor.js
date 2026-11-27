@@ -35,7 +35,8 @@ export function useTaskEditor({ task, date, generation, saveTask, removeTask, mo
   const occurrenceCompleted = editingStart ? toRef(draft, 'completed') : shallowRef(task.completed ?? false);
   const recurring = computed(() => Boolean(draft.recurrence.frequency));
   const recurrence = computed(() => scheduleFromDraft(draft.recurrence));
-  const completionDate = computed(() => task?.date ?? firstTaskOccurrence({ date: draft.date, recurrence: recurrence.value }) ?? '');
+  const firstOccurrence = computed(() => firstTaskOccurrence({ date: draft.date, recurrence: recurrence.value }) ?? '');
+  const completionDate = computed(() => task?.date ?? firstOccurrence.value);
   if (!task) {
     watch([completionDate, recurring], ([next, repeating], [previous, wasRepeating]) => {
       if (next !== previous && (repeating || wasRepeating)) draft.completed = false;
@@ -80,6 +81,6 @@ export function useTaskEditor({ task, date, generation, saveTask, removeTask, mo
       'Не удалось перенести повторение задачи.');
   }
 
-  return { draft, recurring, occurrenceDate, completionDate, occurrenceCompleted, occurrenceAvailable,
+  return { draft, recurring, occurrenceDate, firstOccurrence, completionDate, occurrenceCompleted, occurrenceAvailable,
     movableOccurrence, dirty, busy, error, save, remove, moveOccurrence };
 }

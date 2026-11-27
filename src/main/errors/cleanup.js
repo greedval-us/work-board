@@ -6,13 +6,20 @@ export class CleanupError extends AggregateError {
   }
 }
 
-// Synchronous transactions and connection disposal must finish every cleanup attempt.
-export function rethrowAfterCleanup(error, callbacks) {
-  const failures = [];
+// Always attempt the remaining resources and keep failures in the order they occurred.
+function finishCleanup(callbacks, failures) {
   for (const cleanup of callbacks) {
     try { cleanup(); }
     catch (failure) { failures.push(failure); }
   }
-  if (failures.length) throw new CleanupError(error, failures);
-  throw error;
+  if (failures.length > 1) throw new CleanupError(failures[0], failures.slice(1));
+  if (failures.length === 1) throw failures[0];
+}
+
+export function runCleanup(callbacks) {
+  finishCleanup(callbacks, []);
+}
+
+export function rethrowAfterCleanup(error, callbacks) {
+  finishCleanup(callbacks, [error]);
 }

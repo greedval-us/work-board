@@ -16,6 +16,7 @@ import { ControlCardExportService } from './services/ControlCardExportService.js
 import { IPCManager } from './ipc/IPCManager.js';
 import { AnalyticsService } from './services/AnalyticsService.js';
 import { RecordService } from './services/RecordService.js';
+import { rethrowAfterCleanup, runCleanup } from './errors/cleanup.js';
 import { ENTITY_TYPES } from '../shared/constants/entities.js';
 import { AnalyticsRepository } from './repositories/AnalyticsRepository.js';
 import { NotificationStateRepository } from './repositories/NotificationStateRepository.js';
@@ -38,6 +39,12 @@ export function createApplicationServices({ app, ipcMain, dialog, getWindow, ope
   let lockEnabled;
   let appLock;
   let appearance = startupAppearance();
+  const cleanup = [
+    () => clearInterval(lockCheck),
+    () => reminderScheduler?.stop(),
+    () => ipc?.shutdown(),
+    () => database.close(),
+  ];
   try {
     const userData = app.getPath('userData');
     appLock = new AppLockService({ filePath: path.join(userData, 'app-lock.json'), now,
@@ -113,11 +120,7 @@ export function createApplicationServices({ app, ipcMain, dialog, getWindow, ope
     });
     ipc.init();
   } catch (cause) {
-    clearInterval(lockCheck);
-    reminderScheduler?.stop();
-    ipc?.shutdown();
-    database.close();
-    throw cause;
+    rethrowAfterCleanup(cause, cleanup);
   }
   return {
     getStartupAppearance() { return appearance; },
@@ -125,10 +128,6 @@ export function createApplicationServices({ app, ipcMain, dialog, getWindow, ope
     startNotifications() { return reminderScheduler?.start() ?? false; },
     checkNotifications() { reminderScheduler?.check(); },
     getNotificationStatus() { return reminderScheduler?.getStatus() ?? { mode: 'in-app', error: '' }; },
-    shutdown() {
-      clearInterval(lockCheck);
-      try { reminderScheduler?.stop(); ipc.shutdown(); }
-      finally { database.close(); }
-    },
+    shutdown() { runCleanup(cleanup); },
   };
 }

@@ -118,6 +118,28 @@ test('native reminders aggregate pending deadlines and persist popup delivery on
   assert.deepEqual(f.scheduler.getStatus(), { mode: 'system', error: '' });
 });
 
+test('native show checks current occurrences once and saves receipts without building a renderer response', t => {
+  const f = fixture(t);
+  const moved = f.task();
+  f.task({ title: 'Показано' });
+  f.scheduler.start();
+  const external = new DatabaseService({ filePath: f.firstPath });
+  external.open();
+  try { new TaskRepository(external).update(moved.id, { date: '2026-11-13' }); }
+  finally { external.close(); }
+
+  const scans = t.mock.method(f.tasks, 'occurrences');
+  const receipts = t.mock.method(f.service.repository, 'get');
+  f.service.getDeliveryStatus = t.mock.fn(() => f.scheduler.getStatus());
+  f.shown[0].emit('show');
+  assert.equal(scans.mock.callCount(), 1);
+  assert.equal(receipts.mock.callCount(), 1);
+  assert.equal(f.service.getDeliveryStatus.mock.callCount(), 0);
+  assert.deepEqual(f.service.list().items.map(({ date, unread, popupPending }) => [date, unread, popupPending]), [
+    ['2026-11-12', true, false], ['2026-11-13', true, true],
+  ]);
+});
+
 test('native clicks survive toast timeout in Action Center and keep reminders unread', t => {
   const f = fixture(t);
   f.task();
@@ -149,7 +171,7 @@ test('locking removes detailed toasts and immediately replaces only pending deli
   const displayed = f.task();
   f.scheduler.start();
   const old = f.shown[0];
-  const acknowledge = t.mock.method(f.service, 'acknowledge', () => { throw new Error('database temporarily busy'); });
+  const acknowledge = t.mock.method(f.service.repository, 'acknowledge', () => { throw new Error('database temporarily busy'); });
   old.emit('show'); old.emit('close');
   const pending = f.task({ title: 'Ещё в очереди' });
   f.scheduler.check();
@@ -354,8 +376,7 @@ test('completed, removed and rescheduled occurrences cannot be acknowledged by a
 test('a displayed toast stays unique through receipt write failures and is acknowledged after recovery', t => {
   const f = fixture(t);
   f.task(); f.scheduler.start();
-  const acknowledge = f.service.acknowledge.bind(f.service);
-  f.service.acknowledge = () => { throw new Error('database temporarily busy'); };
+  const write = t.mock.method(f.service.repository, 'acknowledge', () => { throw new Error('database temporarily busy'); });
   f.shown[0].emit('show');
   f.shown[0].emit('show');
   f.clock.advance(5 * 60_000);
@@ -364,7 +385,7 @@ test('a displayed toast stays unique through receipt write failures and is ackno
   assert.match(f.scheduler.getStatus().error, /сохранить/i);
   assert.doesNotMatch(f.scheduler.getStatus().error, /разрешения/i);
   assert.equal(f.service.list().items[0].popupPending, true);
-  f.service.acknowledge = acknowledge;
+  write.mock.restore();
   f.clock.advance(60_000);
   assert.equal(f.shown.length, 1);
   assert.equal(f.service.list().items[0].popupPending, false);
@@ -376,7 +397,7 @@ test('exhausted delivery retries do not stop saving receipts for other toasts', 
   const f = fixture(t);
   const displayed = f.task();
   f.scheduler.start();
-  const write = t.mock.method(f.service, 'acknowledge', () => { throw new Error('database temporarily busy'); });
+  const write = t.mock.method(f.service.repository, 'acknowledge', () => { throw new Error('database temporarily busy'); });
   f.shown[0].emit('show');
 
   const rejected = f.task({ title: 'Отклонено Windows' });
@@ -428,10 +449,9 @@ test('switching databases closes the old reminder even while the new database ca
 test('a displayed toast is not shown again when revalidating its delivery temporarily fails', t => {
   const f = fixture(t);
   f.task(); f.scheduler.start();
-  const list = f.service.list.bind(f.service);
-  f.service.list = () => { throw new Error('database temporarily busy'); };
+  const read = t.mock.method(f.tasks, 'occurrences', () => { throw new Error('database temporarily busy'); });
   f.shown[0].emit('show');
-  f.service.list = list;
+  read.mock.restore();
   f.clock.advance(60_000);
   assert.equal(f.shown.length, 1);
   assert.equal(f.service.list().items[0].popupPending, false);
@@ -495,8 +515,8 @@ test('Action Center retention stays bounded and releases the oldest callbacks', 
 test('synchronous show callbacks and write-triggered checks cannot produce duplicate popups', t => {
   const f = fixture(t);
   f.task();
-  const acknowledge = f.service.acknowledge.bind(f.service);
-  f.service.acknowledge = value => { const result = acknowledge(value); f.scheduler.check(); return result; };
+  const recordShown = f.service.recordShown.bind(f.service);
+  f.service.recordShown = items => { const result = recordShown(items); f.scheduler.check(); return result; };
   const createNotification = f.scheduler.createNotification;
   f.scheduler.createNotification = options => {
     const native = createNotification(options);

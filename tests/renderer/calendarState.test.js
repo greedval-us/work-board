@@ -4,6 +4,7 @@ import { effectScope, nextTick, reactive } from 'vue';
 import { createPinia, disposePinia, setActivePinia } from 'pinia';
 import { useCalendar } from '../../src/renderer/features/calendar/useCalendar.js';
 import { createCalendarStore } from '../../src/renderer/features/calendar/calendarStore.js';
+import { createTaskStore } from '../../src/renderer/features/tasks/taskStore.js';
 import { DesktopError } from '../../src/shared/errors.js';
 import { useAppStore } from '../../src/renderer/app/appStore.js';
 
@@ -16,10 +17,11 @@ function setup(t, service) {
   });
   const pinia = createPinia();
   const store = createCalendarStore({ getApp: () => app, service, initialDate: () => '2026-10-23' })(pinia);
+  const taskStore = createTaskStore({ getApp: () => app, service })(pinia);
   const scopes = [];
   function mount() {
     const scope = effectScope();
-    const calendar = scope.run(() => useCalendar({ store, now: () => new Date(2026, 9, 23, 12), trackDate: false }));
+    const calendar = scope.run(() => useCalendar({ store, taskStore, now: () => new Date(2026, 9, 23, 12), trackDate: false }));
     scopes.push(scope);
     return { scope, calendar };
   }

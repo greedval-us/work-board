@@ -321,6 +321,41 @@ test('read and popup receipts persist separately after reopening and renew on th
   assert.equal(f.service.list().items[0].unread, true);
 });
 
+test('acknowledgement returns fresh items and saved receipts with one reminder scan', t => {
+  const { service, tasks, filePath } = fixture(t);
+  const first = tasks.create({ title: 'Перенесено', date: '2026-11-12' });
+  tasks.create({ title: 'Показано', date: '2026-11-12' });
+  const previous = service.list().items.map(reference);
+  const external = new DatabaseService({ filePath });
+  external.open();
+  try { new TaskRepository(external).update(first.id, { date: '2026-11-13' }); }
+  finally { external.close(); }
+  const scans = t.mock.method(tasks, 'occurrences');
+  const receipts = t.mock.method(service.repository, 'get');
+  const result = service.acknowledge({ items: previous, popup: true });
+  assert.deepEqual(result.items.map(({ date, unread, popupPending }) => [date, unread, popupPending]), [
+    ['2026-11-12', true, false], ['2026-11-13', true, true],
+  ]);
+  assert.equal(scans.mock.callCount(), 1);
+  assert.equal(receipts.mock.callCount(), 1);
+  assert.deepEqual(result, service.list());
+});
+
+test('acknowledging across midnight returns the new day with fresh receipts', t => {
+  const { service, tasks, setToday } = fixture(t);
+  tasks.create({ title: 'Дело', date: '2026-11-12' });
+  const previous = reference(service.list().items[0]);
+  const occurrences = tasks.occurrences.bind(tasks);
+  t.mock.method(tasks, 'occurrences', request => {
+    setToday('2026-11-13');
+    return occurrences(request);
+  });
+  const result = service.acknowledge({ items: [previous], read: true, popup: true });
+  assert.equal(result.today, '2026-11-13');
+  assert.equal(result.items[0].occurrence, '2026-11-12:2026-11-13');
+  assert.ok(result.items[0].unread && result.items[0].popupPending);
+});
+
 test('receipts are isolated by database, record incarnation and current occurrence', t => {
   const f = fixture(t);
   const first = f.tasks.create({ title: 'Первое дело', date: '2026-11-12' });

@@ -15,7 +15,7 @@ const props = defineProps({
   moveTaskOccurrence: { type: Function, required: true },
 });
 const emit = defineEmits(['close']);
-const { draft, recurring, occurrenceDate, completionDate, occurrenceCompleted, occurrenceAvailable,
+const { draft, recurring, occurrenceDate, firstOccurrence, completionDate, occurrenceCompleted, occurrenceAvailable,
   movableOccurrence, dirty, busy, error, save, remove, moveOccurrence } = useTaskEditor(props);
 const moveDate = shallowRef(occurrenceDate);
 const dialog = useTemplateRef('dialog');
@@ -169,7 +169,7 @@ defineExpose({ requestClose });
               <label class="calendar-field">Описание<textarea v-model="draft.description" name="task-description" rows="3" placeholder="Подробности и заметки" /></label>
             </div>
             <div class="calendar-task-schedule">
-              <TaskRecurrenceEditor :model-value="draft.recurrence" :start-date="draft.date" :disabled="fieldsDisabled"
+              <TaskRecurrenceEditor :model-value="draft.recurrence" :start-date="draft.date" :first-occurrence="firstOccurrence" :disabled="fieldsDisabled"
                 @update:model-value="Object.assign(draft.recurrence, $event)" />
               <label v-if="!recurring" class="calendar-completion-field"><input v-model="draft.completed" name="task-completed" type="checkbox" />Задача выполнена</label>
               <label v-else-if="occurrenceAvailable" class="calendar-completion-field">

@@ -2,7 +2,6 @@ import { localDate, validateDate } from '../../shared/dates.js';
 import { buildDeadlineNotifications, deadlineNotificationHorizon } from '../../shared/deadlineNotifications.js';
 import { validateRecord } from '../../shared/validation.js';
 import { ValidationError } from '../../shared/errors.js';
-import { isPlanNotification } from '../../shared/notificationReference.js';
 
 function validateAcknowledgement(value) {
   const request = validateRecord(value, 'Подтверждение уведомлений');
@@ -30,10 +29,11 @@ export class NotificationService {
     Object.assign(this, { instructions, tasks, plans, isPlanningEnabled, repository, today, getDeliveryStatus });
   }
 
-  list() { return this.#snapshot(this.isPlanningEnabled()); }
+  list() { return this.#snapshot(this.#candidates(), this.repository.get()); }
 
-  #snapshot(planningEnabled) {
+  #candidates() {
     const today = validateDate(this.today());
+    const planningEnabled = this.isPlanningEnabled();
     const horizon = deadlineNotificationHorizon(today);
     const request = { filters: { deadlineTo: horizon } };
     const items = buildDeadlineNotifications({
@@ -43,7 +43,10 @@ export class NotificationService {
       scheduledPlans: planningEnabled ? this.plans.scheduledForCalendar() : [],
       tasks: [...this.tasks.occurrences({ from: today, to: horizon }), ...this.tasks.overdueBefore(today)], today,
     });
-    const receipts = this.repository.get();
+    return { today, planningEnabled, items };
+  }
+
+  #snapshot({ today, items }, receipts) {
     return { today, ...(this.getDeliveryStatus ? { delivery: this.getDeliveryStatus() } : {}), items: items.map(item => {
       const receipt = receipts.get(item.id);
       const current = receipt?.occurrence === item.occurrence;
@@ -53,13 +56,13 @@ export class NotificationService {
 
   acknowledge(value) {
     const request = validateAcknowledgement(value);
-    const enabled = this.isPlanningEnabled();
-    const snapshot = this.#snapshot(enabled);
-    // Hidden plans can reappear on the same day. Keep their read and popup
-    // receipts when the user acknowledges an unrelated task or instruction.
-    const keepHidden = receipt => !enabled && receipt.occurrence.endsWith(`:${snapshot.today}`)
-      && isPlanNotification(receipt.id.split(':', 1)[0]);
-    this.repository.acknowledge(snapshot.items, request.items, request, keepHidden);
-    return this.list();
+    const { candidates, receipts } = this.repository.acknowledge(() => this.#candidates(), request);
+    if (this.today() !== candidates.today) return this.list();
+    return this.#snapshot(candidates, receipts);
+  }
+
+  recordShown(items) {
+    const result = this.repository.acknowledge(() => this.#candidates(), { items, popup: true }, { onlyPendingPopups: true });
+    return result.matched;
   }
 }
